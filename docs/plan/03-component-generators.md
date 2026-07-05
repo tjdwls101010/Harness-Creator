@@ -5,6 +5,12 @@
 스킬에 담을 최고 밀도 지식이다.** 구현 세션은 이 목록을 기준으로 references를 작성하되,
 research/ 원본과 `.tmp/docs_claude/`에서 세부를 보강한다.
 
+**전 컴포넌트 공통 작성 규칙**: 생성되는 모든 마크다운 산출물(CLAUDE.md, rules, SKILL.md,
+agents, harness-spec.md)에서 **문장 중간 인위적 줄바꿈(하드 랩)을 금지**한다. 줄바꿈은
+문장·목록 항목·단락 경계에서만. 하드 랩은 이후 세션의 Edit 도구 문자열 매칭을 깨뜨리고
+diff를 오염시키며, 렌더러의 soft wrap 앞에서 아무 이득이 없다. 이 규칙을
+references/skills.md와 claude-md-and-rules.md의 작성 지침에 포함시킬 것.
+
 ## 1. CLAUDE.md + rules (`references/claude-md-and-rules.md`)
 
 ### 원칙
