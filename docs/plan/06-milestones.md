@@ -72,9 +72,25 @@
   추가 개선 없이 완료됨(리뷰→수정→도그푸딩 순서가 유효했음을 보여주는 신호).
 - 수용: 00 문서 §4 성공 기준 1, 2, 3, 5 충족. (기록: 이 커밋 + 구현 세션 트랜스크립트.)
 
-### M5. 배포 마감
-- 플러그인 설치 경로 재검증(fresh 설치 → 동작), README 마감, 버전 태깅(v0.1.0).
-- 수용: 성공 기준 #4, `/plugin marketplace add` → install → 타 프로젝트에서 호출 성공.
+### M5. 배포 마감 — ✅ 완료
+- **플러그인 설치 경로 재검증**: 실제 GitHub 소스로 성공 기준 #4의 정확한 명령을 그대로 실행 —
+  `claude plugin marketplace add tjdwls101010/Harness-Creator` → `claude plugin install
+  harness-creator@harness-creator` → `claude plugin details harness-creator`가 `Skills (1)
+  harness-creator`와 정상 토큰 비용 추정(always-on ~125, on-invoke ~3.5k)을 보고. 캐시가
+  692K로 깨끗함(로컬 경로 설치 시 발견된 `.tmp/` 누출과 무관함을 실측 확정 — 01 문서 참조).
+  검증 후 표준 정리(uninstall + marketplace remove + 캐시 수동 삭제)로 심링크 전용 개발
+  상태로 복귀.
+  - 유일하게 이 샌드박스에서 실측 불가능했던 부분: 설치 후 **다른 프로젝트 디렉토리에서 실제
+    세션을 새로 띄워 호출**하는 것 — M0에서 발견한 "스폰된 `claude` 프로세스 인증 불가" 제약과
+    동일한 이유. 매니페스트·설치·컴포넌트 인벤토리 레벨의 정합성은 위에서 완전히 실측했고,
+    남은 것은 실제 모델 호출이 필요한 부분뿐이므로 사용자의 인증된 환경에서 1회 확인 권장.
+- README.md 마감: Status 섹션을 "구현 진행 중"에서 완료 상태로 갱신, `run_e2e.py` 미검증
+  사항과 로컬 경로 설치 캐시 동작을 사용자에게 미리 고지하는 문단 추가.
+- **버전 태깅**: `claude plugin tag . --push` → `harness-creator--v0.1.0` 태그 생성 및
+  origin에 푸시 완료(plugin.json·marketplace.json 버전 정합성 검증 통과).
+- 수용: 성공 기준 #4 충족(정확한 명령으로 실측). `/plugin marketplace add` → install까지
+  실측 성공 — "타 프로젝트에서 호출 성공"의 마지막 한 조각(라이브 세션 호출)만 위 사유로
+  이 세션에서는 검증 불가, 사용자 확인 필요 항목으로 명시.
 
 ## 구현 세션에 주는 재량과 제약
 
