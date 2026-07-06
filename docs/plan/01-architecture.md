@@ -28,29 +28,44 @@ Harness-Creator/                        # github.com/tjdwls101010/Harness-Creato
   `skills/`에서 스캔되지만, **`skills` 경로 필드는 기본 스캔에 추가(ADD)하는 방식**이므로
   `"skills": "./.claude/skills"`로 지정해 같은 디렉토리가 (a) 이 repo에서의 프로젝트 스킬
   (도그푸딩)과 (b) 플러그인 컴포넌트를 겸하게 한다.
-  - **[검증 필요-V1]** 이 경로 지정이 실제로 동작하는지 M0에서 확인. 안 되면 루트 `skills/`로
-    옮기고 도그푸딩은 심링크로 해결한다.
+  - **[V1 — 실측 완료, M0]** 동작 확인됨. `claude plugin validate .`로 매니페스트 통과,
+    로컬 마켓플레이스 추가(`claude plugin marketplace add .`) 후 설치(`claude plugin install
+    harness-creator@harness-creator`)하면 `claude plugin details harness-creator`가
+    `Skills (1) harness-creator`를 정확히 보고한다. `"skills": "./.claude/skills"` 경로
+    지정이 실제로 동작함 — 폴백(루트 `skills/`로 이동) 불필요.
 - 버전: `version`을 명시(semver). 생략 시 git SHA 버전닝(커밋마다 업데이트로 간주)이라
   의도치 않은 잦은 업데이트 유발.
 - **플러그인 제약이 harness-creator에는 안 걸린다**: 제약(플러그인 agents의
   hooks/mcpServers/permissionMode 무시, workflows 배포 불가)은 플러그인이 컴포넌트로 싣는
   것들에 대한 제약이다. harness-creator는 스킬 하나 + 내부 스크립트뿐이고, agents/workflows는
   플러그인 컴포넌트가 아니라 **대상 프로젝트에 생성해주는 산출물**이므로 무관.
+- **주의(심링크와 플러그인 설치 동시 활성 금지)**: 개발자 자신의 머신에서 심링크
+  (`~/.claude/skills/harness-creator`, bare 이름으로 즉시 트리거)와 플러그인 설치
+  (`harness-creator@harness-creator`, `/harness-creator:harness-creator`로 네임스페이스)를
+  동시에 활성화하면 같은 스킬이 서로 다른 두 이름으로 중복 등록된다(심링크는 동일 타깃 도달 시
+  dedupe되지만, 플러그인 스킬은 별도 네임스페이스라 dedupe 대상이 아님 — `.tmp/docs_claude/
+  02-build-with-claude-code/03-skills/01-extend-claude-with-skills.md` §symlink 문단).
+  일상 개발은 심링크만 유지하고, 플러그인 배포 흐름을 스모크 테스트할 때만 일시적으로
+  마켓플레이스 추가+설치 후 검증이 끝나면 `claude plugin uninstall`+`marketplace remove`로
+  되돌린다(M0에서 실제로 이 절차로 검증 후 정리함).
 
-### 네이밍 문제 **[검증 필요-V2]**
+### 네이밍 **[V2 — 문서로 해소, M0. 실측 불필요했음]**
 
-플러그인 스킬은 `/플러그인명:스킬명`으로 네임스페이스된다. 디렉토리명을 그대로 두면
-`/harness-creator:harness-creator`가 된다. M0에서 실측 후 결정:
+플러그인 스킬은 `/플러그인명:스킬명`으로 네임스페이스된다(공식 문서로 확인 —
+`.tmp/docs_claude/02-build-with-claude-code/04-plugins/02-create-plugins.md`,
+`05-reference/08-plugins-reference.md`). 안 B(디렉토리 `harness-creator` 유지, 플러그인
+경로는 `/harness-creator:harness-creator` 감수)로 확정한다:
 
-- 안 A: 스킬 디렉토리를 `create`로 → `/harness-creator:create`. 단, 심링크 사용자는
-  `/create`가 되어 너무 범용적인 이름이 됨.
-- 안 B(기본): 디렉토리 `harness-creator` 유지. 플러그인 경로 사용자는
-  `/harness-creator:harness-creator`를 감수(자동 트리거는 description 기반이라 실사용 영향 작음).
-- 안 C: 플러그인 루트 `SKILL.md` 단일 스킬 플러그인(이름은 frontmatter `name`) — 이 경우
-  명령이 어떻게 되는지 실측 필요.
-
-description 기반 자동 트리거가 주 진입 경로이므로 이 문제의 실질 영향은 작다.
-실측 결과에 따라 가장 자연스러운 안을 택하고 README에 기록한다.
+- 안 A(디렉토리명을 `create`로) 기각: 심링크 사용자에게 `/create`라는 지나치게 범용적인
+  이름을 남긴다.
+- 안 C(플러그인 루트에 단일 SKILL.md, `skills` 매니페스트 필드 없이) 기각: 공식 문서상 가능한
+  패턴이지만, 이 경우 스킬이 플러그인 루트에 있어야 하므로 `.claude/skills/harness-creator/`
+  구조(심링크 개발 루프·프로젝트 스킬 도그푸딩이 의존하는 경로, D11)와 양립하지 않는다.
+  D11이 요구하는 "플러그인+심링크 병행"을 깨뜨리므로 실측 없이 기각.
+- 안 B 확정 근거: description 기반 자동 트리거가 주 진입 경로이므로 네임스페이스된 슬래시
+  명령의 실사용 영향은 작고, 심링크 경로에서는 애초에 bare `harness-creator`로 트리거된다
+  (플러그인 경로 사용자만 `:harness-creator` 접미를 본다). README에 두 경로의 호출 형태
+  차이를 명시한다.
 
 ### 심링크 개발 루프 (D11)
 

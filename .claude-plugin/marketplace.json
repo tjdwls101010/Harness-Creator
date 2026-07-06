@@ -1,0 +1,13 @@
+{
+  "name": "harness-creator",
+  "description": "A meta-skill that designs, generates, validates, and maintains a complete Claude Code harness for a project through a structured interview.",
+  "owner": {
+    "name": "seongjin"
+  },
+  "plugins": [
+    {
+      "name": "harness-creator",
+      "source": "./"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "harness-creator",
+  "version": "0.1.0",
+  "description": "Design, generate, validate, and maintain a complete Claude Code harness (CLAUDE.md, rules, skills, hooks, permissions, agents, workflows) for a project through a structured interview.",
+  "author": {
+    "name": "seongjin"
+  },
+  "skills": "./.claude/skills"
+}

@@ -2,14 +2,26 @@
 
 ## 마일스톤 (각 완료 시 main에 커밋+푸시 — D10)
 
-### M0. 스캐폴딩 + 검증 항목 해소
+### M0. 스캐폴딩 + 검증 항목 해소 — ✅ 완료 (커밋 예정)
 - 디렉토리 구조 생성(01 문서 §1·2), `.claude-plugin/plugin.json` + `marketplace.json`,
   README.md(설치 2경로: 플러그인/심링크), 이 repo용 CLAUDE.md(간결 — 이 계획 문서 포인터 중심).
-- **V1 검증**: plugin.json `"skills": "./.claude/skills"` 경로가 동작하는지 실측
-  (`claude plugin validate` + 로컬 마켓플레이스 add → install → 스킬 목록 확인).
-  실패 시 루트 `skills/`로 이동하고 01 문서 수정.
-- **V2 검증**: 플러그인 스킬 명령 네이밍 실측 → 01 문서 §네이밍 확정.
-- 수용: `claude plugin validate` 통과, 심링크 설치 후 다른 디렉토리에서 스킬 목록에 표시.
+- **V1 검증 완료**: `claude plugin validate .` 통과 → 로컬 마켓플레이스 add → install →
+  `claude plugin details harness-creator`로 `Skills (1) harness-creator` 확인. 경로 필드
+  동작 확인, 폴백 불필요. 검증 후 `claude plugin uninstall`+`marketplace remove`로 정리
+  (심링크만 상시 유지 — 01 문서 §패키징 참조).
+- **V2 검증 완료(실측 불필요, 문서로 확정)**: 안 B 확정 — `/harness-creator:harness-creator`
+  감수, 안 C는 D11(플러그인+심링크 병행)과 구조적으로 양립 불가해 기각. 근거는 01 문서 §네이밍.
+- **환경 제약 발견(M2로 이관)**: 이 구현 세션의 샌드박스에서는 Bash로 스폰한 `claude` 자식
+  프로세스가 인증되지 않는다(`claude -p`가 헤드리스·비헤드리스 무관 "Not logged in" 반환 —
+  호스트 세션의 OAuth/키체인이 자식 프로세스에 노출되지 않음). 이는 V3(헤드리스 권한 처리
+  실측)와 도그푸딩(M4)의 e2e 부분, 그리고 심링크의 "다른 디렉토리에서 스킬 목록 표시" 실측을
+  이 세션에서 완전히 자동 검증할 수 없게 한다. 대신: (a) 심링크 지원은 공식 문서로 확인
+  (`.tmp/docs_claude/.../01-extend-claude-with-skills.md`의 symlink 문단), (b) V3는 M2에서
+  `run_e2e.py`를 문서화된 사실 기반으로 구현하되 실제 `claude -p` 실행 검증은 인증 가능한
+  환경(사용자의 로컬 터미널)에서 사용자가 1회 수행하도록 안내 문구를 남긴다 — 04 문서 §4,
+  06 문서 R3에 반영.
+- 수용: `claude plugin validate` 통과 ✅. "심링크 설치 후 다른 디렉토리에서 스킬 목록에 표시"는
+  공식 문서 확인 + 파일시스템 레벨 심링크 정합성으로 대체 검증(위 사유로 라이브 세션 실측 불가).
 
 ### M1. references/ 8개 파일
 - 05 문서의 인벤토리 순서대로. 각 파일은 03 문서의 gotcha를 빠짐없이 포함하되
@@ -56,9 +68,9 @@
 
 | # | 리스크/열린 항목 | 대응 |
 |---|---|---|
-| R1 | **V1** plugin.json skills 경로 미동작 | M0에서 실측, 폴백은 루트 skills/ + 심링크 도그푸딩 |
-| R2 | **V2** 플러그인 스킬 네이밍 어색함 | M0에서 실측 후 3안 중 결정 |
-| R3 | **V3** headless 권한 처리 불명 | M2에서 실측. 유력안: --isolate 복사본 + skip-permissions |
+| R1 | **V1** plugin.json skills 경로 미동작 | ✅ M0에서 실측 완료 — 동작 확인, 폴백 불필요 |
+| R2 | **V2** 플러그인 스킬 네이밍 어색함 | ✅ M0에서 문서로 해소 — 안 B 확정(01 문서 §네이밍) |
+| R3 | **V3** headless 권한 처리 불명 + 구현 세션 샌드박스에서 `claude` 자식 프로세스 인증 불가(M0에서 발견 — "Not logged in", 호스트 세션 자격증명이 Bash로 스폰한 프로세스에 노출 안 됨) | M2에서 `run_e2e.py`를 `.tmp/docs_claude` 문서화 사실 기반으로 구현. 유력안: --isolate 복사본 + skip-permissions. **실제 `claude -p` 실행 검증은 이 세션에서 불가하므로 사용자가 인증된 로컬 환경에서 1회 수행**하도록 스크립트 --help와 e2e-testing.md에 안내 문구 포함(자동화된 자기 테스트만으로 완결 선언 금지) |
 | R4 | 문서 스냅샷(.tmp/docs_claude, ~v2.1.200 기준) 노후화 | references에 "기준 버전" 명시. 버전 민감 기능(hook if 등)은 최소 버전 주석. 재동기화는 범위 밖(필요 시 사용자가 스냅샷 갱신) |
 | R5 | e2e 토큰 비용이 부담 | 기본 2~4 시나리오, 실행 전 비용 고지 + 동의(D5), 실패 시나리오만 재실행 |
 | R6 | AskUserQuestion가 서브에이전트/헤드리스에서 불가 | 인터뷰는 항상 메인 스레드에서. e2e로 인터뷰 자체를 테스트할 수 없음을 e2e-testing.md에 명시 (도그푸딩=수동 검증) |
