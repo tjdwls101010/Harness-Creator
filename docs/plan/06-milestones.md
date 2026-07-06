@@ -28,14 +28,21 @@
   1차 소스(`.tmp/docs_claude/`)에서 사실 재확인 후 작성.
 - 수용: 05 문서의 "내용 개요" 항목이 전부 반영됨. gotcha 누락 0 (03 문서 대조).
 
-### M2. scripts/ 4개
-- 순서: validate_harness → test_hook → audit_harness → run_e2e (의존성·가치 순).
-- 각 스크립트에 자기 테스트: **repo 루트의** `tests/fixtures/`(01 문서 §1 트리 참조 —
-  스킬 디렉토리 밖에 두어 플러그인 배포 표면에서 제외)에 정상/오류 하네스 픽스처를 만들어
-  기대 출력 대조(간단한 assert 스크립트면 충분 — pytest 불필요, stdlib unittest 허용).
-- **V3 검증**: run_e2e의 headless 권한 처리 실측 → 04 문서 §4와 e2e-testing.md에 결과 기록.
-- 수용: 픽스처 테스트 전부 통과. test_hook이 대표 3레시피(보호 경로 차단 / post-edit 포맷 /
-  Stop 게이트) 훅을 정확히 판정.
+### M2. scripts/ 4개 — ✅ 완료
+- 순서: validate_harness → test_hook → audit_harness → run_e2e (의존성·가치 순) — 실제로
+  이 순서로 작성. `harness_common.py`(공유 frontmatter 파서·canonical tool list·이벤트
+  테이블)를 4개 스크립트가 공유(D9 공통 규약 — 이중 파서 불일치 방지).
+- 각 스크립트에 자기 테스트: **repo 루트의** `tests/fixtures/`(good-harness/bad-harness)에
+  정상/오류 하네스 픽스처를 만들어 기대 출력 대조. `tests/test_{validate_harness,test_hook,
+  audit_harness,run_e2e}.py` — stdlib unittest, 총 78개 테스트, 전부 통과.
+- **V3 재확인, 미해소(환경 제약)**: M0에서 발견한 샌드박스 인증 제약이 `run_e2e.py`
+  완성 후 재확인됨 — `--isolate`(`--dangerously-skip-permissions` 포함) 실행도 동일하게
+  "Not logged in"으로 막힘. 문서화된 사실 기준으로 구현하고 이 실패 케이스 자체로 파이프라인
+  (subprocess 호출·CLAUDECODE 제거·stream-json 파싱·출력 파일 작성)은 end-to-end 검증됨.
+  실제 도구-호출 시나리오에서의 권한 모드 동작만 사용자의 인증된 환경에서 최초 확인 필요
+  (04 문서·e2e-testing.md에 상세 기록).
+- 수용: 픽스처 테스트 전부 통과(78/78). test_hook이 대표 3레시피(보호 경로 차단 / post-edit
+  포맷 / Stop 게이트) 훅을 정확히 판정 — good-harness 픽스처로 직접 검증함.
 
 ### M3. SKILL.md
 - 02 문서 §1 구성대로. references와 scripts가 완성된 후에 쓴다(참조 대상이 실존해야

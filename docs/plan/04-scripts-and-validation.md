@@ -92,10 +92,16 @@ python scripts/run_e2e.py --project <target-repo> --prompt "..." [--prompt-file 
 4. `--isolate`: 쓰기 작업이 있는 시나리오용. 임시 디렉토리에 프로젝트 복사(또는
    git worktree) 후 실행해 원본 오염 방지.
 
-**[검증 필요-V3]** headless 모드의 권한 처리: `-p`에서 PermissionRequest 훅은 발화하지 않고,
-비승인 도구는 멈추거나 실패한다. `--permission-mode`, `--dangerously-skip-permissions`,
-allowlist 조합 중 어떤 것이 e2e에 적합한지 구현 세션에서 실측하고 e2e-testing.md에 기록할 것.
-(격리 복사본 + skip-permissions가 유력하나 실측 우선.)
+**[V3 — M2에서 실측 시도, 환경 제약으로 미해소]** M0에서 발견한 샌드박스 제약(구현 세션이
+Bash로 스폰하는 `claude` 자식 프로세스는 인증되지 않음 — "Not logged in")이 M2에서도 재확인됨:
+`run_e2e.py --isolate`(즉 `--dangerously-skip-permissions` 포함) 실행도 동일하게 인증 단계에서
+막혀 권한 모드 자체를 실측할 수 없었다. `run_e2e.py`는 문서화된 사실
+(`--permission-mode`/`--dangerously-skip-permissions`의 정확한 플래그명과 의미, D9 공통 규약)
+기준으로 구현했고, subprocess 호출·CLAUDECODE 제거·stream-json 파싱·출력 파일 작성 파이프라인은
+이 "Not logged in" 실패 케이스 자체를 통해 end-to-end로 검증됨(에러 경로가 정확히
+`is_error: true` + `result` 필드로 전파되는 것을 확인). 남은 것은 **실제 도구 호출이 있는
+시나리오에서 권한 모드가 의도대로 동작하는지**뿐이며, 이는 인증 가능한 사용자 환경에서
+최초 실사용 시 확인해야 한다 — e2e-testing.md의 "Headless permission handling" 절 참조.
 
 ## 5. e2e 검증 설계 (2층 검증, `references/e2e-testing.md`)
 
