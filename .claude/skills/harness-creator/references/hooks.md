@@ -32,6 +32,29 @@ Reference that script from `settings.json` using **exec form** — an `args` arr
 
 Three reasons this specific shape, not something else: first, `${CLAUDE_PROJECT_DIR}` is what makes the hook resolve correctly regardless of the directory Claude Code happens to be `cwd`'d into when the hook fires — a relative path silently breaks the moment a subagent or a `cd` changes the working directory mid-session. Second, `args` being present (even as an empty array) is what switches Claude Code to exec form: no shell, no quoting rules, no risk of a path containing a space or an apostrophe breaking tokenization — the executable is resolved and spawned directly, and each `args` element passes through verbatim. Third, a real file under version control is diffable, testable in isolation with `echo '{...}' | ./script.sh`, and survives being read back by a future session in a way an inline shell string embedded in JSON does not.
 
+## Hooks can also live in a skill's or agent's own frontmatter
+
+Settings.json isn't the only place a hook can be declared. A skill or agent's own frontmatter can carry a `hooks:` field in the exact same event/matcher/handler shape used everywhere else in this file, scoped to that component's own active lifetime — it starts working when the skill or agent becomes active and is cleaned up when it finishes, without ever touching the target project's `settings.json`:
+
+```yaml
+---
+name: secure-operations
+description: Perform operations with security checks
+hooks:
+  PreToolUse:
+    - matcher: "Bash"
+      hooks:
+        - type: command
+          command: "./scripts/security-check.sh"
+---
+```
+
+One field here has no settings.json equivalent: `once: true` on a handler makes it run once per session and then remove itself — but this is honored **only** for hooks declared in skill frontmatter; the same field on an agent-frontmatter hook or a settings.json hook is silently ignored. If you're generating a skill that needs a check to fire on its first activation only (a one-time environment sanity check, say), skill frontmatter with `once: true` is the only place that behavior exists at all.
+
+Command paths here resolve relative to the skill's own directory, not `${CLAUDE_PROJECT_DIR}` — a different convention from every settings.json recipe in this file, so don't copy a `${CLAUDE_PROJECT_DIR}`-anchored command into a skill's frontmatter unchanged. The substitutions actually documented as available inside a hook's `command` field are `${CLAUDE_PROJECT_DIR}`, `${CLAUDE_PLUGIN_ROOT}`, and `${CLAUDE_PLUGIN_DATA}` — `${CLAUDE_SKILL_DIR}` is a convention for referencing scripts from a skill's own *body* text (what the model reads and acts on), not a substitution Claude Code performs inside a hook's execution environment; treat it as unverified in a `command` field until you've confirmed otherwise against a real run.
+
+This mechanism is a real way for a skill to self-enforce something automatically instead of just telling the model to remember to check it — but it isn't automatically the right call just because it's available. Eligibility still runs through the same test as any other hook: a `PostToolUse` hook that fires on every `Edit|Write` a skill's own generation process makes will fire on every incomplete mid-draft edit, not just on a finished component, which is exactly the over-firing failure mode the eligibility test above warns about — the fix for "the model might forget to validate" is usually a clearer instruction at the right checkpoint in the skill's own body, not a hook racing ahead of the model's own judgment about when a component is actually done.
+
 ## Every generated hook must be verified with test_hook.py before delivery
 
 Do not consider a hook "generated" until `${CLAUDE_SKILL_DIR}/scripts/test_hook.py` has run against it and passed. A hook that looks correct by inspection can still fail for reasons that are invisible until you actually pipe JSON at it: `jq` not installed, the script not marked executable, a shell-profile `echo` polluting stdout ahead of the JSON, an exit code that doesn't match what you intended. This is a free, offline check — there is no reason to skip it, and skipping it is how a harness ships a hook that silently no-ops the first time it fires for real.

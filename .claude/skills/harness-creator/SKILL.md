@@ -30,20 +30,33 @@ Invocation
         audit_harness.py's "suggested mode" is a hint, not a verdict — for extend vs. improve
         specifically, ask the user directly (see references/interview.md's re-entry variants).
  └─ Phase 1-N. Interview (load references/interview.md)
-     └─ each stage ends by updating the spec, then a user approval gate
- └─ Generate (load references/<component>.md, only after the spec is approved)
+     ├─ each stage ends by updating the spec, then a user approval gate
+     └─ behavior inventory specifically: skill count is a real cost (see the layer-routing table below) —
+        weigh consolidation into the inventory decision itself, not as an afterthought once Generate starts
+ └─ Generate (load references/<component>.md for EVERY component type in this pass — an agent, a workflow,
+   │  and a skill in one pass means three separate reference loads, never one file's principles stretched
+   │  by analogy over another component type — only after the spec is approved)
      ├─ warn the user once that the first .claude/ write will prompt (protected path, see Hard lines)
      ├─ generate components (a large harness can fan out generation across a dynamic workflow — optional,
      │   see references/workflows.md for when that's worth it vs. just writing files directly)
-     └─ python "${CLAUDE_SKILL_DIR}/scripts/validate_harness.py" --path . → fix until zero errors
+     ├─ python "${CLAUDE_SKILL_DIR}/scripts/validate_harness.py" --path . → fix until zero errors
+     └─ any hook generated OR wired this pass (a new hook script, or a settings.json edit that points at
+        one) → python "${CLAUDE_SKILL_DIR}/scripts/test_hook.py" must pass first — not optional, not just
+        "recommended" (see references/hooks.md); validate_harness.py cannot check this for you, it has no
+        way to know a hook was actually exercised, so this step is on you to actually run, every time
  └─ Offer validation (load references/e2e-testing.md)
-     ├─ hooks: scripts/test_hook.py — free, always recommend it
      └─ e2e: only with the user's consent (it spends real tokens) — compose a dynamic workflow on the
         spot from the spec's Validation scenarios, or fall back to sequential subagents if workflows
         aren't available
  └─ Wrap-up
+     ├─ python "${CLAUDE_SKILL_DIR}/scripts/validate_harness.py" --path . → one more whole-harness pass —
+     │   not because the per-component runs above were scoped too narrowly (they already scan the whole
+     │   repo every time), but because the two bullets below can themselves introduce new drift after the
+     │   last Generate-phase run
      ├─ record what happened in the spec's Change history
-     ├─ update CLAUDE.md's pointers if needed (never enumerate components — see references/claude-md-and-rules.md)
+     ├─ update CLAUDE.md's pointers if needed (never enumerate components — see references/claude-md-and-rules.md);
+     │   if this changes what harness-spec.md should say, fold it into the Change-history update above —
+     │   the validate_harness.py run just above will independently catch any spec-vs-disk drift this introduces
      └─ propose a commit
 ```
 
@@ -59,7 +72,7 @@ This is the core judgment call the whole interview builds toward: for each thing
 |---|---|---|
 | A project fact or constraint relevant to nearly every request (build commands, an architecture decision, "this rule exists" notices) | CLAUDE.md | Loaded every session. Past ~200 lines, adherence drops — the bar for a line here is "does literally every session need this." |
 | A rule that only matters in one part of the tree (a migration convention under `src/db/**`) | `.claude/rules/*.md` + `paths:` glob | Loads only when a matching file is touched — keeps CLAUDE.md from bloating with things most sessions never need. |
-| A procedure, domain playbook, or reference material needed only when a specific job comes up | skill | Triggers on `description`; body loads only then. This is a repeated-prompt turned into an on-demand asset. |
+| A procedure, domain playbook, or reference material needed only when a specific job comes up | skill | Triggers on `description`; body loads only then. This is a repeated-prompt turned into an on-demand asset — but skill count is a real cost (see references/skills.md), so consolidate related behaviors during the interview rather than defaulting to one skill per requested behavior. |
 | Something that must happen (or never happen) every time, no exceptions | hook, paired with a `permissions` rule | Advisory layers have no enforcement power — a model can and occasionally will deviate. A hook fires deterministically regardless of what the model decides; pair it with a permission rule because a hook's own `if` filter is best-effort and fails open on unparseable input (see references/hooks.md). |
 | A specific tool, command, or path that must be blocked or force-approved | `permissions.allow` / `permissions.deny` | Enforced by the client itself, independent of model behavior. |
 | A context-hungry, read-heavy role where only the conclusion matters back in the main thread (research, review, QA) | `.claude/agents/*.md` | Isolates context and lets you restrict tools/system-prompt per role — but agent count is a real cost (see references/agents.md), generate only roles the interview actually demonstrated a need for. |
@@ -89,10 +102,12 @@ All four live in `scripts/` and are plain-argument Python 3.10+ CLIs (stdlib onl
 | `test_hook.py` | Right after generating any hook, before calling it delivered | `--settings <path> --event <Event> [--tool <Tool>] [--input-field k=v ...]` or `--command <script> --event <Event> [--input <file>]`, plus `--matrix` for match-only inspection |
 | `run_e2e.py` | Only with explicit user consent, during the validation stage | `--project <path> --prompt "..." [--model] [--timeout] [--out] [--isolate]` |
 
+`validate_harness.py` checks structural integrity (pointers resolve, YAML parses, no drift, no unknown tool names) — it does not grade a skill's `description` for trigger quality or near-miss coverage against sibling skills. For any skill generated this session, re-read its description against references/skills.md's triggering and near-miss guidance before calling it done — do this for a single new skill too, not only when multiple skills are generated in the same pass.
+
 `run_e2e.py`'s headless permission handling is a documented best guess (`--isolate` + `--dangerously-skip-permissions`), not empirically confirmed — see references/e2e-testing.md before the first real run and say so to the user.
 
 ## Hard lines
 
 1. **Never advertise a component you haven't actually generated.** Every pointer this skill or its output writes — a reference to a script, a skill, a file — must resolve to a real file. `validate_harness.py` checks this mechanically; that check existing is not a substitute for you checking it yourself before claiming a component is done.
-2. **A generated harness is not finished until `validate_harness.py` exits 0 (errors).** A checklist that isn't mechanically enforced doesn't get enforced — this is the direct fix for the failure mode a prior harness-generation project (referred to internally as revfactory) fell into: a review checklist that existed on paper and was never actually run.
+2. **A generated harness is not finished until `validate_harness.py` exits 0 (errors).** A checklist that isn't mechanically enforced doesn't get enforced — this is the direct fix for the failure mode a prior harness-generation project (referred to internally as revfactory) fell into: a review checklist that existed on paper and was never actually run. A generated hook carries the same bar but a weaker guarantee: it isn't "finished" until `test_hook.py` passes against it either, but unlike the `validate_harness.py` check, nothing can mechanically confirm you actually ran `test_hook.py` — that half rests on you actually doing it, not on a script catching you if you don't.
 3. **`.claude/harness-spec.md` and the actual files must never drift apart silently.** Every generation or edit updates the spec in the same pass; `audit_harness.py`'s drift check exists to catch the times this slips, not to be the only thing keeping them in sync.
