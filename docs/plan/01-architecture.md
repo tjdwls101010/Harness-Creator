@@ -67,6 +67,18 @@ Harness-Creator/                        # github.com/tjdwls101010/Harness-Creato
   (플러그인 경로 사용자만 `:harness-creator` 접미를 본다). README에 두 경로의 호출 형태
   차이를 명시한다.
 
+### 로컬 경로 마켓플레이스 설치의 캐시 누출 (M5에서 발견)
+
+`claude plugin marketplace add ./`(또는 절대 경로)처럼 **로컬 디렉토리를 소스로** 설치하면
+git이 아니라 파일시스템을 그대로 복사하는 것으로 보인다 — `.gitignore`된 `.tmp/`(로컬 전용
+문서 스냅샷, 수십 MB)까지 `~/.claude/plugins/cache/`에 통째로 복사됨을 실측 확인했다
+(`git ls-files`로 `.tmp/`가 추적되지 않음을 재확인 — 실제 GitHub 소스
+`tjdwls101010/Harness-Creator` 설치는 git 추적 콘텐츠만 가져오므로 이 문제와 무관할 것으로
+추정되나, 이 세션에서 GitHub 경로 자체는 실측하지 못함). 개발/테스트 중 로컬 경로로
+`marketplace add`를 쓸 때는: (1) `claude plugin uninstall` + `marketplace remove`만으로는
+`~/.claude/plugins/cache/<name>/`가 남는다 — 수동으로 지워야 함. (2) 이 캐시에 `.tmp/`처럼
+큰 로컬 전용 디렉토리가 딸려올 수 있으니 정리 시 크기를 확인할 것.
+
 ### 심링크 개발 루프 (D11)
 
 ```bash

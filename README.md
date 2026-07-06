@@ -36,4 +36,6 @@ Edits to the skill are reflected immediately in a fresh session — no plugin ca
 
 ## Status
 
-Implementation is in progress against [docs/plan/06-milestones.md](docs/plan/06-milestones.md) (M0–M5). The plan itself was written and adversarially reviewed in a separate planning session before implementation began.
+v0.1.0 — implementation complete against [docs/plan/06-milestones.md](docs/plan/06-milestones.md) (M0–M5): the plugin/marketplace path and the symlink dev path both verified working, all 8 reference files and 4 scripts written and self-tested (78 passing unit tests against hand-built fixture harnesses), the skill dogfooded end to end against a real project (audit → interview → generate → validate → re-entry check). The plan itself was written and adversarially reviewed in a separate planning session before implementation began.
+
+Two things a fresh user should know going in: `run_e2e.py`'s headless permission handling (`--isolate` + `--dangerously-skip-permissions`) is a documented best guess, not empirically confirmed in an authenticated environment — the implementation sandbox that built it couldn't log in a spawned `claude` process to test it, so treat your first real e2e run as the actual verification. And installing the plugin from a **local directory path** (as opposed to the real GitHub source) copies the raw filesystem, including anything gitignored — harmless but worth knowing if you're testing from a local checkout.
