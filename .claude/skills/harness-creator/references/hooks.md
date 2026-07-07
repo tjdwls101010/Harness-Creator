@@ -12,7 +12,7 @@ This test matters because hooks are not free. Every hook adds a process spawn to
 
 ## Hard guarantees need a permission-rule pair, not a hook alone
 
-A `PreToolUse` hook's `if` field looks like a filter, but it is best-effort: it fails open on Bash commands it can't parse, and the official Claude Code documentation itself says explicitly that hard allow/deny decisions belong in the permission system, not in a hook's `if` condition. This is not a hedge — it is a direct statement from the primary source that a hook is the wrong tool for a guarantee on its own.
+A `PreToolUse` hook's `if` field looks like a filter, but it is best-effort: it fails open on Bash commands it can't parse, and the official Claude Code documentation itself says explicitly that hard allow/deny decisions belong in the permission system, not in a hook's `if` condition. A hook is therefore the wrong tool for a guarantee on its own.
 
 The practical implication: whenever the interview surfaces a "must never happen" item — protected file, forbidden command, dangerous directory — generate **both** a `PreToolUse` hook (for the rich feedback message Claude sees when it tries and fails, so it can adapt its approach) **and** a matching `permissions.deny` rule (for the guarantee that actually can't be bypassed, including in `bypassPermissions` mode). The hook without the deny rule is a suggestion with good error messages; the deny rule without the hook is a hard wall with a generic client-side message. Together they give Claude both the wall and the explanation for why it hit the wall.
 

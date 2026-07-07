@@ -1,6 +1,6 @@
 # Generating skills
 
-You are generating a SKILL.md (and possibly `references/` and `scripts/`) for someone else's project. This file is what you follow while doing that. It compresses the authoring philosophy of `skill-creator` — a mature, battle-tested meta-skill for writing skills — into the parts that transfer to harness generation. Everything here applies to CLAUDE.md and rules too, not only to skills; skills are just where the doctrine is sharpest.
+You are generating a SKILL.md (and possibly `references/` and `scripts/`) for someone else's project. This file is what you follow while doing that. It compresses general skill-authoring doctrine into the parts that transfer to harness generation. Everything here applies to CLAUDE.md and rules too, not only to skills; skills are just where the doctrine is sharpest.
 
 ## Conviction over compliance
 
@@ -59,7 +59,7 @@ Most frontmatter fields are mechanical (`name`, `argument-hint`). The ones below
 
 ## Six gotchas you cannot derive from general skill-writing sense
 
-These are the traps that are specific to how Claude Code implements skills, verified against the product docs — not general writing advice, and not things a capable model already knows.
+These are the traps that are specific to how Claude Code implements skills — not general writing advice, and not things a capable model already knows.
 
 **The invocable command name comes from the directory, not `name`.** `name` in frontmatter is a display label only. A skill at `.claude/skills/deploy-staging/SKILL.md` is invoked as `/deploy-staging` regardless of what `name` says — set `name: Deploy to Staging` for a nicer listing and the command is still `/deploy-staging`. When you generate a skill, the directory name *is* the interface contract; naming it sloppily (`skill1`, `helper`) breaks discoverability in a way no frontmatter fix can repair without moving the whole directory.
 

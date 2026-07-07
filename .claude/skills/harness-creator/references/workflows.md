@@ -26,7 +26,7 @@ When a workflow is warranted, start from this shape and adapt it rather than rei
 
 Treat this as a starting silhouette, not a rigid template — a "keep fixing until a check passes" workflow doesn't need a verify stage because the check itself is the verifier, and a pure research workflow might verify claims against multiple independent sources instead of a single adversarial pass. The shape is a default to adapt, the same way the layer-routing table in SKILL.md is a default to adapt — not a checklist to satisfy mechanically.
 
-## Hard gotchas — verified against the primary source, not general JS knowledge
+## Hard gotchas — not general JS knowledge
 
 These are parser and runtime requirements, not style preferences. Getting any of them wrong produces a script that fails validation or silently misbehaves.
 
