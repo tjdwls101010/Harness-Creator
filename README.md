@@ -9,13 +9,15 @@
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin%20%2B%20skill-8A63D2)](https://claude.com/claude-code)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 
+![](https://raw.githubusercontent.com/tjdwls101010/tjdwls101010/refs/heads/main/Images/ChatGPT%20Image%202026%E1%84%82%E1%85%A7%E1%86%AB%207%E1%84%8B%E1%85%AF%E1%86%AF%209%E1%84%8B%E1%85%B5%E1%86%AF%20%E1%84%8B%E1%85%A9%E1%84%92%E1%85%AE%2001_13_27.png)
+
 </div>
 
 ---
 
 ## The idea in one line
 
-> **`ai-agent = model + ai-harness`**
+> **`ai-agent = ai-model + ai-harness`**
 
 The *model* is fixed — you get Claude's intelligence out of the box. What actually determines how well Claude works in **your** repo is the **harness**: the `CLAUDE.md`, rules, skills, hooks, permissions, agents, and workflows that tell it what this project needs and quietly keep it on the rails.
 

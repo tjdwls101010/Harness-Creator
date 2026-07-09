@@ -8,7 +8,7 @@ harness-creator is a meta-skill for [Claude Code](https://claude.com/claude-code
 
 The guiding equation:
 
-> **`ai-agent = model + ai-harness`**
+> **`ai-agent = ai-model + ai-harness`**
 
 You can't change the model. The harness is the part you *can* shape — and building a good one by hand takes a lot of hard-won knowledge about how Claude Code actually behaves. harness-creator packages that knowledge and the interview that turns your goals into concrete components.
 

@@ -8,7 +8,7 @@
 `.claude/skills/harness-creator` — 사용자와 수십 회의 AskUserQuestion 논의를 통해,
 사용자의 의도에 맞는 **하네스(harness)를 통째로 설계·생성·검증·유지보수해주는 메타 하네스**.
 
-- `ai-agent = model + ai-harness`. 하네스는 모델의 지능과 창의성을 유지하면서 역량을 추가하는 레이어.
+- `ai-agent = ai-model + ai-harness`. 하네스는 모델의 지능과 창의성을 유지하면서 역량을 추가하는 레이어.
 - 생성 대상: **대상 프로젝트 repo 내부**(in-repo). 루트 `CLAUDE.md` + `.claude/` 트리.
 - 생성 범위: **CLAUDE.md, .claude/rules/, .claude/skills/, hooks+permissions(.claude/settings.json), .claude/agents/, .claude/workflows/**.
   (.mcp.json, output-styles, statusline, loop.md는 v1 범위 밖 — 필요 시 인터뷰에서 언급만.)

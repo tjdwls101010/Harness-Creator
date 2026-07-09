@@ -4,7 +4,7 @@ This page is the mental model. If you read only one wiki page before using harne
 
 ## What is a harness?
 
-> **`ai-agent = model + ai-harness`**
+> **`ai-agent = ai-model + ai-harness`**
 
 An AI agent is two things: the **model** (Claude's raw intelligence, which you don't control) and the **harness** (everything around it that shapes how it behaves in a specific project). The harness is made of seven kinds of thing in Claude Code:
 

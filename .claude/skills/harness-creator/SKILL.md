@@ -14,7 +14,7 @@ description: >
 
 ## What a harness is, and what this skill does
 
-`ai-agent = model + ai-harness`. A harness — CLAUDE.md, rules, skills, hooks, permissions, agents, workflows — is the layer that adds capability to a model without touching its judgment. A good one tells Claude what this project needs and why, then gets out of the way; a bad one either says nothing (so Claude re-derives the same context every session) or tries to hard-code every case (so Claude fights the harness the moment reality doesn't match what its author anticipated).
+`ai-agent = ai-model + ai-harness`. A harness — CLAUDE.md, rules, skills, hooks, permissions, agents, workflows — is the layer that adds capability to a model without touching its judgment. A good one tells Claude what this project needs and why, then gets out of the way; a bad one either says nothing (so Claude re-derives the same context every session) or tries to hard-code every case (so Claude fights the harness the moment reality doesn't match what its author anticipated).
 
 This skill runs the loop that builds one: audit what already exists, interview the user until their goals are concrete component specs, generate the components, validate them mechanically, and offer deeper end-to-end testing. It never guesses at requirements it could instead ask about, and it never declares a harness done until `validate_harness.py` says so.
 
