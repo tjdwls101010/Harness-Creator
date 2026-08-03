@@ -8,6 +8,8 @@ Permissions are folded into this same file rather than split out on their own. A
 
 Before writing a hook, ask: **must this never be violated?** If the answer is "it's fine if Claude usually gets it right," the item belongs in CLAUDE.md, a rule file, or a skill — not a hook. Route it back through the layer-routing framework in SKILL.md instead of reaching for a hook by default.
 
+That question alone won't do the work, because almost nobody being interviewed answers "no" to it — asked whether something matters, people say yes. Ask a second one that can actually come back negative: **what does a violation cost, and is something already catching it?** A mistake that a code review, a CI job, or a type checker already catches doesn't need a hook; the hook just moves the failure earlier and pays for that on every single tool call. A mistake that is cheap to undo — a formatting slip, a file in the wrong directory — doesn't need one either. The hooks worth generating guard the cases that are expensive or irreversible *and* that nothing downstream will catch: a destructive command, a write to production config, a secret leaving the repo. If the user can't name a consequence worse than "we'd fix it in review," that's the signal to route the item back to prose, and it's a much more useful signal than asking again whether it's important.
+
 This test matters because hooks are not free. Every hook adds a process spawn to the relevant lifecycle point, which is latency the user pays on every matching event whether or not anything was actually wrong. A `PreToolUse` hook on `Bash` runs on every single shell command for the rest of the session. Beyond latency, a harness with hooks scattered across every plausible concern starts fighting the model instead of guiding it — legitimate edge cases the interview didn't anticipate get blocked alongside the genuine violations, and the user ends up fighting their own harness. Reserve hooks for the small set of points where determinism is worth that cost: protecting a path from ever being edited, guaranteeing a formatter always runs, blocking a category of command outright. Everything softer is advisory, and advisory belongs in a layer that's cheap to override when the 16th case you didn't think of shows up.
 
 ## Hard guarantees need a permission-rule pair, not a hook alone
@@ -107,13 +109,52 @@ Permission rules are evaluated in a fixed order — deny rules first, then ask r
 
 Critically, an `Edit` rule also governs `Write` and `NotebookEdit` — you don't need three separate rules for the three file-mutating tools, one `Edit` rule covers the family. Symmetrically, a `Read` rule also governs `Grep`, `Glob`, and IDE-shared file context. When the interview surfaces "never let Claude touch `.env`," one `Edit(.env)` deny rule (plus, if read access should also be blocked, one `Read(.env)` deny rule) is the complete answer — don't generate redundant per-tool rules.
 
-### Project allow rules are gated on workspace trust; deny/ask are not
+**The stronger form of that, because it fails silently in the direction a generator naturally reaches:** file permission checks consult `Edit(path)` and `Read(path)` rules *only*. A path rule written for `Write`, `NotebookEdit`, `Glob`, or `MultiEdit` is accepted and then **never consulted** — `deny: ["Write(docs/**)"]` looks like it protects `docs/`, parses fine, and protects nothing. Since v2.1.210 Claude Code prints a startup warning naming the offending rule, but that scrolls past in a fresh clone and the harness reads as working. Write `Edit(docs/**)` instead of `Write(docs/**)`, and `Read(docs/**)` instead of `Glob(docs/**)`. A rule with no path at all, like a bare `Write` deny, is different — that one matches at the tool level everywhere and does what it looks like.
 
-A project's `.claude/settings.json` **allow** rules only take effect after the user has accepted the workspace-trust dialog for that directory — until then, Claude Code reads the rules but does not apply them. Deny and ask rules have no such gate; they apply immediately regardless of trust, since they only restrict, never grant. This asymmetry is the direct explanation for a specific, otherwise-confusing bug report: "I cloned the repo, the committed settings.json has an allow rule for `npm test`, but Claude still prompts me for it." The rule is real and correctly written; it just hasn't taken effect yet because the workspace hasn't been trusted in this environment. State this explicitly in any harness documentation you generate that ships allow rules in project settings, so a fresh clone doesn't read as a broken harness.
+### Workspace trust gates everything the repo *grants*, not just allow rules
+
+A project's `.claude/settings.json` **allow** rules only take effect after the user has accepted the workspace-trust dialog for that directory — until then, Claude Code reads the rules but does not apply them. Deny and ask rules have no such gate; they apply immediately regardless of trust, since they only restrict, never grant. This asymmetry is the direct explanation for a specific, otherwise-confusing bug report: "I cloned the repo, the committed settings.json has an allow rule for `npm test`, but Claude still prompts me for it." The rule is real and correctly written; it just hasn't taken effect yet because the workspace hasn't been trusted in this environment.
+
+The gate is wider than allow rules, and this is what makes it a harness-level concern rather than a permissions footnote. The same acceptance governs every capability a checked-in repo can hand itself:
+
+- `permissions.allow` and `permissions.additionalDirectories`
+- **project hooks** — they execute shell commands, so they carry the same trust requirement as any other shell-executing project setting
+- a project **`statusLine`** command — until trusted it stays blank, with `Status line command skipped: workspace trust not accepted` in the debug log
+- a **project skill's `allowed-tools`** — a skill could otherwise grant itself broad tool access just by being committed
+- **frontmatter hooks on a project subagent** (v2.1.218+) — the subagent still runs, but its hooks are skipped and the reason goes only to the debug log. User-level subagents in `~/.claude/agents/` are exempt, and a folder added with `--add-dir` needs trusting separately; it does not inherit the workspace's grant
+- `autoMemoryDirectory` when set in project settings
+
+The consequence a generator has to plan for: **on an untrusted fresh clone, the enforcing half of the harness is inert while the restricting half is fully live.** Deny and ask rules bite, hooks don't fire, and the failure is quiet — nothing surfaces in the session, only in a debug log nobody has running. Say this explicitly in what you generate whenever the harness ships project allow rules or hooks, so a fresh clone doesn't read as broken and, worse, so nobody concludes a guarantee is holding when it isn't.
+
+`.claude/settings.local.json` is normally the user's own file and skips the check — but when the repository could have supplied it (it's committed to git, or `.claude` is a symlink), its allow rules go through the same gate as project settings.
+
+### Protected paths: `.claude/` writes can't be pre-approved, and one mode refuses them outright
+
+`.claude` is a **protected directory** (except `.claude/worktrees`), alongside `.git`, `.vscode`, `.idea`, `.husky`, `.devcontainer` and others; `.mcp.json`, `.claude.json`, shell rc files, `.npmrc`, and `.pre-commit-config.yaml` are protected files. Two consequences matter for a generator, and they point in opposite directions.
+
+**You cannot fix a protected-path prompt with an allow rule.** The safety check runs *before* Claude Code evaluates allow rules from settings, so an `Edit(.claude/**)` entry — in project settings or user settings — changes nothing. This is the exact repair a generator reaches for when a user complains about being prompted on every `.claude/` write, and it is a no-op that looks like a fix. Don't generate it.
+
+**The outcome is per-mode, and one mode is a hard stop:**
+
+| Mode | Protected-path write |
+|---|---|
+| `default`, `acceptEdits` | Prompted |
+| `plan` | Prompted (allowed where bypass is available; routed to the classifier where auto mode is) |
+| `auto` | Routed to the classifier |
+| `dontAsk` | **Denied** |
+| `bypassPermissions` | Allowed |
+
+`dontAsk` is the row to design around: it's the mode built for CI and locked-down runs, so a harness whose setup or self-update step writes into `.claude/` works on a developer's laptop and silently fails in the pipeline. The only genuinely useful thing to tell a user in the modes that prompt is that the `.claude/` prompt carries an extra option — **"Yes, and allow Claude to edit its own settings for this session"** — which clears the rest of the session's `.claude/` writes without them having to approve each one.
 
 ### Only narrow allow rules are worth generating — broad ones get dropped in auto mode
 
 When a session enters auto mode, Claude Code automatically suspends broad allow rules that grant arbitrary code execution: a blanket `Bash(*)` or `PowerShell(*)`, wildcarded interpreters like `Bash(python*)`, package-manager run commands, and `Agent` allow rules. Narrow rules like `Bash(npm test)` carry over untouched. The practical consequence for a generator: **a broad allow rule has no durable value** in a harness that might ever run under auto mode — it works in `default`/`acceptEdits` mode and silently stops covering anything the moment the user switches to auto. Generate narrow, specific allow rules (`Bash(npm test)`, `Bash(git status)`) rather than broad ones (`Bash(*)`), both because narrow rules are what the interview should actually be surfacing (specific, named, safe commands) and because narrow rules are the only kind guaranteed to keep working across every permission mode.
+
+### `defaultMode: "auto"` is ignored in the settings file this skill writes
+
+A repository cannot grant itself auto mode. Since v2.1.142, Claude Code **ignores `permissions.defaultMode: "auto"`** when it appears in `.claude/settings.json` or `.claude/settings.local.json`; the session starts in `default` with no error and no warning. Only `~/.claude/settings.json` (or managed settings) can set it.
+
+This matters here more than most gotchas because project `settings.json` is a file this skill generates. If the interview lands on "I don't want to be prompted constantly," writing `defaultMode: "auto"` into the project settings produces a harness that appears configured and behaves exactly as if it weren't. Route that request to the user's own settings and say so in the spec's Design rationale; `acceptEdits` and `plan` are honored in project settings and are the values worth generating there.
 
 ### Compound commands need every sub-command matched, and a trailing wildcard enforces a word boundary
 
@@ -232,3 +273,5 @@ Each recipe below is deliberately dense: the `settings.json` entry plus a one-li
 ```
 
 `check-tests.sh` reads `stop_hook_active` from stdin first and exits 0 immediately if it's `true` (loop guard — see the gotcha above); otherwise it runs the test suite, and if tests fail, prints a JSON object with `decision: "block"` and a `reason` describing what's failing, then exits 0 (JSON decision channel, not the exit-2 channel, since `Stop` reads the top-level `decision` field rather than relying on exit code alone for this event). No permission-rule pair is needed here — a `Stop` hook isn't blocking a *tool call*, it's keeping the turn going, so there's no allow/deny rule that would express the same guarantee more strongly. The loop guard plus the built-in 8-consecutive-block cap are what keep this safe from becoming an infinite loop if the tests never pass.
+
+**Price this one before generating it.** `Stop` is a once-per-turn event, so unlike a `PreToolUse` hook that only wakes on a matching tool, this cost lands on *every* turn — including the turns where Claude answered a question and touched nothing. A hook that shells out to a full test suite turns every reply into a test run. And the usual escape hatch doesn't apply here: `async: true` makes a hook non-blocking, but Claude Code then ignores its output completely — no stdout, no JSON parsing, no exit codes — so an async `Stop` hook cannot block, which is the entire point of this recipe. (`asyncRewake: true` is a middle path: it runs in the background and wakes Claude on exit 2, which suits a slow check that should interrupt later rather than gate now.) Either scope the check to something cheap, gate it inside the script on whether any relevant file actually changed this turn, or accept the per-turn cost deliberately.

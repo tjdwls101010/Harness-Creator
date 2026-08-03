@@ -159,6 +159,81 @@ class DeadLinkCoverageTests(unittest.TestCase):
         self.assertEqual([f for f in findings if f[0] == "E"], [])
 
 
+class GuardrailTests(unittest.TestCase):
+    """The do-not-cut list from the audit (audit-synthesis.md section 4), plus
+    the mechanics added in WS5. Each entry is a product mechanism with a named
+    silent failure mode: cutting it degrades generated harnesses without
+    degrading the prose, so nothing here should quietly disappear during the
+    example-trimming pass.
+
+    Anchors are distinctive technical tokens rather than sentences, so
+    legitimate rewording doesn't trip them. If a rewrite genuinely retires an
+    anchor, change it here deliberately -- that edit is the review signal."""
+
+    GUARDRAILS = {
+        "hooks.md": [
+            "exit 2",              # only exit 2 blocks; exit 1 proceeds silently
+            "stop_hook_active",    # unguarded Stop hook is an infinite loop
+            "NotebookEdit",        # Edit.* matcher also matches NotebookEdit
+            "additionalContext",   # imperative phrasing trips injection defenses
+            "workspace trust",     # the enforcing half is inert on a fresh clone
+            "bypassPermissions",   # hook deny holds; hook allow never loosens
+            "protected",           # .claude/ writes can't be pre-approved
+            "dontAsk",             # protected-path writes are denied outright
+            "defaultMode",         # "auto" is ignored in project settings
+            "asyncRewake",         # the middle path for a slow Stop check
+        ],
+        "skills.md": [
+            "once: true",
+            "!`",                  # !`command` always runs, it is preprocessing
+        ],
+        "agents.md": [
+            "Explore and Plan",    # they skip CLAUDE.md and git status
+            "skills:",             # preloads full skill bodies, not descriptions
+            "once: true",
+            "AskUserQuestion",     # does not exist inside a subagent
+            "v2.1.218",            # frontmatter hooks are trust-gated
+        ],
+        "claude-md-and-rules.md": [
+            "paths:",              # a rule without paths: loads at launch
+            "@",                   # imports expand at launch, saving nothing
+            "200",                 # the line guideline, with its exception
+        ],
+        "workflows.md": [
+            "meta",                # must be a pure literal, read before execution
+            "Date.now()",          # outright rejection, not a warning
+            "acceptEdits",         # every workflow agent runs in this mode
+        ],
+        "e2e-testing.md": [
+            "AskUserQuestion",     # the interview can never be e2e-tested
+        ],
+        "hooks-events.md": [
+            "stop_hook_active",
+            "SessionEnd",
+        ],
+    }
+
+    def test_guardrail_facts_survive(self):
+        for filename, anchors in self.GUARDRAILS.items():
+            text = read(SKILL_DIR / "references" / filename)
+            for anchor in anchors:
+                self.assertIn(anchor, text, f"{filename} lost {anchor!r}")
+
+    def test_hooks_router_survives(self):
+        """R3. The event router is what makes the hooks.md/hooks-events.md
+        split safe -- without it the model loads ~3,800 words to pick one
+        event, turning a staged split into a routing failure."""
+        text = read(SKILL_DIR / "references" / "hooks.md")
+        events = re.findall(r"`(PreToolUse|PostToolUse|Stop|SessionEnd|UserPromptSubmit)`", text)
+        self.assertGreater(len(set(events)), 3)
+        self.assertIn("hooks-events.md", text)
+
+    def test_run_e2e_honesty_survives(self):
+        """Deleting the stated limitation turns an honest best guess into an
+        implied guarantee."""
+        self.assertIn("best guess", read(SKILL_MD) + read(SKILL_DIR / "references" / "e2e-testing.md"))
+
+
 class NoExternalToolNamesTests(unittest.TestCase):
     """D14. The shipped skill is a self-contained plugin and must not name
     Claude Code UI commands."""

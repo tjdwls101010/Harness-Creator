@@ -26,6 +26,14 @@ Everything in CLAUDE.md must be something Claude cannot infer by reading the cod
 
 When generating a harness, everything you put in CLAUDE.md should be traceable to something the interview surfaced that genuinely can't be recovered by reading the repo. If an interview answer is really just describing what the code already shows, that's a signal the answer doesn't need a CLAUDE.md line at all.
 
+### The line worth keeping is the one that contradicts a default, not the one that repeats it
+
+The test above catches instructions that **duplicate** what the model already does. It does not catch the opposite case, and the opposite case is where the highest-value lines live: an instruction that **contradicts** a sensible default. Ask "if I deleted this line, would Claude get it wrong?" — for a line fighting a default, the answer is a clean yes, and that is exactly what earns its tokens. A project that wants no docstrings on internal helpers, or that wants tests colocated when the ecosystem convention is a `tests/` tree, or that wants an older API surface kept because a downstream consumer pins it, has to say so; nothing in the codebase announces a decision that was made by *not* doing something.
+
+Write these as intent, not prohibition. "Don't add docstrings" holds only the case its author listed and snaps on the first variant — a type comment, a module header — that wasn't enumerated. "Internal helpers under `src/lib/` are deliberately undocumented; the public API in `src/api/` carries full docs, and that split is what tells a reader which surface is stable" lets the model re-derive the rule for a case nobody wrote down. The same shape applies to any harness layer, not just CLAUDE.md.
+
+One caution when you write one of these: a default you're contradicting is a moving target. Say what the project wants and why, and avoid pinning the sentence to a description of current model behavior that will read as false in a year.
+
 ## Write concretely and verifiably
 
 Every instruction should be checkable, not aspirational. "Use 2-space indentation" is verifiable — you can look at a file and confirm it's true or false. "Format code properly" is not — there's no way to check compliance, so the model has nothing concrete to aim for and reviewers have nothing concrete to check against. Apply this test to every line you generate: could someone glance at the codebase and confirm this rule is (or isn't) being followed? If not, sharpen it until they can.
