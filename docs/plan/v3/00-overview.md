@@ -135,7 +135,7 @@ v2 계획 §4는 "증가분은 전부 조건부 로드되는 reference에 들어
 
 12. README staleness 수정, CHANGELOG, v0.3.0 태그
 
-> **시작 전 `git tag v3-baseline`.** v2가 `v2-baseline`으로 A/B 기준을 잡았던 것과 같은 이유다.
+> **`v3-baseline` 태그는 이미 찍혀 있다** (계획 병합 시점, `797c98a`). 계획 문서는 스킬 표면을 건드리지 않으므로 이 태그의 수치는 v0.2.0의 수치와 같다. **v0.2.0이 아니라 이 태그와 비교할 것** — 그래야 diff에 v3가 한 일만 남는다.
 
 ## 5b. 계획 문서 위생 (PR1에 포함)
 
@@ -190,9 +190,12 @@ PR1(01-doctrine.md)부터. 머지된 뒤에 PR2(02-compression.md)로 넘어가.
 
 **시작 전 확인**
 
-- `git tag v3-baseline`
 - `~/.claude/skills/harness-creator` 심링크가 이 repo를 가리키는지 (플러그인 설치와 동시 사용 금지 — 스킬이 두 이름으로 이중 등록된다)
 - `.tmp/docs_claude/`(2026-07-05 스냅샷)와 `.tmp/The new rules of context engineering...md`가 로컬에 있는지
-- `docs/plan/v3-compression-targets.md` 삭제 (이 문서가 대체한다)
+
+**이미 처리된 것** — 다시 하지 말 것:
+
+- `git tag v3-baseline` ✅ 계획 병합 시점에 찍음
+- `docs/plan/v3-compression-targets.md` 삭제 ✅ 이 문서가 대체한다
 
 **작업 중 지켜야 할 검증 규칙 (D24 유지).** 버전 민감 메커니즘(타임아웃 값, matcher가 받는 값 목록, 버전 플로어, frontmatter 필드 집합)은 스냅샷이 아니라 `https://code.claude.com/docs/en/<page>` 라이브 문서로 확인한다. B5(SessionEnd 타임아웃)가 정확히 이 함정이었다.
