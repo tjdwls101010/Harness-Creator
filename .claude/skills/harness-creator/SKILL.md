@@ -36,7 +36,9 @@ Invocation
  └─ Generate (load references/<component>.md for EVERY component type in this pass — an agent, a workflow,
    │  and a skill in one pass means three separate reference loads, never one file's principles stretched
    │  by analogy over another component type — only after the spec is approved)
-     ├─ warn the user once that the first .claude/ write will prompt (protected path, see Hard lines)
+     ├─ warn the user once that the first .claude/ write hits a protected path: it prompts in most modes
+     │   and is refused outright under dontAsk, and no allow rule can pre-approve it (see the protected
+     │   paths section in references/hooks.md)
      ├─ generate components (a large harness can fan out generation across a dynamic workflow — optional,
      │   see references/workflows.md for when that's worth it vs. just writing files directly)
      ├─ python "${CLAUDE_SKILL_DIR}/scripts/validate_harness.py" --path . → fix until zero errors
@@ -48,15 +50,15 @@ Invocation
      └─ e2e: only with the user's consent (it spends real tokens) — compose a dynamic workflow on the
         spot from the spec's Validation scenarios, or fall back to sequential subagents if workflows
         aren't available
- └─ Wrap-up
-     ├─ python "${CLAUDE_SKILL_DIR}/scripts/validate_harness.py" --path . → one more whole-harness pass —
-     │   not because the per-component runs above were scoped too narrowly (they already scan the whole
-     │   repo every time), but because the two bullets below can themselves introduce new drift after the
-     │   last Generate-phase run
+ └─ Wrap-up (in this order — the validation has to come after the edits it's meant to check)
      ├─ record what happened in the spec's Change history
      ├─ update CLAUDE.md's pointers if needed (never enumerate components — see references/claude-md-and-rules.md);
-     │   if this changes what harness-spec.md should say, fold it into the Change-history update above —
-     │   the validate_harness.py run just above will independently catch any spec-vs-disk drift this introduces
+     │   if this changes what harness-spec.md should say, fold it back into the Change-history update
+     ├─ python "${CLAUDE_SKILL_DIR}/scripts/validate_harness.py" --path . → one more whole-harness pass.
+     │   The per-component runs above already scanned the whole repo, so this pass exists for one reason:
+     │   the two bullets above edit the spec and CLAUDE.md, and those edits can trip the @-import check,
+     │   the 200-line warning, or the bare-name inventory warning — the last being the exact mistake the
+     │   pointer bullet warns about. Run it last, and fix what it finds before the commit.
      └─ propose a commit
 ```
 
@@ -70,11 +72,11 @@ This is the core judgment call the whole interview builds toward: for each thing
 
 | What it is | Layer | Why |
 |---|---|---|
-| A project fact or constraint relevant to nearly every request (build commands, an architecture decision, "this rule exists" notices) | CLAUDE.md | Loaded every session. Past ~200 lines, adherence drops — the bar for a line here is "does literally every session need this." |
-| A rule that only matters in one part of the tree (a migration convention under `src/db/**`) | `.claude/rules/*.md` + `paths:` glob | Loads only when a matching file is touched — keeps CLAUDE.md from bloating with things most sessions never need. |
+| A project fact or constraint relevant to nearly every request (build commands, an architecture decision, "this rule exists" notices) | CLAUDE.md | Loaded every session. Past ~200 lines, adherence drops — the bar for a line here is "does literally every session need this" (see references/claude-md-and-rules.md). |
+| A rule that only matters in one part of the tree (a migration convention under `src/db/**`) | `.claude/rules/*.md` + `paths:` glob | Loads only when a matching file is touched — keeps CLAUDE.md from bloating with things most sessions never need (see references/claude-md-and-rules.md). |
 | A procedure, domain playbook, or reference material needed only when a specific job comes up | skill | Triggers on `description`; body loads only then. This is a repeated-prompt turned into an on-demand asset — but skill count is a real cost (see references/skills.md), so consolidate related behaviors during the interview rather than defaulting to one skill per requested behavior. |
 | Something that must happen (or never happen) every time, no exceptions | hook, paired with a `permissions` rule | Advisory layers have no enforcement power — a model can and occasionally will deviate. A hook fires deterministically regardless of what the model decides; pair it with a permission rule because a hook's own `if` filter is best-effort and fails open on unparseable input (see references/hooks.md). |
-| A specific tool, command, or path that must be blocked or force-approved | `permissions.allow` / `permissions.deny` | Enforced by the client itself, independent of model behavior. |
+| A specific tool, command, or path that must be blocked or force-approved | `permissions.allow` / `permissions.deny` | Enforced by the client itself, independent of model behavior (see the permissions section in references/hooks.md). |
 | A context-hungry, read-heavy role where only the conclusion matters back in the main thread (research, review, QA) | `.claude/agents/*.md` | Isolates context and lets you restrict tools/system-prompt per role — but agent count is a real cost (see references/agents.md), generate only roles the interview actually demonstrated a need for. |
 | An orchestration whose *shape* is fixed and repeats — same steps, only the arguments change, meant to be a one-button `/name` | `.claude/workflows/*.js` | Determinism is the point here. Keep it thin: skeleton in the script, judgment in the agent prompts (see references/workflows.md and D12). |
 | Large parallel work whose shape is different every time it comes up | Natural-language guidance in CLAUDE.md/a skill ("fan this out with a workflow: find → verify → synthesize") | A fixed file for a variable-shaped task becomes a flexibility tax. On-the-fly composition, guided by a principle, beats a rigid template here. |
@@ -83,7 +85,7 @@ How to apply it, in three questions: **enforced or advisory** — is it fine if 
 
 ## Authoring philosophy
 
-Conviction over compliance: every instruction you write into a generated component is what + a convincing why + a concrete picture, and the test is whether the why alone would let the model re-derive the rule and handle a case you didn't think to enumerate. A rule with no reason attached is a rail — it holds exactly the cases its author listed and snaps on the sixteenth one that wasn't. Don't write what a capable model already knows; the content that's actually worth its tokens is the **gotcha** — a domain trap nobody could have derived from general competence, only from having been burned by it once. Progressive disclosure is an optimum, not a default — split a file only when the model genuinely branches at that seam (which cloud provider, which template); splitting by volume alone produces a routing decision with no payoff and sometimes a silently-missed fragment. Numbers need their justification and their exception in the same breath. Every one of these threads is covered in depth, with the exact product-specific gotchas, in `references/` — load the file for whatever component you're about to generate before you generate it, every time, even if you've generated that component type before in this session.
+Conviction over compliance: every instruction you write into a generated component is what + a convincing why + a concrete picture, and the test is whether the why alone would let the model re-derive the rule and handle a case you didn't think to enumerate. A rule with no reason attached is a rail — it holds exactly the cases its author listed and snaps on the sixteenth one that wasn't. Don't write what a capable model already knows; the content that's actually worth its tokens is the **gotcha** — a domain trap nobody could have derived from general competence, only from having been burned by it once. Progressive disclosure is an optimum, not a default — the seam that pays is one where the model genuinely branches (which cloud provider, which template, which mode), because then each invocation reads one file instead of all of them. Volume alone is a weaker reason but not a non-reason: official guidance is to keep a SKILL.md under 500 lines and move detailed reference material out, so a body that has outgrown that gets split even if the branch is soft. What never pays is splitting a file the model will always read in full anyway — that buys a routing decision with no saved reading, and sometimes a silently-missed fragment. Numbers need their justification and their exception in the same breath. Every one of these threads is covered in depth, with the exact product-specific gotchas, in `references/` — load the file for whatever component you're about to generate before you generate it, every time, even if you've generated that component type before in this session.
 
 **No mid-sentence hard-wrapping.** Line breaks in every file you write — this skill's own files and everything you generate for a target project — fall only at sentence, list-item, or paragraph boundaries, never in the middle of a sentence to fit a column width. Hard wraps break a future Edit tool's exact-string matching and pollute diffs; renderers soft-wrap on their own, so there's no display benefit to doing it manually.
 
@@ -108,6 +110,6 @@ All four live in `scripts/` and are plain-argument Python 3.10+ CLIs (stdlib onl
 
 ## Hard lines
 
-1. **Never advertise a component you haven't actually generated.** Every pointer this skill or its output writes — a reference to a script, a skill, a file — must resolve to a real file. `validate_harness.py` checks this mechanically; that check existing is not a substitute for you checking it yourself before claiming a component is done.
+1. **Never advertise a component you haven't actually generated.** Every pointer this skill or its output writes — a reference to a script, a skill, a file — must resolve to a real file. `validate_harness.py` mechanically checks the pointers a skill makes into its own bundled `references/` and `scripts/`, in whatever form they're written; it does not follow prose that names a component some other way, so that check existing is not a substitute for you checking it yourself before claiming a component is done.
 2. **A generated harness is not finished until `validate_harness.py` exits 0 (errors).** A checklist that isn't mechanically enforced doesn't get enforced. A generated hook carries the same bar but a weaker guarantee: it isn't "finished" until `test_hook.py` passes against it either, but unlike the `validate_harness.py` check, nothing can mechanically confirm you actually ran `test_hook.py` — that half rests on you actually doing it, not on a script catching you if you don't.
 3. **`.claude/harness-spec.md` and the actual files must never drift apart silently.** Every generation or edit updates the spec in the same pass; `audit_harness.py`'s drift check exists to catch the times this slips, not to be the only thing keeping them in sync.

@@ -39,7 +39,7 @@ Decompose I1's answer into items, then reconnoiter the codebase for things the u
 
 ### I3 — Layer routing
 
-**Purpose:** for each inventory item, decide which layer it belongs to (CLAUDE.md / rules / skill / hook+permission / agent / workflow) using the layer-routing framework from SKILL.md §3, then get the user to confirm the routing — especially the enforce-vs-advise calls, which are the ones with real consequences if you get them wrong.
+**Purpose:** for each inventory item, decide which layer it belongs to (CLAUDE.md / rules / skill / hook+permission / agent / workflow) using the layer-routing framework from SKILL.md's "The layer-routing framework" section, then get the user to confirm the routing — especially the enforce-vs-advise calls, which are the ones with real consequences if you get them wrong.
 
 Propose routing, don't derive it silently. For most items the routing is unambiguous enough to just state ("test-runner convention → CLAUDE.md, it's a fact every session needs"), but flag the ones where you're making a judgment call the user might disagree with — typically anything that could plausibly be either a strong CLAUDE.md instruction or a hook. Example: the user said in I1 "Claude should never commit without running tests." That's a candidate for a hook (enforced) or a CLAUDE.md line (advised), and the difference matters — a CLAUDE.md line can be ignored under context pressure, a hook cannot. Surface the tradeoff plainly rather than picking silently: "should this be a hard block before commit, or a reminder Claude usually follows?"
 

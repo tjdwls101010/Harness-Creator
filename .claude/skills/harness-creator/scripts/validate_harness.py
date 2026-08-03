@@ -39,6 +39,10 @@ _TRIGGER_PHRASE_RE = re.compile(
     r"\b(use|when|whenever|trigger|invoke)\b|할\s*때|사용", re.IGNORECASE
 )
 _BULLET_NAME_RE = re.compile(r"^\s*[-*]\s+`?([A-Za-z0-9_\-]+)`?\s*$")
+_SKILL_POINTER_RE = re.compile(
+    r"(?P<prefix>\$\{CLAUDE_SKILL_DIR\}/|\./|/)?"
+    r"(?P<subdir>references|scripts)/(?P<name>[A-Za-z0-9_.*\-]+)"
+)
 
 
 def add(findings, level, location, message):
@@ -235,6 +239,16 @@ def check_skills(root, findings):
 
         _check_dead_links(skill_dir, loc, text, findings)
 
+        # Reference-to-reference pointers are as load-bearing as the ones in
+        # SKILL.md and were previously never scanned at all. There are only a
+        # handful of files, so this is cheap.
+        refs_dir = skill_dir / "references"
+        if refs_dir.is_dir():
+            for ref in sorted(refs_dir.rglob("*.md")):
+                _check_dead_links(
+                    skill_dir, str(ref.relative_to(root)), hc.read_text(ref), findings
+                )
+
     if total_description_chars > 0:
         # ~1% of a 200k-token window in characters, as a rough budget signal
         # (references/skills.md) -- an estimate, so this is always a W.
@@ -249,12 +263,24 @@ def check_skills(root, findings):
 
 
 def _check_dead_links(skill_dir, loc, text, findings):
-    for m in re.finditer(r"`references/([\w.\-]+)`|`scripts/([\w.\-]+)`", text):
-        rel_name = m.group(1) or m.group(2)
-        subdir = "references" if m.group(1) else "scripts"
-        target = skill_dir / subdir / rel_name
-        if not target.exists():
-            add(findings, "E", loc, f"references a {subdir} file that does not exist: {subdir}/{rel_name}")
+    """Every pointer to a bundled reference or script must resolve.
+
+    Deliberately wrapper-agnostic: a pointer is just as dead when it is
+    written as bare prose ("see references/hooks.md"), as a markdown link,
+    or inside a ${CLAUDE_SKILL_DIR} invocation as it is inside backticks.
+    Only matching the backticked form would leave most of a skill's own
+    pointers unchecked while Hard line 1 claims otherwise."""
+    for m in re.finditer(_SKILL_POINTER_RE, text):
+        subdir, name = m.group("subdir"), m.group("name")
+        # A `./`- or `/`-anchored path belongs to the target project, not to
+        # this skill -- hook commands in the examples are exactly that shape.
+        if m.group("prefix") in ("./", "/"):
+            continue
+        # A glob is a pattern, not a pointer; `...` is an ellipsis, not a file.
+        if "*" in name or not name.strip("."):
+            continue
+        if not (skill_dir / subdir / name).exists():
+            add(findings, "E", loc, f"references a {subdir} file that does not exist: {subdir}/{name}")
 
 
 def check_agents(root, findings):
