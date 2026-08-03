@@ -162,13 +162,69 @@ def check_spec_drift(root, inventory):
     return {
         "spec_exists": True,
         "on_disk_not_in_spec": on_disk_not_in_spec,
-        # "in spec but not on disk" would require parsing the spec's
-        # Behavior inventory table, which is free-form prose by design (see
-        # references/interview.md) -- conservatively not attempted here to
-        # avoid a false "missing" report; a human (or the interviewing
-        # Claude) reading the spec's Behavior inventory table against this
-        # on-disk list is the reliable way to catch that direction.
+        "in_spec_not_on_disk": _spec_rows_without_files(spec_text, on_disk),
     }
+
+
+# Only these two statuses assert that a file exists. `proposed` and
+# `approved` are intent, not artifacts, so a row at either is not drift --
+# reporting them would fire on every harness mid-interview.
+_STATUSES_CLAIMING_A_FILE = frozenset({"generated", "validated"})
+
+
+def _spec_rows_without_files(spec_text, on_disk):
+    """Rows in the Behavior inventory whose status claims a file exists,
+    where no such file is on disk.
+
+    The other half of drift. Previously declined here on the grounds that the
+    spec is free-form prose, but it is not: the Behavior inventory table's
+    columns are fixed by the spec template that this skill itself writes
+    (see references/interview.md), and the status column exists precisely so
+    this check can be made. `status` stuck at `generated` with no matching
+    file is the signal that generation was interrupted, or that something
+    deleted the component out from under the spec."""
+    missing = []
+    disk_names = {Path(p.rstrip("/")).name for p in on_disk}
+    disk_stems = {Path(p.rstrip("/")).stem for p in on_disk}
+
+    for row in _iter_inventory_rows(spec_text):
+        if len(row) < 5:
+            continue
+        component, status = row[3], row[4].lower()
+        if status not in _STATUSES_CLAIMING_A_FILE:
+            continue
+        # The spec convention is a backticked repo-relative path, but accept
+        # a bare name too rather than reporting a false "missing" against a
+        # spec written before that convention was documented.
+        name = component.strip().strip("`").rstrip("/")
+        if not name or name.startswith("<"):
+            continue
+        stem = Path(name).stem
+        if name in on_disk or Path(name).name in disk_names or stem in disk_stems:
+            continue
+        missing.append({"id": row[0].strip(), "component": name, "status": status})
+    return missing
+
+
+def _iter_inventory_rows(spec_text):
+    """Yield the data rows of the `## Behavior inventory` markdown table as
+    lists of cell strings, skipping the header and separator rows."""
+    in_section = False
+    for line in spec_text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            # A new heading ends the section; match on the heading text so a
+            # different heading level doesn't break the parse.
+            in_section = stripped.lstrip("#").strip().lower() == "behavior inventory"
+            continue
+        if not in_section or not stripped.startswith("|"):
+            continue
+        cells = [c.strip() for c in stripped.strip("|").split("|")]
+        if not cells or set("".join(cells)) <= set("-: "):
+            continue  # separator row
+        if cells[0].lower() == "id":
+            continue  # header row
+        yield cells
 
 
 def check_user_scope_conflicts(root, inventory):
@@ -209,6 +265,8 @@ def suggest_mode(inventory, drift, hygiene):
         return "new -- no harness components found at all."
     if not drift["spec_exists"]:
         return "improve or sync -- components exist but there's no harness-spec.md; treat the first pass as recovering a spec from what's actually on disk."
+    if drift["in_spec_not_on_disk"]:
+        return "sync -- the spec claims components that aren't on disk; generation was interrupted, or something removed them. Confirm with the user before regenerating."
     if drift["on_disk_not_in_spec"]:
         return "sync -- components exist on disk that the spec doesn't mention; confirm with the user whether to update the spec or these files."
     if hygiene["total_lint_errors"] > 0:
@@ -269,12 +327,19 @@ def print_markdown(result):
     drift = result["spec_drift"]
     if not drift["spec_exists"]:
         print("- No harness-spec.md found.")
-    elif drift["on_disk_not_in_spec"]:
-        print("- Components on disk but not mentioned in the spec:")
-        for p in drift["on_disk_not_in_spec"]:
-            print(f"  - {p}")
     else:
-        print("- No drift detected (every on-disk component is mentioned somewhere in the spec).")
+        if drift["in_spec_not_on_disk"]:
+            print("- Spec claims these components exist, but they are not on disk:")
+            for row in drift["in_spec_not_on_disk"]:
+                print(f"  - {row['component']} (row {row['id']}, status: {row['status']})")
+        if drift["on_disk_not_in_spec"]:
+            print("- Components on disk but not mentioned in the spec:")
+            for p in drift["on_disk_not_in_spec"]:
+                print(f"  - {p}")
+            print("    (a component here may be a normal edit made outside this flow, not")
+            print("     corruption -- ask before proposing to regenerate or remove anything)")
+        if not drift["in_spec_not_on_disk"] and not drift["on_disk_not_in_spec"]:
+            print("- No drift detected in either direction.")
 
     print("\n## User-scope conflict candidates\n")
     if result["user_scope_conflicts"]:
