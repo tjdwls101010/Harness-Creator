@@ -91,17 +91,9 @@ Same decision, same spec cell, different surface language. Don't force tool jarg
 
 **Divergent questions are not AskUserQuestion's job.** AskUserQuestion is a convergence tool: it's for picking among a small set of options you can already enumerate. "What's your goal for this harness" and "what's been painful" have answer spaces you cannot enumerate in advance — forcing them into 2-4 options would either bias the answer toward your guesses or truncate something the user needed to say in full sentences. Those belong in ordinary dialogue (this is exactly why I1 above is written as plain questions, not a tool call). Once you're choosing between "hook vs CLAUDE.md rule" or "block vs warn," the option space is small and known — that's when the tool earns its keep.
 
-## Re-entry mode variants
+## Re-entry
 
-**Extend mode** shrinks I1 down to a single question — "what's newly wanted, beyond what's already in the harness?" — and everything else follows the same stage flow, except the resulting Goals content is merged into the existing spec's Goals section rather than replacing it. I2-I5 run as normal against the delta, since new behaviors still need inventory, routing, and component detail even if the overall harness already exists.
-
-**Improve mode** replaces I1 entirely with "what was uncomfortable, wrong, or annoying about how the current harness behaves?" instead of "what's the goal" — the framing shifts from greenfield intent to observed failure. Each piece of feedback then gets routed through the feedback-routing table (symptom → repair target: wrong trigger → description, triggered-but-wrong-behavior → skill body, ignored rule → CLAUDE.md then escalate to hook, etc.) defined in `e2e-testing.md` — don't duplicate that table here, just route feedback through it and let it tell you which component and which stage of this protocol to re-enter at.
-
-**Sync mode** minimizes the interview almost to nothing: Phase 0's audit already produced a drift list in both directions — a spec row whose `status` claims a file that isn't there, and a file on disk the spec never mentions — so the entire interview collapses to presenting that list and asking, per item, whether the spec should be corrected to match reality or the files regenerated to match the spec. There is no I1-I5 traversal in sync mode — drift resolution is its own minimal loop.
-
-Default to correcting the spec, and ask before proposing anything else. Divergence is not automatically corruption: a component on disk that the spec doesn't mention is usually a teammate's or another tool's ordinary work, not damage to be reverted, and the same goes for behavior that migrated out of CLAUDE.md into a skill. Establish which it is before offering to regenerate; "the spec is behind" is the common case and "the files are wrong" is the rare one.
-
-One honest limit to state when you present the list: edits to CLAUDE.md itself — the root file or any nested one — **do not appear in the drift list at all.** The audit inventories instruction files but does not diff their contents against the spec, so if the drift you're chasing is "someone rewrote a section of CLAUDE.md," you have to read it and compare by hand.
+Extend and improve reuse the stages above with a different opening question; sync skips them entirely. All three, plus the full drift-resolution procedure, are in `references/re-entry.md` — read that instead of this file when Phase 0 found an existing harness.
 
 ## The harness-spec.md template
 
@@ -136,6 +128,6 @@ This is the exact section skeleton to generate and keep updated across every sta
 <!-- Date, mode (new/extend/improve/sync), summary of what changed -->
 ```
 
-The `status` column progresses through four values, in order: `proposed` (surfaced during I2, not yet approved) → `approved` (survived its stage gate, locked as intent) → `generated` (a file now exists on disk for it) → `validated` (it passed lint and, if run, e2e). The last two values are the ones the audit acts on: `generated` and `validated` assert that a file exists, so a row at either with nothing on disk is reported as drift. `proposed` and `approved` assert intent only — a harness paused mid-interview is full of them, and treating those as drift would make every re-entry look broken. A file on disk with no corresponding row is the other direction, and means the component was added outside this flow.
+The `status` column progresses in order: `proposed` (surfaced during I2, not yet approved) → `approved` (survived its stage gate, locked as intent) → `generated` (a file now exists on disk) → `validated` (it passed lint and, if run, e2e). Two more are terminal rather than sequential: `declined` for something deliberately not built, and `retired` for something deliberately removed. Keep both rows — a spec that only records what was built loses the record of what was decided against, and the next pass re-proposes it.
 
-Keep a row's status current in the same pass that changes its reality, because the status column is what carries meaning the filesystem can't: a missing file for an `approved` row is a job never started, while a missing file for a `validated` row is something that existed, passed, and then disappeared. Those want different questions asked of the user, and only the spec knows which is which.
+Keep a row's status current in the same pass that changes its reality. Only `generated` and `validated` assert that a file exists, and that distinction is what the re-entry drift check reads; `references/re-entry.md` covers how each value is interpreted when the spec and the disk disagree.

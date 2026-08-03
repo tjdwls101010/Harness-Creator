@@ -14,9 +14,9 @@ description: >
 
 ## What a harness is, and what this skill does
 
-`ai-agent = ai-model + ai-harness`. A harness — CLAUDE.md, rules, skills, hooks, permissions, agents, workflows — is the layer that adds capability to a model without touching its judgment. A good one tells Claude what this project needs and why, then gets out of the way; a bad one either says nothing (so Claude re-derives the same context every session) or tries to hard-code every case (so Claude fights the harness the moment reality doesn't match what its author anticipated).
+`ai-agent = ai-model + ai-harness`. A harness — CLAUDE.md, rules, skills, hooks, permissions, agents, workflows — adds capability to a model without touching its judgment. A bad one either says nothing (so Claude re-derives the same context every session) or hard-codes every case (so Claude fights it the moment reality doesn't match what its author anticipated).
 
-This skill runs the loop that builds one: audit what already exists, interview the user until their goals are concrete component specs, generate the components, validate them mechanically, and offer deeper end-to-end testing. It never guesses at requirements it could instead ask about, and it never declares a harness done until `validate_harness.py` says so.
+This skill runs the loop that builds one: audit, interview until goals are concrete component specs, generate, validate mechanically, offer end-to-end testing. It never guesses at a requirement it could ask about, and never declares a harness done until `validate_harness.py` says so.
 
 ## Operating loop
 
@@ -28,10 +28,14 @@ Invocation
      ├─ scout the codebase (build system, language, test runner, team-size signals) and, if it
      │   exists, read this project's auto-memory MEMORY.md — it's the most honest record of what
      │   Claude has repeatedly needed here, so it's interview material, not a component to track
-     └─ branch: new / extend (new asks) / improve (fix existing problems) / sync (resolve spec-vs-disk drift)
-        audit_harness.py's "suggested mode" is a hint, not a verdict — for extend vs. improve
-        specifically, ask the user directly (see references/interview.md's re-entry variants).
- └─ Phase 1-N. Interview (load references/interview.md)
+     └─ branch on mode. audit_harness.py's "suggested mode" is a hint, not a verdict: it can tell
+        new from not-new, but extend and improve look identical on disk, so ask the user directly.
+        ├─ new → load references/interview.md, run the five stages
+        ├─ extend / improve → load references/re-entry.md; it says which stages to re-enter and
+        │   sends you to references/interview.md for them
+        └─ sync → load references/re-entry.md only. There is no interview in sync mode, so
+            interview.md stays unread.
+ └─ Phase 1-N. Interview (whichever of the two the branch above selected)
      ├─ each stage ends by updating the spec, then a user approval gate
      └─ behavior inventory specifically: skill count is a real cost (see the layer-routing table below) —
         weigh consolidation into the inventory decision itself, not as an afterthought once Generate starts
@@ -45,9 +49,8 @@ Invocation
      │   see references/workflows.md for when that's worth it vs. just writing files directly)
      ├─ python "${CLAUDE_SKILL_DIR}/scripts/validate_harness.py" --path . → fix until zero errors
      └─ any hook generated OR wired this pass (a new hook script, or a settings.json edit that points at
-        one) → python "${CLAUDE_SKILL_DIR}/scripts/test_hook.py" must pass first — not optional, not just
-        "recommended" (see references/hooks.md); validate_harness.py cannot check this for you, it has no
-        way to know a hook was actually exercised, so this step is on you to actually run, every time
+        one) → python "${CLAUDE_SKILL_DIR}/scripts/test_hook.py" must pass first (see references/hooks.md).
+        validate_harness.py cannot check this for you — it has no way to know a hook was exercised
  └─ Offer validation (load references/e2e-testing.md)
      └─ e2e: only with the user's consent (it spends real tokens) — compose a dynamic workflow on the
         spot from the spec's Validation scenarios, or fall back to sequential subagents if workflows
@@ -64,13 +67,11 @@ Invocation
      └─ propose a commit
 ```
 
-Flexibility (this loop is a map, not rails): skip a stage whose answer you already have, compress everything into one pass for a simple ask ("just a CLAUDE.md and two hooks"), and for "just build it" take the minimum needed to fill Goals and hard constraints before proceeding. The one thing that never gets skipped is the spec-approval gate — the spec is the record of what was agreed, and generating without it means there's nothing to audit against on the next invocation.
-
-All script invocations in this skill and its references use `${CLAUDE_SKILL_DIR}/scripts/...` — never a bare relative path. The working directory is the target project, not this skill's own directory, and a plugin install runs these scripts from the plugin cache, not from a repo checkout — a relative path breaks in both cases.
+This loop is a map, not rails: skip a stage whose answer you already have, and compress the whole thing into one pass for a simple ask. The spec-approval gate is the one step that never gets skipped — without it there's nothing to audit against next time.
 
 ## The layer-routing framework
 
-This is the core judgment call the whole interview builds toward: for each thing the user wants, which layer should hold it? Get this table into muscle memory — everything else in this skill exists to help you fill in one row of it correctly.
+The core judgment call the whole interview builds toward: for each thing the user wants, which layer should hold it? Everything else in this skill exists to help you fill in one row of this table correctly.
 
 | What it is | Layer | Why |
 |---|---|---|
@@ -89,15 +90,15 @@ How to apply it, in four questions: **enforced or advisory** — is it fine if C
 
 Conviction over compliance: every instruction you write into a generated component is what + a convincing why + a concrete picture, and the test is whether the why alone would let the model re-derive the rule and handle a case you didn't think to enumerate. A rule with no reason attached is a rail — it holds exactly the cases its author listed and snaps on the sixteenth one that wasn't. Don't write what a capable model already knows; the content that's actually worth its tokens is the **gotcha** — a domain trap nobody could have derived from general competence, only from having been burned by it once. Progressive disclosure is an optimum, not a default — the seam that pays is one where the model genuinely branches (which cloud provider, which template, which mode), because then each invocation reads one file instead of all of them. Volume alone is a weaker reason but not a non-reason: official guidance is to keep a SKILL.md under 500 lines and move detailed reference material out, so a body that has outgrown that gets split even if the branch is soft. What never pays is splitting a file the model will always read in full anyway — that buys a routing decision with no saved reading, and sometimes a silently-missed fragment. Numbers need their justification and their exception in the same breath. Every one of these threads is covered in depth, with the exact product-specific gotchas, in `references/` — load the file for whatever component you're about to generate before you generate it, every time, even if you've generated that component type before in this session.
 
-**No mid-sentence hard-wrapping.** Line breaks in every file you write — this skill's own files and everything you generate for a target project — fall only at sentence, list-item, or paragraph boundaries, never in the middle of a sentence to fit a column width. Hard wraps break a future Edit tool's exact-string matching and pollute diffs; renderers soft-wrap on their own, so there's no display benefit to doing it manually.
+**Prefer an interface over an instruction where one exists.** Some behaviors don't need to be told to Claude at all — the thing Claude operates can be shaped so the wrong move isn't available. An interface is re-read from the tool's own signature on every use: every session, after every compaction, inside every subagent, including the ones that skip CLAUDE.md entirely. The harness's own interface surfaces are a bundled script's CLI, a hook script's configuration input, a workflow's `args`, a skill's `description`, an agent's `tools:`. The boundary: an interface expresses what is *valid*, never when to reach for it or why this project chose it — those stay prose. This applies to what the harness contains; this skill designs harnesses, not the project's application code.
 
-## Interview protocol, summarized
+**No mid-sentence hard-wrapping.** Line breaks in every file you write fall only at sentence, list-item, or paragraph boundaries, never in the middle of a sentence to fit a column width. Hard wraps break a future Edit tool's exact-string matching and pollute diffs; renderers soft-wrap on their own, so there's no display benefit to doing it manually.
 
-Five stages for a fresh build: goals & pain points → behavior inventory → layer routing → component detail → validation plan, each ending in an update to `.claude/harness-spec.md` and a gate. Re-entry (extend/improve/sync) shrinks or reframes the early stages — full detail, the exact AskUserQuestion operating rules, worked example questions, and the spec template are in `references/interview.md`; load it before Phase 1 of any invocation. Two operating rules worth internalizing here because they shape every stage: use AskUserQuestion for convergence among options you already know, and ordinary conversation for divergence (goals, pain points) where the option space isn't known yet — and never ask a question whose answer the codebase already shows you; state the finding instead.
+Two interview rules shape every stage, so they live here rather than in the file that branches: use AskUserQuestion for **convergence** among options you already know, and ordinary conversation for **divergence** (goals, pain points) where the option space isn't known yet. And never ask a question the codebase already answers — state the finding instead.
 
 ## Scripts
 
-All four live in `scripts/` and are plain-argument Python 3.10+ CLIs (stdlib only) — call them with `${CLAUDE_SKILL_DIR}/scripts/<name>.py`, not a bare relative path.
+All four live in `scripts/` and are plain-argument Python 3.10+ CLIs (stdlib only). Always invoke them as `${CLAUDE_SKILL_DIR}/scripts/<name>.py`: the working directory is the target project, and a plugin install runs them from the plugin cache, so a relative path breaks in both cases. `${CLAUDE_SKILL_DIR}` is substituted in this skill's own markdown and in `allowed-tools` rules — **not** inside a workflow's prompt strings or a subagent's shell environment, where it expands to nothing. Resolve it to an absolute path before passing it anywhere else.
 
 | Script | Run it when | Signature |
 |---|---|---|
@@ -106,12 +107,12 @@ All four live in `scripts/` and are plain-argument Python 3.10+ CLIs (stdlib onl
 | `test_hook.py` | Right after generating any hook, before calling it delivered | `--settings <path> --event <Event> [--tool <Tool>] [--input-field k=v ...]` or `--command <script> --event <Event> [--input <file>]`, plus `--matrix` for match-only inspection |
 | `run_e2e.py` | Only with explicit user consent, during the validation stage | `--project <path> --prompt "..." [--model] [--timeout] [--out] [--isolate]` |
 
-`validate_harness.py` checks structural integrity (pointers resolve, YAML parses, no drift, no unknown tool names) — it does not grade a skill's `description` for trigger quality or near-miss coverage against sibling skills. For any skill generated this session, re-read its description against references/skills.md's triggering and near-miss guidance before calling it done — do this for a single new skill too, not only when multiple skills are generated in the same pass.
+`validate_harness.py` checks structural integrity and prints the always-loaded budget, but it cannot grade a skill's `description` for trigger quality or near-miss overlap with sibling skills. Re-read every description you generate against references/skills.md before calling it done — including a lone new skill, not just a batch.
 
 `run_e2e.py`'s headless permission handling is a documented best guess (`--isolate` + `--dangerously-skip-permissions`), not empirically confirmed — see references/e2e-testing.md before the first real run and say so to the user.
 
 ## Hard lines
 
 1. **Never advertise a component you haven't actually generated.** Every pointer this skill or its output writes — a reference to a script, a skill, a file — must resolve to a real file. `validate_harness.py` mechanically checks the pointers a skill makes into its own bundled `references/` and `scripts/`, in whatever form they're written; it does not follow prose that names a component some other way, so that check existing is not a substitute for you checking it yourself before claiming a component is done.
-2. **A generated harness is not finished until `validate_harness.py` exits 0 (errors).** A checklist that isn't mechanically enforced doesn't get enforced. A generated hook carries the same bar but a weaker guarantee: it isn't "finished" until `test_hook.py` passes against it either, but unlike the `validate_harness.py` check, nothing can mechanically confirm you actually ran `test_hook.py` — that half rests on you actually doing it, not on a script catching you if you don't.
+2. **A generated harness is not finished until `validate_harness.py` exits 0 (errors), and a generated hook is not finished until `test_hook.py` passes against it.** A checklist that isn't mechanically enforced doesn't get enforced — which is the whole reason for the first half. The second half is the exception that proves it: nothing can mechanically confirm you ran `test_hook.py`, so that one rests on you.
 3. **`.claude/harness-spec.md` and the actual files must never drift apart silently.** Every generation or edit updates the spec in the same pass; `audit_harness.py`'s drift check exists to catch the times this slips, not to be the only thing keeping them in sync.

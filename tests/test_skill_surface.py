@@ -159,6 +159,50 @@ class DeadLinkCoverageTests(unittest.TestCase):
         self.assertEqual([f for f in findings if f[0] == "E"], [])
 
 
+class AlwaysLoadedBudgetTests(unittest.TestCase):
+    """The headline metric of the v2 revision. SKILL.md was 2,185 words but
+    the true always-loaded surface was 4,833, because SKILL.md instructed an
+    unconditional load of interview.md and reached into it during Phase 0 --
+    so the progressive-disclosure seam between them bought nothing.
+
+    The ceiling that matters is compaction: auto-compaction re-attaches only
+    the first 5,000 tokens of a skill, and everything past that vanishes
+    silently rather than degrading."""
+
+    WORD_BUDGET = 2500          # acceptance criterion 6
+    HARD_CEILING = 3750         # ~5,000 tokens; past here content is dropped
+
+    def test_skill_md_within_budget(self):
+        words = len(read(SKILL_MD).split())
+        self.assertLess(words, self.WORD_BUDGET, f"SKILL.md is {words} words")
+
+    def test_skill_md_under_the_compaction_ceiling(self):
+        self.assertLess(len(read(SKILL_MD).split()), self.HARD_CEILING)
+
+    def test_interview_md_is_not_loaded_unconditionally(self):
+        """WS8 step 2. If SKILL.md ever tells the model to load interview.md
+        on every invocation again, the always-loaded surface doubles and this
+        whole workstream is undone."""
+        text = read(SKILL_MD)
+        for phrase in (
+            "load it before Phase 1 of any invocation",
+            "load references/interview.md)",
+        ):
+            self.assertNotIn(phrase, text, phrase)
+
+    def test_sync_path_does_not_require_interview_md(self):
+        """WS8 step 1. The sync procedure has to live somewhere reachable
+        without loading interview.md, or gating the load strands sync mode."""
+        re_entry = SKILL_DIR / "references" / "re-entry.md"
+        self.assertTrue(re_entry.is_file(), "references/re-entry.md must exist")
+        text = read(re_entry)
+        for concept in ("sync", "status", "generated", "validated", "Change history"):
+            self.assertIn(concept, text, concept)
+
+    def test_skill_md_routes_to_re_entry(self):
+        self.assertIn("re-entry.md", read(SKILL_MD))
+
+
 class GuardrailTests(unittest.TestCase):
     """The do-not-cut list from the audit (audit-synthesis.md section 4), plus
     the mechanics added in WS5. Each entry is a product mechanism with a named
