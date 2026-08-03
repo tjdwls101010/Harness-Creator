@@ -140,13 +140,9 @@ Every failure should resolve to one specific layer to edit — never "make it wo
 
 ### Retiring a component
 
-A harness only grows unless something makes it shrink, and every layer keeps charging rent whether or not it earns it: a skill's description sits in the listing budget on every session even when the skill never fires, a rule without `paths:` loads at launch forever, an agent adds a routing decision every time it exists as an option. So an improve pass should look for what to remove, not only what to add.
+A harness only grows unless something makes it shrink, and every layer charges rent whether or not it earns it — an unfired skill's description still occupies the listing budget, a rule without `paths:` still loads at launch, an agent still costs a routing decision every time it exists as an option. So an improve pass looks for what to remove, not only what to add.
 
-**Every retirement candidate is a question with its cost stated, and never an action.** You cannot measure this from disk — there is no invocation telemetry, so "unused" is not something you can observe, only something the user can tell you. Deleting something a user deliberately added is far worse than leaving it: they had a reason, it may have been working exactly as intended, and silence looks like it was never there. Ask like this: "`changelog-helper`'s description costs part of the skill listing budget every session — is it still earning that, or should we retire it?"
-
-Offer the middle setting before deletion. `disable-model-invocation: true` keeps a skill available under its explicit `/name` while removing it from auto-triggering, which fits the common case of "I still want it, I just don't want it firing on its own."
-
-When something is retired, mark the spec row `status: retired` rather than deleting it. Same reason as `declined`: the next pass otherwise re-proposes it, and the harness loses the record of a decision that was made deliberately.
+**Every candidate is a question with its cost stated, never an action.** There is no invocation telemetry, so "unused" isn't observable from disk — only the user knows. And deleting something they deliberately added is worse than leaving it. Ask like this: "`changelog-helper`'s description costs listing budget every session — still earning it?" Offer `disable-model-invocation: true` before deletion; it keeps the skill under its explicit `/name` while dropping auto-triggering, which fits the usual answer. Mark the spec row `status: retired` rather than deleting it, for the same reason as `declined`.
 
 ## Re-run discipline
 

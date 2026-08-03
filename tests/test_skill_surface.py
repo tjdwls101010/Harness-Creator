@@ -264,10 +264,13 @@ class GuardrailTests(unittest.TestCase):
     }
 
     def test_guardrail_facts_survive(self):
+        # Case-insensitive on purpose. These anchor *concepts* that must not be
+        # deleted, not exact wording -- a heading capitalizing a term is a
+        # rewrite, and this test exists to catch removal.
         for filename, anchors in self.GUARDRAILS.items():
-            text = read(SKILL_DIR / "references" / filename)
+            text = read(SKILL_DIR / "references" / filename).lower()
             for anchor in anchors:
-                self.assertIn(anchor, text, f"{filename} lost {anchor!r}")
+                self.assertIn(anchor.lower(), text, f"{filename} lost {anchor!r}")
 
     def test_hooks_router_survives(self):
         """R3. The event router is what makes the hooks.md/hooks-events.md

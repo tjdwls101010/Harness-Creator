@@ -25,9 +25,9 @@ The whole mode is: present that list, and ask per item whether the spec should b
 
 ### Default to correcting the spec, and ask before anything else
 
-**Divergence is not automatically corruption.** A component on disk the spec doesn't mention is usually a teammate's ordinary work, or another tool's, or a deliberate hand-edit — not damage to be reverted. The same goes for behavior that migrated out of CLAUDE.md into a skill: someone made a routing decision, and it may well have been the right one. Establish which case you're in before offering to regenerate anything. "The spec is behind" is the common case; "the files are wrong" is the rare one. A sync pass that quietly reverts a colleague's work is far worse than one that asks an unnecessary question.
+**Divergence is not automatically corruption.** A component the spec doesn't mention is usually a teammate's work, another tool's, or a deliberate hand-edit; behavior that migrated from CLAUDE.md into a skill is someone's routing decision, possibly a better one than yours. "The spec is behind" is the common case, "the files are wrong" is the rare one, and quietly reverting a colleague's work is far worse than asking an unnecessary question. Establish which you're in first.
 
-Record the resolution in the spec's Change history as what it was — an external edit that the spec now reflects — rather than as a file restoration. The next person reading the history needs to see that the harness has other authors.
+Record it in Change history as what it was — an external edit the spec now reflects, not a file restoration — so the next pass sees that this harness has other authors.
 
 ### Reading the status column
 
@@ -46,12 +46,6 @@ The `status` values carry meaning the filesystem cannot, which is why the audit 
 
 ### What sync cannot see
 
-State this when you present the list, because otherwise a clean drift report reads as "nothing changed":
+Say this when you present the list, or a clean report reads as "nothing changed." **The check is about existence, not correctness.** So edits to CLAUDE.md never appear (the audit inventories instruction files without diffing them), and neither do edits to a component's *contents* — a rewritten skill body is still a file at the path the spec names, and reads as perfectly in sync. Compare those by hand.
 
-- **Edits to CLAUDE.md itself never appear** — root or nested. The audit inventories instruction files but does not diff their contents against the spec. If the drift you're chasing is "someone rewrote a section of CLAUDE.md," you have to read it and compare by hand.
-- **Edits to the *contents* of a component don't appear either.** A skill whose body was rewritten is still a file at the path the spec names, so it reads as perfectly in sync.
-- The drift check is about existence, not about correctness. `validate_harness.py` covers structural correctness; neither covers whether a component still does what its spec row says it does.
-
-## After any re-entry mode
-
-Re-entry ends the same way a fresh build does — spec updated, `validate_harness.py` clean, Change history recording what happened and in which mode. The Change history entry matters more here than on a fresh build: it is the only place the next pass learns that this harness has been edited by more than one process.
+Re-entry then ends like a fresh build: spec updated, `validate_harness.py` clean, Change history written. That last entry carries more weight here — it's the only place the next pass learns this harness has more than one author.

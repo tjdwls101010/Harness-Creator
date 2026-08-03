@@ -28,11 +28,9 @@ When generating a harness, everything you put in CLAUDE.md should be traceable t
 
 ### The line worth keeping is the one that contradicts a default, not the one that repeats it
 
-The test above catches instructions that **duplicate** what the model already does. It does not catch the opposite case, and the opposite case is where the highest-value lines live: an instruction that **contradicts** a sensible default. Ask "if I deleted this line, would Claude get it wrong?" — for a line fighting a default, the answer is a clean yes, and that is exactly what earns its tokens. A project that wants no docstrings on internal helpers, or that wants tests colocated when the ecosystem convention is a `tests/` tree, or that wants an older API surface kept because a downstream consumer pins it, has to say so; nothing in the codebase announces a decision that was made by *not* doing something.
+The test above catches lines that **duplicate** a default. The opposite case is where the best lines live: one that **contradicts** a sensible default. The check is *"delete this line — would Claude get it wrong?"* For a line fighting a default the answer is a clean yes, and nothing in a codebase announces a decision made by *not* doing something — no docstrings on internal helpers, tests colocated against the ecosystem convention, an old API surface kept because a consumer pins it.
 
-Write these as intent, not prohibition. "Don't add docstrings" holds only the case its author listed and snaps on the first variant — a type comment, a module header — that wasn't enumerated. "Internal helpers under `src/lib/` are deliberately undocumented; the public API in `src/api/` carries full docs, and that split is what tells a reader which surface is stable" lets the model re-derive the rule for a case nobody wrote down. The same shape applies to any harness layer, not just CLAUDE.md.
-
-One caution when you write one of these: a default you're contradicting is a moving target. Say what the project wants and why, and avoid pinning the sentence to a description of current model behavior that will read as false in a year.
+Write them as intent, not prohibition, and the reason is the rail argument again: "don't add docstrings" snaps on the first variant nobody enumerated (a type comment, a module header), while "internal helpers under `src/lib/` are deliberately undocumented — the split from `src/api/` is what tells a reader which surface is stable" survives the case you didn't think of. Say what the project wants and why; don't pin the sentence to a description of current model behavior, which dates.
 
 ## Write concretely and verifiably
 
@@ -42,24 +40,18 @@ Emphasis markers like "IMPORTANT" or "YOU MUST" measurably raise compliance on t
 
 ## The scope axis: who needs this, and who writes it
 
-"Does this belong in CLAUDE.md?" has a second half that the eligibility test above doesn't ask: **is this fact true for every clone of the repo, or only on this developer's machine?** Get it wrong in the generous direction and a shared, version-controlled file that every teammate pays for on every request fills up with one person's sandbox URLs. There are four places a durable fact can live, and they differ on two axes — who it's for, and who writes it.
+The eligibility test asks whether a fact is derivable. It doesn't ask the second question: **true for every clone, or only on this machine?** Answer it generously and a file the whole team pays for on every request fills with one person's sandbox URLs.
 
 | | You write it | Claude writes it |
 |---|---|---|
-| **Everyone gets it** | `CLAUDE.md`, `.claude/rules/` — committed, reviewed, shared | *(nothing — Claude never authors a shared file on its own)* |
-| **Only this machine** | `CLAUDE.local.md` — gitignored, deterministic, yours | **auto memory** — `MEMORY.md` plus topic files, machine-local |
+| **Everyone gets it** | `CLAUDE.md`, `.claude/rules/` — committed, reviewed, shared | *(nothing — Claude never authors a shared file)* |
+| **Only this machine** | `CLAUDE.local.md` — gitignored, deterministic, yours | **auto memory** — `MEMORY.md` + topic files |
 
-`CLAUDE.local.md` sits at the project root, loads alongside `CLAUDE.md` and immediately after it, and is the documented home for "your sandbox URLs, preferred test data." When the interview surfaces a fact that is real but personal, route it here and say why: it keeps the team's always-loaded budget clean, and it keeps a teammate from inheriting a URL that only resolves on someone else's laptop. Add it to `.gitignore` in the same pass. One caveat for anyone using git worktrees: a gitignored `CLAUDE.local.md` exists only in the worktree where it was created, so a fact that should follow the developer everywhere is better written once in their home directory and imported with `@~/.claude/my-notes.md`.
+`CLAUDE.local.md` sits at the project root and loads right after `CLAUDE.md`; it's the documented home for "your sandbox URLs, preferred test data." Route personal facts there and gitignore it in the same pass. Worktree caveat: a gitignored file exists only in the worktree that created it, so a fact that should follow the developer belongs in their home directory, imported as `@~/.claude/my-notes.md`.
 
-**Auto memory is the surface to know about but never to depend on.** Claude writes it itself — build commands it worked out, debugging insights, preferences it noticed — into `~/.claude/projects/<project>/memory/`, and the first 200 lines or 25KB of `MEMORY.md` (whichever comes first) load into every conversation. So it is a second always-loaded instruction surface carrying the same *kind* of content this file routes to CLAUDE.md, which is exactly why it belongs in the budget question. Three properties make it a destination you must not route requirements to:
+**Auto memory is the surface to know about and never to depend on.** Claude writes it into `~/.claude/projects/<project>/memory/`, and `MEMORY.md`'s first 200 lines or 25KB (whichever comes first) load every conversation — a second always-loaded surface holding the same *kind* of content this file routes to CLAUDE.md, which is why it belongs in the budget. But it is nondeterministic by design ("Claude doesn't save something every session. It decides what's worth remembering"), can be switched off entirely (`autoMemoryEnabled: false`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`), and never travels — not committed, not across machines, not into subagents unless one declares its own `memory` field. So it is never the answer to "where should this requirement live." Its use to a generator is subtractive: a reason not to spend a shared line on something Claude learns after one correction.
 
-- **It is nondeterministic.** "Claude doesn't save something every session. It decides what's worth remembering." A fact Claude *must* have cannot be filed somewhere that may or may not record it.
-- **It can be switched off entirely** — `autoMemoryEnabled: false` in any settings scope, or `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`. Nothing load-bearing may assume it exists.
-- **It is machine-local and never travels.** Not committed, not shared across machines or cloud environments, and not loaded into subagents unless a subagent declares its own `memory` field.
-
-The practical use for a generator is subtractive: auto memory is a reason *not* to spend a shared CLAUDE.md line on something Claude will pick up on its own after one correction. It is never the answer to "where should this requirement live."
-
-During Phase 0, it's worth reading the project's `MEMORY.md` if it exists — it is the most honest available record of what Claude has repeatedly needed here, which makes it interview material of unusually high quality. Read it, don't script it: the directory-slug encoding isn't documented, and it's the user's private notes.
+Do read the project's `MEMORY.md` during Phase 0 if it exists — it's the most honest record of what Claude has repeatedly needed here. Read it, don't script it: the slug encoding is undocumented and these are private notes.
 
 ## Interoperating with AGENTS.md and other agents' rule files
 
@@ -89,28 +81,11 @@ These behaviors are not what most people expect from "a config file Claude reads
 
 - **The auto-mode classifier reads CLAUDE.md directly.** When a project runs in auto permission mode, a separate classifier model reviews each action and decides whether it looks safe, and that classifier's input includes the generated CLAUDE.md text. This means a prohibition written in CLAUDE.md prose ("never modify files under `legacy/`") isn't purely advisory in auto mode — it measurably steers the classifier's allow/block decisions, even though it's still not a hard guarantee on its own. For anything that must be durably blocked, pair the CLAUDE.md prose with a matching `permissions.deny` rule: the deny rule is what actually can't be bypassed, and the CLAUDE.md text is what makes the classifier's default behavior already point the right way before the deny rule even has to fire.
 
-## A good vs. bad CLAUDE.md, side by side
+## A good CLAUDE.md, concretely
 
-**Bad** — enumerates components (goes stale immediately) and states unverifiable, uncheckable advice:
+The two failure modes worth naming are the two `validate_harness.py` now warns on: a bulleted inventory of skills and agents, which drifts the first time someone adds one, and generic advice ("write clean, maintainable code," "follow best practices") that no one can check against actual behavior. Both are cheap to write and cost tokens every request forever.
 
-```markdown
-# Project
-
-We have the following skills: deploy, review-pr, migrate-db, seed-fixtures,
-generate-report, sync-schema.
-
-Our agents: security-reviewer, perf-auditor, doc-writer.
-
-## Style
-Write clean, maintainable code. Follow best practices. Be consistent.
-
-## Testing
-Test your changes before committing.
-```
-
-Every claim here is either a list that will drift the first time someone adds a skill, or advice too vague to check against actual behavior.
-
-**Good** — points at the filesystem instead of listing it, and states only what the code can't tell you:
+What's left when you remove them points at the filesystem instead of listing it, and states only what the code can't tell you:
 
 ```markdown
 # Project
