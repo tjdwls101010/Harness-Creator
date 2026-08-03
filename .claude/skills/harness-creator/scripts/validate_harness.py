@@ -63,6 +63,8 @@ def check_settings(root, findings):
 
         _check_hooks_block(root, rel, data.get("hooks", {}), findings)
         _check_permissions_block(rel, data.get("permissions", {}), findings)
+        if isinstance(data.get("permissions"), dict):
+            _check_deny_subsumes_allow(str(rel), data["permissions"], findings)
 
 
 def _check_hooks_block(root, rel, hooks, findings):
@@ -405,8 +407,32 @@ def check_rules(root, findings):
         elif isinstance(paths, list):
             for p in paths:
                 _check_glob_syntax(loc, p, findings)
+                _check_catch_all_glob(loc, p, findings)
         elif isinstance(paths, str):
             _check_glob_syntax(loc, paths, findings)
+            _check_catch_all_glob(loc, paths, findings)
+
+
+_CATCH_ALL_GLOBS = frozenset({"**", "**/*", "*", "./**", "**/**"})
+
+
+def _check_catch_all_glob(loc, pattern, findings):
+    """A `paths:` that matches everything scopes nothing.
+
+    Note the precise cost, because the obvious phrasing is wrong: unlike a
+    rule with no `paths:` at all, this does NOT load at launch -- it loads on
+    the first matching file read, which in practice is the first file of any
+    kind. So it is slightly cheaper than an unscoped rule and entirely
+    unpredictable about when it arrives, which is the worse property."""
+    if not isinstance(pattern, str) or pattern.strip() not in _CATCH_ALL_GLOBS:
+        return
+    add(
+        findings, "W", loc,
+        f"paths glob '{pattern}' matches every file, so it scopes nothing. It loads on the "
+        "first matching file read rather than at launch, which makes its arrival time "
+        "unpredictable rather than free. Either narrow it to the paths this rule is really "
+        "about, or drop the 'paths:' key and accept that it loads at launch like CLAUDE.md",
+    )
 
 
 def _check_glob_syntax(loc, pattern, findings):
@@ -424,10 +450,22 @@ def _check_glob_syntax(loc, pattern, findings):
 
 
 def check_claude_md(root, findings):
-    claude_md = root / "CLAUDE.md"
-    if not claude_md.is_file():
-        return
-    loc = "CLAUDE.md"
+    paths = hc.claude_md_paths(root)
+    if len(paths) > 1 and {p.name for p in paths} >= {"CLAUDE.md"} and any(
+        p.parent.name == ".claude" for p in paths
+    ) and any(p.parent == Path(root) and p.name == "CLAUDE.md" for p in paths):
+        add(
+            findings, "W", "CLAUDE.md",
+            "both ./CLAUDE.md and ./.claude/CLAUDE.md exist -- both load and concatenate "
+            "with no override, so a reader looking at one is seeing half the instructions; "
+            "pick one location unless the split is deliberate",
+        )
+    for path in paths:
+        _check_one_claude_md(root, path, findings)
+
+
+def _check_one_claude_md(root, claude_md, findings):
+    loc = str(claude_md.relative_to(root))
     text = hc.read_text(claude_md)
     lines = text.splitlines()
     if len(lines) > MAX_CLAUDE_MD_LINES:
@@ -444,6 +482,7 @@ def check_claude_md(root, findings):
         f.stem for f in hc.iter_agent_files(root)
     }
     _check_inventory_listing(loc, lines, known_names, findings)
+    _check_generic_advice(loc, text, findings)
 
 
 def _check_at_imports(root, containing_file, loc, text, findings):
@@ -470,6 +509,87 @@ def _check_at_imports(root, containing_file, loc, text, findings):
             continue
         if not path.exists():
             add(findings, "E", loc, f"@{target} import target does not exist")
+
+
+# Anchored to a whole sentence or bullet, never a substring. "Write clean
+# code." should fire; "Be consistent with the existing handler naming
+# (`handleFooRequest`)" must not, and it would under substring matching.
+_GENERIC_ADVICE = (
+    "write clean code",
+    "write clean, maintainable code",
+    "follow best practices",
+    "use best practices",
+    "handle errors properly",
+    "handle errors appropriately",
+    "write good tests",
+    "write meaningful tests",
+    "keep it simple",
+    "follow solid principles",
+    "write readable code",
+    "add comments where necessary",
+    "be consistent",
+    "avoid technical debt",
+    "write maintainable code",
+    "use descriptive variable names",
+    "keep functions small",
+    "dont repeat yourself",
+    "follow the dry principle",
+)
+
+
+def _normalize_advice(fragment):
+    text = fragment.strip().strip("-*# ").strip()
+    text = re.sub(r"`[^`]*`", "", text)          # a backticked example makes it specific
+    text = re.sub(r"[^a-z\s]", "", text.lower())  # drop punctuation, keep word shape
+    return " ".join(text.split())
+
+
+def _check_generic_advice(loc, text, findings):
+    """A line a capable model already follows spends context without changing
+    behavior. Prose said so; nothing enforced it."""
+    hits = []
+    for line in text.splitlines():
+        if line.strip().startswith(("|", ">")):
+            continue
+        for fragment in re.split(r"(?<=[.!?])\s+", line):
+            normalized = _normalize_advice(fragment)
+            if normalized in _GENERIC_ADVICE:
+                hits.append(fragment.strip().strip("-*# ").strip())
+    if hits:
+        unique = sorted(set(hits))[:3]
+        add(
+            findings, "W", loc,
+            "generic engineering advice a capable model already follows ("
+            + "; ".join(f'"{h}"' for h in unique)
+            + ") -- costs context every session without changing behavior. Replace with the "
+            "project-specific version of the same idea, or cut it",
+        )
+
+
+def _check_deny_subsumes_allow(loc, permissions, findings):
+    """A deny rule that swallows an allow rule the same harness ships. Deny is
+    evaluated first and wins regardless of specificity, so the allow rule is
+    dead weight that reads as an exception."""
+    denies = [d for d in permissions.get("deny", []) if isinstance(d, str)]
+    allows = [a for a in permissions.get("allow", []) if isinstance(a, str)]
+    for deny in denies:
+        m = re.match(r"^([A-Za-z_]+)\((.*)\)$", deny.strip())
+        if not m or not m.group(2).endswith("*"):
+            continue
+        tool, prefix = m.group(1), m.group(2)[:-1]
+        for allow in allows:
+            am = re.match(r"^([A-Za-z_]+)\((.*)\)$", allow.strip())
+            if not am or am.group(1) != tool:
+                continue
+            if am.group(2).startswith(prefix) and am.group(2) != prefix + "*":
+                add(
+                    findings, "W", loc,
+                    f"deny rule '{deny}' already covers allow rule '{allow}' -- deny is "
+                    "evaluated first and wins regardless of specificity, so the allow rule "
+                    "never fires. An exception has to be carved out of the deny pattern "
+                    "itself. (Project-scope rules only; a deny in another settings scope "
+                    "isn't visible here.)",
+                )
 
 
 def _check_inventory_listing(loc, lines, known_names, findings):
@@ -505,18 +625,121 @@ def check_harness_spec(root, findings):
         return
 
     text = hc.read_text(spec)
-    referenced = set(re.findall(r"`([\w./\-]+)`", text))
+    backticked = set(re.findall(r"`([\w./\-]+)`", text))
     actual = set()
     for d in hc.iter_skill_dirs(root):
         actual.add(f".claude/skills/{d.name}/")
     for f in hc.iter_agent_files(root):
-        actual.add(f".claude/agents/{f.name}")
+        actual.add(f".claude/agents/{f.relative_to(root / '.claude' / 'agents')}")
     for f in hc.iter_workflow_files(root):
         actual.add(f".claude/workflows/{f.name}")
 
-    missing_from_spec = [a for a in sorted(actual) if not any(a.rstrip("/") in r for r in referenced)]
-    for m in missing_from_spec:
-        add(findings, "W", ".claude/harness-spec.md", f"component exists on disk but isn't mentioned in the spec: {m}")
+    # Two distinct findings, because collapsing them produced a false
+    # "isn't mentioned" on a spec that mentioned the component by bare name.
+    # The convention is a backticked repo-relative path (interview.md says
+    # so); a bare name is a nudge, not a defect, and only a component absent
+    # from the spec entirely is real drift.
+    for component in sorted(actual):
+        bare = Path(component.rstrip("/")).name
+        stem = Path(component.rstrip("/")).stem
+        if any(component.rstrip("/") in ref for ref in backticked):
+            continue
+        if bare in text or stem in text or component in text:
+            add(
+                findings, "W", ".claude/harness-spec.md",
+                f"{component} is referred to by bare name -- write it as a backticked "
+                "repo-relative path so the spec reads the same way both scripts and a "
+                "human resolve it",
+            )
+        else:
+            add(
+                findings, "W", ".claude/harness-spec.md",
+                f"component exists on disk but isn't mentioned in the spec: {component}",
+            )
+
+
+# Over this, the report adds a warning. It is the documented per-file
+# CLAUDE.md guideline applied to the whole always-loaded set, since that set
+# is what the session actually pays for. Stated with its exception, because a
+# number without one is the kind of rail this skill warns against generating.
+ALWAYS_LOADED_LINE_BUDGET = 400
+
+MAX_IMPORT_HOPS = 4
+
+
+def always_loaded_report(root):
+    """Measure what enters context on every session, before the first prompt.
+
+    A measurement, not a judgement: it prints whether or not anything is
+    wrong, because the number is the thing a harness author needs to see and
+    almost never has. Project scope only -- see `uncounted` for why that
+    matters."""
+    root = Path(root)
+    entries = []
+    seen = set()
+
+    def add_file(path, note, hops=0):
+        try:
+            resolved = path.resolve()
+        except OSError:
+            return
+        if resolved in seen or not path.is_file():
+            return
+        seen.add(resolved)
+        text = hc.read_text(path)
+        try:
+            shown = str(path.relative_to(root))
+        except ValueError:
+            shown = str(path)
+        entries.append({
+            "path": shown,
+            "lines": len(text.splitlines()),
+            "bytes": len(text.encode("utf-8")),
+            "note": note,
+        })
+        if hops < MAX_IMPORT_HOPS:
+            for target in hc.parse_at_imports(text):
+                imported, external = hc.resolve_import(target, path)
+                if not external:
+                    add_file(imported, "import, expands at launch", hops + 1)
+
+    for path in hc.claude_md_paths(root):
+        add_file(path, "")
+
+    for rule in hc.iter_rule_files(root):
+        fm = hc.parse_frontmatter(hc.read_text(rule))
+        if fm.ok and fm.data.get("paths"):
+            continue  # loads on a matching file read, not at launch
+        add_file(rule, "NO paths:, loads at launch")
+
+    return {
+        "entries": entries,
+        "total_lines": sum(e["lines"] for e in entries),
+        "total_bytes": sum(e["bytes"] for e in entries),
+        "line_budget": ALWAYS_LOADED_LINE_BUDGET,
+        "uncounted": [
+            "user scope (~/.claude/CLAUDE.md, ~/.claude/rules/)",
+            "CLAUDE.md files in ancestor directories above this repo",
+            "auto memory (MEMORY.md, machine-local, first 200 lines or 25KB)",
+            "managed-policy CLAUDE.md and any managed `claudeMd` setting",
+        ],
+    }
+
+
+def print_always_loaded_report(report):
+    print("\n== Always-loaded context, project scope ==")
+    print("(enters every session before the first prompt)\n")
+    if not report["entries"]:
+        print("  (nothing -- no CLAUDE.md and no unscoped rules)")
+    else:
+        width = max(len(e["path"]) for e in report["entries"])
+        width = max(width, 20)
+        for e in report["entries"]:
+            note = f"   {e['note']}" if e["note"] else ""
+            print(f"  {e['path']:<{width}}  {e['lines']:>6,} lines  {e['bytes'] / 1024:>7.1f} KB{note}")
+        print("  " + "-" * (width + 24))
+        print(f"  {'TOTAL':<{width}}  {report['total_lines']:>6,} lines  {report['total_bytes'] / 1024:>7.1f} KB")
+    print("\n  Not counted here: " + "; ".join(report["uncounted"]) + ".")
 
 
 def run(root, strict):
@@ -528,6 +751,17 @@ def run(root, strict):
     check_rules(root, findings)
     check_claude_md(root, findings)
     check_harness_spec(root, findings)
+
+    report = always_loaded_report(root)
+    if report["total_lines"] > ALWAYS_LOADED_LINE_BUDGET:
+        add(
+            findings, "W", "always-loaded",
+            f"{report['total_lines']:,} lines load on every session (CLAUDE.md + expanded "
+            f"@imports + rules without paths:), over the {ALWAYS_LOADED_LINE_BUDGET}-line "
+            "guideline -- adherence drops as this grows. The exception is a monorepo that "
+            "still overflows after path-scoping what it can; if that's this repo, the number "
+            "is the cost of the layout, not a defect",
+        )
 
     has_error = any(level == "E" for level, _, _ in findings)
     has_warning = any(level == "W" for level, _, _ in findings)
@@ -555,12 +789,14 @@ def main():
         print(json.dumps({
             "errors": errors, "warnings": warnings,
             "findings": hc.findings_to_json(findings),
+            "always_loaded": always_loaded_report(root),
         }, indent=2))
     else:
         errors = [f for f in findings if f[0] == "E"]
         warnings = [f for f in findings if f[0] == "W"]
         hc.print_findings_text(errors, "Errors")
         hc.print_findings_text(warnings, "Warnings")
+        print_always_loaded_report(always_loaded_report(root))
         print(f"\n{len(errors)} error(s), {len(warnings)} warning(s).")
         if exit_code == hc.EXIT_OK:
             print("PASS" + (" (strict: warnings would fail)" if warnings and not args.strict else ""))

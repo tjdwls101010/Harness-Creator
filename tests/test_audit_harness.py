@@ -81,7 +81,7 @@ class EmptyProjectAuditTests(unittest.TestCase):
 
     def test_empty_inventory(self):
         inv = self.result["inventory"]
-        self.assertIsNone(inv["claude_md"])
+        self.assertEqual(inv["claude_md"], [])
         self.assertEqual(inv["rules"], [])
         self.assertEqual(inv["skills"], [])
 

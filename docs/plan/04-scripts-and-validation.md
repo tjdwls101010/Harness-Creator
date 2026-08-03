@@ -25,10 +25,27 @@ python scripts/validate_harness.py --path <target-repo> [--json] [--strict]
 | skills | E: SKILL.md 없는 스킬 디렉토리. E: frontmatter 파스 실패(자동 트리거 사망 고지). W: description 없음/1,536자 초과. E: 본문 내 상대 링크 대상 미존재(죽은 참조). W: 500줄 초과. E: scripts/ 내 파일을 본문이 참조하는데 미존재 |
 | agents | E: name/description 누락. E: 같은 scope 내 중복 name. W: 알 수 없는 model 값. E: tools의 알 수 없는 도구명 |
 | workflows | E: `export const meta` 리터럴 부재/name 누락. E: `Date.now()`·`Math.random()` 호출 검출. W: node 실행 가능 시 문법 검사 — 반드시 ESM 강제로: `node --input-type=module --check < 파일` 또는 임시 `.mjs` 복사 후 `--check` (맨몸 `node --check`는 대상 프로젝트 package.json이 `"type": "commonjs"`면 유효한 워크플로우의 `export`에서 오탐) (node 불가 시 skip 고지) |
-| rules | E: paths glob 문법 오류. W: paths 없는 rule(launch 로드됨을 고지) |
-| CLAUDE.md | W: 200줄 초과. E: `@import` 대상 미존재. W: 컴포넌트 인벤토리 나열 감지 — 단, 03 문서가 권장하는 "핵심 스킬의 트리거 규칙 한 줄" 백업과 충돌하지 않게: 맨몸 이름 나열(불릿 목록의 연속 이름)만 플래그하고, 트리거 문구가 있는 줄("...할 때 /x를 사용")은 면제 |
+| rules | E: paths glob 문법 오류. W: paths 없는 rule(launch 로드됨을 고지). **W: catch-all glob(`**`, `**/*`, `*`) — 아무것도 스코프하지 않음. 메시지는 "launch 로드"가 아니라 "첫 매칭 파일 읽기에 로드"라고 정확히 말해야 한다 (v2 WS2-6)** |
+| CLAUDE.md | W: 200줄 초과. E: `@import` 대상 미존재. W: 컴포넌트 인벤토리 나열 감지 — 단, 03 문서가 권장하는 "핵심 스킬의 트리거 규칙 한 줄" 백업과 충돌하지 않게: 맨몸 이름 나열(불릿 목록의 연속 이름)만 플래그하고, 트리거 문구가 있는 줄("...할 때 /x를 사용")은 면제. **W: generic-advice 문구 — 문장/불릿 전체 앵커링(substring 금지) (v2 WS2-6)** |
 | harness-spec.md | W: 부재(생성 하네스면 있어야 함). W: spec의 component 목록 vs 실제 파일 drift |
-| 교차 | E: settings.json 훅이 참조하는 `.claude/hooks/*` 실행권한 없음. W: 스킬 description 총량이 목록 예산 초과 추정 |
+| 교차 | E: settings.json 훅이 참조하는 `.claude/hooks/*` 실행권한 없음. W: 스킬 description 총량이 목록 예산 초과 추정. **W: deny 규칙이 같은 파일의 allow 규칙을 삼킴 (v2 WS2-6)** |
+
+**always-loaded 예산 리포트 (v2 WS2-5, 이 표의 확장).** 경고가 아니라 **무조건 출력되는 측정치**다.
+CLAUDE.md(두 위치 + `CLAUDE.local.md`) + `@import` 4-hop 전개 + `paths:` 없는 rule의 줄 수·바이트를
+프로젝트 스코프로 합산하고, `--json`의 `always_loaded` 키에도 싣는다. **셀 수 없는 표면을 명시하는 줄이
+필수다** — user 스코프, 조상 디렉토리 CLAUDE.md, auto memory, managed 정책. 합계가
+`ALWAYS_LOADED_LINE_BUDGET`(400줄)을 넘을 때만 W를 내고, 임계값·사유·모노레포 예외를 같은 문장에 담는다.
+
+**만들지 않기로 한 검사와 그 사유 (v2 WS2-6).** 기록해 두지 않으면 다음 사람이 "왜 없지"로 되돌린다.
+
+- **디렉토리 트리 탐지기** — 작동하는 유일한 임계값이 ASCII 제어흐름 다이어그램을 잡는다.
+  `SKILL.md`의 Operating loop 블록이 정확히 그 형태라 **자기 자신을 오탐한다.**
+- **의존성 목록 / 아키텍처 개요 탐지기** — "코드에서 유도 가능하니 잘라라"에 해당하는 경우와,
+  루브릭이 명시적으로 남기라고 하는 경우를 가르는 어휘 신호가 없다. 만들면 생성기가 프로젝트가 아니라
+  린터를 만족시키려고 글을 쓰게 된다.
+
+> 원칙: **정상 하네스에서 울리는 체크는 체크가 없는 것보다 나쁘다.** 각 체크는 픽스처로
+> false-positive 케이스를 **먼저** 갖는다(`tests/test_validate_harness.py`의 `HeuristicFalsePositiveTests`).
 
 - `--strict`: W도 exit 1로 취급 (CI용).
 - harness-creator는 생성 직후 항상 이 스크립트를 돌리고 **오류 0까지 수정 후 완료를 선언**한다
@@ -45,6 +62,13 @@ python scripts/audit_harness.py --path <target-repo> [--json]
   이름·description 요약·크기·mtime.
 - harness-spec.md 유무 + spec 대비 drift(스펙에 있는데 파일 없음 / 파일 있는데 스펙에 없음).
 - user-scope 충돌 후보: `~/.claude/CLAUDE.md`·`~/.claude/skills`에 같은 이름 존재 여부.
+  **(v2 WS3-4 확장)** `~/.claude/rules/` 중 `paths:` 없는 항목 — 모든 프로젝트에 로드된다.
+  그리고 **외부 지시 파일 존재 감지**(`AGENTS.md`, `.cursorrules`, `.cursor/rules/`,
+  `.github/copilot-instructions.md`, `.windsurfrules`, `.clinerules`): **보고만 하고 파싱하지 않으며
+  drift 집합에도 넣지 않는다** — 다른 도구의 것이고, 인터뷰 재료이지 추적 대상 컴포넌트가 아니다.
+  **`~/.claude/projects/<project>/`는 스크립트로 만지지 않는다** — 디렉토리 슬러그 인코딩이 문서화돼
+  있지 않아 리버스 엔지니어링해야 하고, 사용자의 사적 노트다. Phase 0에서 인터뷰하는 클로드에게
+  열어보라고 지시하는 쪽으로 처리한다.
 - 위생 신호: 중복 에이전트 name, 죽은 링크 수(validate 요약 재사용), 훅 스크립트 실행권한.
 - 결론 힌트: "신규 / 확장 / 개선 / 동기화" 모드 제안 근거.
 

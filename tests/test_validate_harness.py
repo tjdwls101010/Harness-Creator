@@ -235,6 +235,170 @@ class GoodHarnessImportTests(unittest.TestCase):
         self.assertEqual(list(vh.hc.parse_at_imports(self.text)), ["README.md"])
 
 
+class DiscoveryPathTests(unittest.TestCase):
+    """B3. Both scripts hardcoded ./CLAUDE.md, and rules/agents globs were
+    non-recursive -- so a project using .claude/CLAUDE.md inventoried as
+    having no instructions at all, and a nested rule that loads at launch was
+    invisible to the linter, the inventory, and the drift check."""
+
+    def setUp(self):
+        self.root = REPO_ROOT / "tests" / "fixtures" / "harness-in-dot-claude"
+
+    def test_dot_claude_location_is_discovered(self):
+        names = [p.name for p in vh.hc.claude_md_paths(self.root)]
+        self.assertIn("CLAUDE.md", names)
+        self.assertTrue(
+            any(p.parent.name == ".claude" for p in vh.hc.claude_md_paths(self.root))
+        )
+
+    def test_nested_rule_is_discovered(self):
+        rels = [str(p.relative_to(self.root)) for p in vh.hc.iter_rule_files(self.root)]
+        self.assertIn(".claude/rules/frontend/style.md", rels)
+
+    def test_nested_agent_is_discovered(self):
+        rels = [str(p.relative_to(self.root)) for p in vh.hc.iter_agent_files(self.root)]
+        self.assertIn(".claude/agents/sub/reviewer.md", rels)
+
+    def test_walk_terminates_on_a_symlink_cycle(self):
+        import tempfile, shutil, os
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            (tmp / "a").mkdir()
+            (tmp / "a" / "note.md").write_text("x", encoding="utf-8")
+            try:
+                os.symlink(tmp, tmp / "a" / "loop")
+            except (OSError, NotImplementedError):
+                self.skipTest("symlinks unavailable")
+            found = [p.name for p in vh.hc.walk_markdown(tmp)]
+            self.assertIn("note.md", found)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+class AlwaysLoadedReportTests(unittest.TestCase):
+    """The measurement a harness author needs and almost never has. Printed
+    unconditionally, so it must be right on a correct harness too."""
+
+    def test_counts_claude_md_and_unscoped_rules_only(self):
+        root = REPO_ROOT / "tests" / "fixtures" / "harness-in-dot-claude"
+        report = vh.always_loaded_report(root)
+        paths = {e["path"] for e in report["entries"]}
+        self.assertIn(".claude/CLAUDE.md", paths)
+        self.assertIn(".claude/rules/frontend/style.md", paths)
+        # A path-scoped rule loads on a matching read, not at launch.
+        self.assertNotIn(".claude/rules/scoped.md", paths)
+
+    def test_expands_imports(self):
+        root = REPO_ROOT / "tests" / "fixtures" / "good-harness"
+        report = vh.always_loaded_report(root)
+        entry = next(e for e in report["entries"] if e["path"] == "README.md")
+        self.assertIn("import", entry["note"])
+
+    def test_names_what_it_cannot_count(self):
+        report = vh.always_loaded_report(REPO_ROOT / "tests" / "fixtures" / "good-harness")
+        joined = " ".join(report["uncounted"]).lower()
+        for surface in ("user scope", "ancestor", "auto memory"):
+            self.assertIn(surface, joined)
+
+    def test_totals_match_the_entries(self):
+        report = vh.always_loaded_report(REPO_ROOT / "tests" / "fixtures" / "good-harness")
+        self.assertEqual(report["total_lines"], sum(e["lines"] for e in report["entries"]))
+
+
+class HeuristicFalsePositiveTests(unittest.TestCase):
+    """A check that fires on a correct harness is worse than no check, so
+    every heuristic gets its must-not-fire case first."""
+
+    def _advice(self, text):
+        findings = []
+        vh._check_generic_advice("CLAUDE.md", text, findings)
+        return findings
+
+    def test_generic_advice_fires_on_generic_advice(self):
+        self.assertTrue(self._advice("Write clean code. Handle errors properly.\n"))
+        self.assertTrue(self._advice("- Follow best practices\n"))
+
+    def test_generic_advice_silent_on_project_specific_lines(self):
+        for line in (
+            "Be consistent with the existing handler naming (`handleFooRequest`).",
+            "Handle errors properly by returning a `Result`, never by throwing across FFI.",
+            "Write clean code in `src/legacy/` only after checking the migration guide.",
+        ):
+            self.assertEqual(self._advice(line), [], line)
+
+    def _deny_allow(self, permissions):
+        findings = []
+        vh._check_deny_subsumes_allow("settings.json", permissions, findings)
+        return findings
+
+    def test_deny_subsumes_allow_fires(self):
+        self.assertTrue(
+            self._deny_allow({"deny": ["Bash(aws *)"], "allow": ["Bash(aws s3 ls)"]})
+        )
+
+    def test_deny_subsumes_allow_silent_on_disjoint_rules(self):
+        self.assertEqual(
+            self._deny_allow({"deny": ["Bash(rm *)"], "allow": ["Bash(npm test)"]}), []
+        )
+        # An allow identical to the deny is a different (already-reported) problem.
+        self.assertEqual(
+            self._deny_allow({"deny": ["Bash(aws *)"], "allow": ["Bash(aws *)"]}), []
+        )
+
+    def _glob(self, pattern):
+        findings = []
+        vh._check_catch_all_glob("rule.md", pattern, findings)
+        return findings
+
+    def test_catch_all_glob_fires(self):
+        for pattern in ("**", "**/*", "*"):
+            self.assertTrue(self._glob(pattern), pattern)
+
+    def test_catch_all_glob_silent_on_a_real_scope(self):
+        for pattern in ("src/**/*.ts", "docs/*.md", "src/api/**"):
+            self.assertEqual(self._glob(pattern), [], pattern)
+
+    def test_catch_all_message_does_not_claim_launch_loading(self):
+        # The obvious phrasing is wrong: a catch-all glob loads on the first
+        # matching read, not at launch. Shipping the wrong reason repeats B5.
+        message = self._glob("**")[0][2]
+        self.assertIn("first matching file read", message)
+
+
+class SpecMentionConventionTests(unittest.TestCase):
+    """B9. The lint required a backticked repo-relative path before a
+    component counted as 'mentioned', while the audit accepted a bare stem --
+    so the same repo could get opposite verdicts, and a spec written with bare
+    names drew a false 'isn't mentioned in the spec' on a correct harness."""
+
+    def setUp(self):
+        self.root = REPO_ROOT / "tests" / "fixtures" / "spec-bare-name-skill"
+        self.findings, _ = vh.run(self.root, strict=False)
+        self.messages = [f[2] for f in self.findings]
+
+    def test_bare_name_is_not_reported_as_missing(self):
+        for message in self.messages:
+            self.assertNotIn("isn't mentioned in the spec", message)
+
+    def test_bare_name_draws_a_convention_nudge_instead(self):
+        self.assertTrue(any("bare name" in m for m in self.messages), self.messages)
+
+    def test_both_scripts_agree_the_component_is_accounted_for(self):
+        import audit_harness as ah
+        drift = ah.check_spec_drift(self.root, ah.run(self.root)["inventory"])
+        self.assertEqual(drift["in_spec_not_on_disk"], [])
+        self.assertEqual(drift["on_disk_not_in_spec"], [])
+
+    def test_a_genuinely_absent_component_is_still_reported(self):
+        findings = []
+        vh.check_harness_spec(REPO_ROOT / "tests" / "fixtures" / "good-harness", findings)
+        # good-harness's spec names every component, so nothing should be
+        # reported as missing there either -- the control for this check.
+        self.assertEqual(
+            [f for f in findings if "isn't mentioned in the spec" in f[2]], []
+        )
+
+
 class MatcherHelperTests(unittest.TestCase):
     def test_exact_matchers(self):
         for m in ("Bash", "Edit|Write", "code-reviewer", "a,b,c"):

@@ -35,12 +35,18 @@ def _file_summary(path, root):
 
 
 def inventory_claude_md(root):
-    path = root / "CLAUDE.md"
-    if not path.is_file():
-        return None
-    summary = _file_summary(path, root)
-    summary["over_200_lines"] = (summary["lines"] or 0) > vh.MAX_CLAUDE_MD_LINES
-    return summary
+    """Every project-scope instruction file, not just ./CLAUDE.md.
+
+    Returns a list. A project using only `.claude/CLAUDE.md` previously
+    inventoried as having no CLAUDE.md at all, which made the audit report
+    it absent and -- worse -- made suggest_mode classify an established
+    harness as `new`."""
+    out = []
+    for path in hc.claude_md_paths(root):
+        summary = _file_summary(path, root)
+        summary["over_200_lines"] = (summary["lines"] or 0) > vh.MAX_CLAUDE_MD_LINES
+        out.append(summary)
+    return out
 
 
 def inventory_rules(root):
@@ -239,7 +245,52 @@ def check_user_scope_conflicts(root, inventory):
             candidate = user_skills / s["name"]
             if candidate.exists():
                 conflicts.append(f"a user-scope skill named '{s['name']}' also exists at {candidate} -- verify this isn't an unintentional shadow/duplicate")
+
+    # User rules apply to every project on this machine and load before
+    # project rules. One without `paths:` is in context for this session
+    # whether or not it has anything to do with this repo.
+    user_rules = home / ".claude" / "rules"
+    unscoped = []
+    for f in hc.iter_rule_files(home):
+        fm = hc.parse_frontmatter(hc.read_text(f))
+        if not (fm.ok and fm.data.get("paths")):
+            unscoped.append(f.name)
+    if unscoped:
+        conflicts.append(
+            f"{len(unscoped)} user-level rule(s) in {user_rules} have no 'paths:' and so load "
+            f"into every project including this one ({', '.join(sorted(unscoped)[:5])}"
+            f"{', ...' if len(unscoped) > 5 else ''}) -- check they don't contradict what "
+            "this harness is about to say"
+        )
+
+    for name, path in _foreign_instruction_files(root):
+        conflicts.append(
+            f"{name} exists at {path} -- another coding agent's instructions. Claude Code does "
+            "not read it, so its content is interview material rather than a component; if the "
+            "project wants one source of truth, make '@" + name + "' the first line of CLAUDE.md"
+        )
     return conflicts
+
+
+# Reported, never parsed, and never treated as harness components: these
+# belong to other tools, and the audit's job here is to surface that a second
+# set of instructions exists so the interview can ask about it.
+_FOREIGN_INSTRUCTION_PATHS = (
+    "AGENTS.md",
+    ".cursorrules",
+    ".cursor/rules",
+    ".github/copilot-instructions.md",
+    ".windsurfrules",
+    ".windsurf/rules",
+    ".clinerules",
+)
+
+
+def _foreign_instruction_files(root):
+    for rel in _FOREIGN_INSTRUCTION_PATHS:
+        path = Path(root) / rel
+        if path.exists():
+            yield rel, path
 
 
 def hygiene_signals(root):
@@ -299,7 +350,11 @@ def print_markdown(result):
     print("# Harness audit\n")
 
     print("## Component inventory\n")
-    print(f"- CLAUDE.md: {'present, ' + str(inv['claude_md']['lines']) + ' lines' if inv['claude_md'] else 'absent'}")
+    if inv["claude_md"]:
+        for entry in inv["claude_md"]:
+            print(f"- {entry['path']}: present, {entry['lines']} lines")
+    else:
+        print("- CLAUDE.md: absent (checked ./CLAUDE.md, ./.claude/CLAUDE.md, ./CLAUDE.local.md)")
     print(f"- rules/: {len(inv['rules'])} file(s)")
     for r in inv["rules"]:
         print(f"  - {r['path']} ({'has paths' if r['has_paths'] else 'NO paths -- loads at launch'})")

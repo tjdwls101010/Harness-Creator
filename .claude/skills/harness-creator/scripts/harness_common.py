@@ -328,13 +328,59 @@ def iter_skill_dirs(root):
             yield child
 
 
-def iter_agent_files(root):
-    """Yield each `.claude/agents/*.md` file under root."""
-    agents_root = Path(root) / ".claude" / "agents"
-    if not agents_root.is_dir():
+def claude_md_paths(root):
+    """Return the project-scope instruction files that exist at the root.
+
+    A project CLAUDE.md may live at either `./CLAUDE.md` or
+    `./.claude/CLAUDE.md` -- both load, and they concatenate rather than
+    override. `CLAUDE.local.md` loads alongside CLAUDE.md, after it."""
+    root = Path(root)
+    candidates = [
+        root / "CLAUDE.md",
+        root / ".claude" / "CLAUDE.md",
+        root / "CLAUDE.local.md",
+    ]
+    return [p for p in candidates if p.is_file()]
+
+
+def walk_markdown(directory):
+    """Yield every `.md` file at or below directory, following symlinks but
+    visiting each resolved path once.
+
+    Deliberately not `rglob`: Claude Code documents and supports symlinked
+    rule directories ("circular symlinks are detected and handled
+    gracefully"), and Python's own recursive-glob symlink behavior differs
+    across the 3.12/3.13 versions this has to run on. An explicit walk with a
+    resolved-path visited set behaves the same everywhere and terminates on a
+    cycle."""
+    directory = Path(directory)
+    if not directory.is_dir():
         return
-    for child in sorted(agents_root.glob("*.md")):
-        yield child
+    visited = set()
+    stack = [directory]
+    while stack:
+        current = stack.pop()
+        try:
+            resolved = current.resolve()
+        except OSError:
+            continue
+        if resolved in visited:
+            continue
+        visited.add(resolved)
+        try:
+            children = sorted(current.iterdir())
+        except OSError:
+            continue
+        for child in children:
+            if child.is_dir():
+                stack.append(child)
+            elif child.suffix == ".md":
+                yield child
+
+
+def iter_agent_files(root):
+    """Yield each `.claude/agents/**/*.md` file under root."""
+    yield from sorted(walk_markdown(Path(root) / ".claude" / "agents"))
 
 
 def iter_workflow_files(root):
@@ -347,12 +393,13 @@ def iter_workflow_files(root):
 
 
 def iter_rule_files(root):
-    """Yield each `.claude/rules/*.md` file under root."""
-    rules_root = Path(root) / ".claude" / "rules"
-    if not rules_root.is_dir():
-        return
-    for child in sorted(rules_root.glob("*.md")):
-        yield child
+    """Yield each `.claude/rules/**/*.md` file under root.
+
+    Rules are discovered recursively, including subdirectories like
+    `frontend/`. A nested rule without `paths:` loads at launch exactly like
+    `.claude/CLAUDE.md`, so a non-recursive scan hides files that are being
+    paid for on every session."""
+    yield from sorted(walk_markdown(Path(root) / ".claude" / "rules"))
 
 
 def settings_paths(root):
