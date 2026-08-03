@@ -193,11 +193,17 @@ class GuardrailTests(unittest.TestCase):
             "once: true",
             "AskUserQuestion",     # does not exist inside a subagent
             "v2.1.218",            # frontmatter hooks are trust-gated
+            "agent-memory",        # memory: project writes a committed directory
         ],
         "claude-md-and-rules.md": [
             "paths:",              # a rule without paths: loads at launch
             "@",                   # imports expand at launch, saving nothing
             "200",                 # the line guideline, with its exception
+            "CLAUDE.local.md",     # the destination for per-machine facts
+            "autoMemoryEnabled",   # auto memory can be switched off entirely
+            "MEMORY.md",           # a second always-loaded surface
+            "AGENTS.md",           # Claude Code does not read it
+            "compaction",          # the survival matrix
         ],
         "workflows.md": [
             "meta",                # must be a pure literal, read before execution

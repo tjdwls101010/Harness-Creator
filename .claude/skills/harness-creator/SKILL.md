@@ -25,7 +25,9 @@ Invocation
  └─ Phase 0. Audit (always, before anything else)
      ├─ python "${CLAUDE_SKILL_DIR}/scripts/audit_harness.py" --path . → existing component inventory
      ├─ check .claude/harness-spec.md
-     ├─ scout the codebase (build system, language, test runner, team-size signals)
+     ├─ scout the codebase (build system, language, test runner, team-size signals) and, if it
+     │   exists, read this project's auto-memory MEMORY.md — it's the most honest record of what
+     │   Claude has repeatedly needed here, so it's interview material, not a component to track
      └─ branch: new / extend (new asks) / improve (fix existing problems) / sync (resolve spec-vs-disk drift)
         audit_harness.py's "suggested mode" is a hint, not a verdict — for extend vs. improve
         specifically, ask the user directly (see references/interview.md's re-entry variants).
@@ -81,7 +83,7 @@ This is the core judgment call the whole interview builds toward: for each thing
 | An orchestration whose *shape* is fixed and repeats — same steps, only the arguments change, meant to be a one-button `/name` | `.claude/workflows/*.js` | Determinism is the point here. Keep it thin: skeleton in the script, judgment in the agent prompts (see references/workflows.md and D12). |
 | Large parallel work whose shape is different every time it comes up | Natural-language guidance in CLAUDE.md/a skill ("fan this out with a workflow: find → verify → synthesize") | A fixed file for a variable-shaped task becomes a flexibility tax. On-the-fly composition, guided by a principle, beats a rigid template here. |
 
-How to apply it, in three questions: **enforced or advisory** — is it fine if Claude usually gets it right, or must it never fail? The former is prose (CLAUDE.md/rules/skills), the latter is code (hooks/permissions). **When does it load** — every session, only on a path, only on demand, only on an event? That answer names the layer directly. **What does it cost** — CLAUDE.md content is paid every request, a skill's description sits in a shared listing budget (~1% of context), a hook costs nothing unless it produces output, an agent costs a routing decision every time it exists as an option. A single request often splits across layers: "always run tests before committing" is a hook (the guarantee) plus one CLAUDE.md line explaining why that hook exists (so a block doesn't read as confusing).
+How to apply it, in four questions: **enforced or advisory** — is it fine if Claude usually gets it right, or must it never fail? The former is prose (CLAUDE.md/rules/skills), the latter is code (hooks/permissions). **When does it load** — every session, only on a path, only on demand, only on an event? That answer names the layer directly. **Who needs it, and who writes it** — every clone or only this machine; you or Claude at runtime? A fact only this developer needs goes in `CLAUDE.local.md` (gitignored, deterministic, theirs), not in the CLAUDE.md their whole team pays for. **What does it cost** — the always-loaded bill is CLAUDE.md *plus* every rule without `paths:` *plus* every `@import` expanded *plus* the first 200 lines of auto memory's `MEMORY.md`, all paid on every request; a skill's description sits in a shared listing budget (~1% of context); a hook costs nothing unless it produces output; an agent costs a routing decision every time it exists as an option. A single request often splits across layers: "always run tests before committing" is a hook (the guarantee) plus one CLAUDE.md line explaining why that hook exists (so a block doesn't read as confusing).
 
 ## Authoring philosophy
 
