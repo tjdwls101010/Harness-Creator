@@ -47,21 +47,17 @@ export const meta = {
   description: 'Audit every route handler under src/routes/ for missing authentication checks, cross-verify each finding, and report only what survives verification.',
 }
 
-// --- Stage 1: fan-out. Judgment ("what counts as a route file") is in the
-// prompt text below, not in a hardcoded glob or file-extension check here.
+// --- Stage 1: fan-out.
 const discovered = await agent(
   'List every file under src/routes/ that defines an HTTP route handler. Return only real route-handler files, not test files, mocks, or shared utilities.',
   { schema: { type: 'object', required: ['files'], properties: { files: { type: 'array', items: { type: 'string' } } } } },
 )
 
-// One independent agent per file. The prompt carries the entire judgment
-// call of "what missing auth looks like" — the script only knows "per file."
+// One independent agent per file. The script only knows "per file."
 const findings = await pipeline(discovered.files, file =>
   agent(
     `Audit ${file} for a missing authentication check on any route it defines. ` +
-    `A route is missing auth if it reads or mutates user-scoped data without checking ` +
-    `an auth token or session first. Return your finding with a direct quote of the ` +
-    `offending code as evidence, or report no finding if the file is clean.`,
+    `Quote the offending code as evidence, or report no finding if the file is clean.`,
     {
       label: file,
       schema: {
@@ -78,20 +74,15 @@ const findings = await pipeline(discovered.files, file =>
   ),
 )
 
-// --- Stage 2: adversarial verify. Only findings that claim a problem go
-// through a second, skeptical pass — the gate here ("hasFinding") is pure
-// control flow; whether the finding is *actually valid* is the verifier
-// agent's judgment, not a check written into this script.
+// --- Stage 2: adversarial verify. `hasFinding` is pure control flow;
+// whether a finding is *valid* is the verifier's judgment, not this script's.
 const candidates = findings.filter(f => f.hasFinding)
 
 const verified = await pipeline(candidates, finding =>
   agent(
-    `A prior review flagged ${finding.file} for missing authentication, citing this ` +
-    `evidence: "${finding.evidence}". Explanation given: "${finding.explanation}". ` +
-    `Independently check this claim against the actual file. Would a skeptical senior ` +
-    `engineer accept this as a real, exploitable gap? Reject anything that's actually ` +
-    `covered by middleware, a wrapper, or a false read of the code. Return your verdict ` +
-    `and reasoning.`,
+    `A prior review flagged ${finding.file}, citing: "${finding.evidence}". ` +
+    `Check that claim against the file yourself. Try to refute it — a gap that turns ` +
+    `out to be covered elsewhere, or a misread, is a rejection. Return verdict and reasoning.`,
     {
       label: finding.file,
       schema: {
@@ -105,17 +96,14 @@ const verified = await pipeline(candidates, finding =>
 
 const confirmed = verified.filter(v => v.confirmed)
 
-// --- Stage 3: synthesize. Only this stage's return value should reach
-// Claude's context — everything upstream (raw findings, rejected claims)
-// stays in script variables, which is the entire point of moving the plan
-// into a script instead of a conversation.
+// --- Stage 3: synthesize. Only this return value reaches Claude's context;
+// the raw findings and rejected claims stay in script variables.
 if (confirmed.length === 0) {
-  return { summary: 'No confirmed missing-auth findings after verification.', findings: [] }
+  return { summary: 'Nothing survived verification.', findings: [] }
 }
 
 const report = await agent(
-  `Write a short prioritized report of these confirmed missing-authentication findings, ` +
-  `ranked by how sensitive the exposed data looks: ${JSON.stringify(confirmed)}`,
+  `Write a short report of these confirmed findings, most severe first: ${JSON.stringify(confirmed)}`,
 )
 
 return { summary: report, findings: confirmed }

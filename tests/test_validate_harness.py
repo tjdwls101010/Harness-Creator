@@ -399,6 +399,52 @@ class SpecMentionConventionTests(unittest.TestCase):
         )
 
 
+class WorkflowSyntaxProbeTests(unittest.TestCase):
+    """B12, found while trimming the examples in WS6. The node syntax gate
+    checked the workflow file as a bare module, so a top-level `return` --
+    which the workflow runtime supports, and which BOTH of this skill's own
+    reference examples use -- was reported as an E. That made Hard line 2
+    unsatisfiable for a correct workflow, the same shape of bug as B1."""
+
+    def _check(self, source):
+        import shutil, subprocess
+        if not shutil.which("node"):
+            self.skipTest("node unavailable")
+        return subprocess.run(
+            ["node", "--input-type=module", "--check"],
+            input=vh._workflow_syntax_probe(source),
+            capture_output=True, text=True, timeout=10,
+        ).returncode
+
+    def test_top_level_return_is_valid(self):
+        source = (
+            "export const meta = { name: 'x', description: 'y' }\n"
+            "const r = await agent('go', { schema: {} })\n"
+            "if (!r) return { ok: false }\n"
+            "return { ok: true }\n"
+        )
+        self.assertEqual(self._check(source), 0)
+
+    def test_top_level_await_is_valid(self):
+        self.assertEqual(
+            self._check("export const meta = { name: 'x' }\nconst a = await agent('go')\n"), 0
+        )
+
+    def test_a_real_syntax_error_is_still_caught(self):
+        self.assertNotEqual(
+            self._check("export const meta = { name: 'x' }\nconst r = await agent('go'\n"), 0
+        )
+
+    def test_shipped_examples_pass_the_gate(self):
+        """The examples in references/ must survive the linter that this skill
+        tells the model to run. They didn't."""
+        import re as _re
+        for name in ("workflows.md", "e2e-testing.md"):
+            text = (SCRIPTS_DIR.parent / "references" / name).read_text(encoding="utf-8")
+            for i, block in enumerate(_re.findall(r"```javascript\n(.*?)```", text, _re.S)):
+                self.assertEqual(self._check(block), 0, f"{name} block {i}")
+
+
 class MatcherHelperTests(unittest.TestCase):
     def test_exact_matchers(self):
         for m in ("Bash", "Edit|Write", "code-reviewer", "a,b,c"):

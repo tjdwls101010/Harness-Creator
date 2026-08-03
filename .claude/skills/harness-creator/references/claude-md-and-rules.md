@@ -115,8 +115,8 @@ Every claim here is either a list that will drift the first time someone adds a 
 ```markdown
 # Project
 
-Node/TypeScript API + React frontend. See `.claude/harness-spec.md` for the
-full harness inventory and design rationale.
+See `.claude/harness-spec.md` for the full harness inventory and design
+rationale.
 
 ## Build & test
 - `npm run dev` starts both API (port 3001) and frontend (port 5173).
@@ -124,8 +124,8 @@ full harness inventory and design rationale.
   suite takes ~6 minutes; avoid it unless asked explicitly.
 
 ## Style
-- 2-space indentation, no semicolons (enforced by `npm run lint`).
 - API handlers live in `src/api/routes/`, one file per resource.
+- Formatting is `npm run lint`'s job, not yours — run it, don't hand-match it.
 
 ## Architecture
 - Auth tokens are validated in the gateway (`src/gateway/auth.ts`), not in
@@ -138,3 +138,5 @@ this line exists so you know why that hook fires before you hit it.
 ```
 
 Notice the last block: the hook does the actual enforcement, and the CLAUDE.md line exists only to explain *why*, so the model isn't confused when the hook blocks it. That's the correct division of labor between this layer and the enforcement layer.
+
+Notice two things this file does **not** say, both of which a first draft usually contains. It never summarizes the stack — `package.json` already answers "what is this project," and a line restating it is pure cost. And it doesn't restate the formatting rules the linter enforces; it points at the linter instead, because a rule with a mechanical enforcer already has a better home than prose. Everything that survived is something the repo genuinely cannot tell you: which port, how long the suite takes, where auth actually lives, and why a hook is about to block you.

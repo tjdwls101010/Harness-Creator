@@ -36,56 +36,52 @@ export const meta = {
   description: 'Run the spec Validation scenarios as headless sessions against the generated harness and grade each transcript.',
 }
 
-// --- Phase Run: one agent per scenario, run_e2e.py does the actual spawning.
-// Judgment about *what the scenario checks* lives in the spec, not in this script;
-// the script only knows "run N scenarios, one call each."
+// Resolve this in the composing session and paste the absolute path in.
+// `${CLAUDE_SKILL_DIR}` is NOT substituted inside a workflow's prompt strings
+// (see the gotcha below) -- it would reach the subagent as literal text.
+const SKILL_DIR = '/absolute/path/to/the/harness-creator/skill'
+
+// One entry per scenario in the spec's Validation section. Each `expect` is
+// copied from the spec -- the grading agent must never invent what "correct"
+// means, and at least one scenario should be a near-miss whose expectation is
+// that nothing triggers.
 const scenarios = [
-  { id: 'V1', prompt: 'Add a new API route for deleting a user account.', isolate: true },
-  { id: 'V2', prompt: 'What testing framework does this project use?', isolate: false },
-  { id: 'V3', prompt: 'Refactor the auth module to use async/await.', isolate: false }, // near-miss: should NOT trigger the migration-safety skill
+  { id: 'V1', isolate: true,  prompt: 'Add a new API route for deleting a user account.',
+    expect: 'Should trigger the api-route-conventions skill and follow its error-handling pattern.' },
+  { id: 'V2', isolate: false, prompt: 'What testing framework does this project use?',
+    expect: 'Should answer "pytest" by reading CLAUDE.md, not by guessing or searching.' },
+  { id: 'V3', isolate: false, prompt: 'Refactor the auth module to use async/await.',
+    expect: 'Should NOT trigger the migration-safety skill -- this is a near-miss prompt.' },
 ]
 
-const runs = await pipeline(scenarios, s =>
-  agent(
-    `Run: python "\${CLAUDE_SKILL_DIR}/scripts/run_e2e.py" --project . --prompt ${JSON.stringify(s.prompt)} ` +
+const VERDICT = { type: 'object', required: ['verdict', 'evidence'], properties: {
+  verdict: { type: 'string', enum: ['pass', 'fail'] }, evidence: { type: 'string' } } }
+
+// Two stages over the same item. The second stage reads `s`, the original
+// scenario -- not the first stage's return value, which is a plain string
+// because that agent() call has no schema and so has no `.label` to read.
+const grades = await pipeline(
+  scenarios,
+  s => agent(
+    `Run: python "${SKILL_DIR}/scripts/run_e2e.py" --project . --prompt ${JSON.stringify(s.prompt)} ` +
     `--out .claude/.e2e-runs/${s.id} --json ${s.isolate ? '--isolate' : ''}. ` +
     `Report the summary.json contents back verbatim.`,
-    { label: s.id },
+    { label: `run:${s.id}` },
   ),
-)
-
-// --- Phase Grade: one grading agent per transcript, evidence-cited verdicts only.
-// The expected-behavior text per scenario comes straight from the spec's Validation
-// section — do not let the grading agent invent what "correct" means.
-const expected = {
-  V1: 'Should trigger the api-route-conventions skill and follow its error-handling pattern.',
-  V2: 'Should answer "pytest" by reading CLAUDE.md, not by guessing or searching.',
-  V3: 'Should NOT trigger the migration-safety skill (this is a near-miss prompt).',
-}
-
-const grades = await pipeline(runs, run =>
-  agent(
-    `Grade .claude/.e2e-runs/${run.label}/transcript.jsonl against this expectation: ` +
-    `"${expected[run.label]}". Cite specific tool_use events or response text as evidence. ` +
+  (_summary, s) => agent(
+    `Grade .claude/.e2e-runs/${s.id}/transcript.jsonl against this expectation: "${s.expect}". ` +
+    `Cite specific tool_use events or response text as evidence. ` +
     `Surface-level compliance without real supporting evidence is a FAIL, not a PASS.`,
-    { label: run.label, schema: { type: 'object', required: ['verdict', 'evidence'], properties: {
-      verdict: { type: 'string', enum: ['pass', 'fail'] }, evidence: { type: 'string' } } } },
-  ),
+    { label: `grade:${s.id}`, schema: VERDICT },
+  ).then(v => ({ ...v, id: s.id })),
 )
 
-// --- Phase Report: synthesize, one repair suggestion per failure.
-const failures = grades.filter(g => g.verdict === 'fail')
-if (failures.length === 0) return { summary: `All ${grades.length} scenarios passed.`, grades }
-
-const report = await agent(
-  `Write a short report: ${grades.length - failures.length}/${grades.length} scenarios passed. ` +
-  `For each failure, name the specific layer to fix (skill description, skill body, CLAUDE.md, ` +
-  `hook matcher) using this routing table: ${JSON.stringify(failures)}`,
-)
-return { summary: report, grades }
+return { passed: grades.filter(g => g.verdict === 'pass').length, total: grades.length, grades }
 ```
 
-Notice what the script never does: it never decides whether a transcript shows real trigger evidence, and it never decides what "correct behavior" means for a scenario — both of those judgments live inside the prompt strings and the spec, exactly as every other workflow in this skill keeps judgment out of control flow.
+Notice what the script never does: it never decides whether a transcript shows real trigger evidence, and it never decides what "correct behavior" means — both judgments live in the prompt strings and the spec, keeping judgment out of control flow. Route each failure to a repair target yourself using the feedback-routing table below; don't hand that table to another agent inside the workflow, since you're the one who then has to act on it.
+
+**Two failure modes in this shape are worth naming, because both are silent.** First, `${CLAUDE_SKILL_DIR}` is substituted in a skill's own markdown body and in `allowed-tools` Bash rules — **not** in a workflow's prompt strings, and not in a subagent's shell environment. Written there, it arrives as literal text and becomes either a permission stall or a `python "/scripts/run_e2e.py"` file-not-found, which reads like a permissions problem and isn't one. Resolve the absolute path in the composing session. Second, an `agent()` call **without** a `schema` returns its final text as a plain string, so reading a property off it (`run.label`, `run.id`) silently yields `undefined` and you get a path like `.e2e-runs/undefined/`. Either attach a schema, or carry the identity from the original item the way the second stage above does.
 
 ### Fallback when dynamic workflows are unavailable
 

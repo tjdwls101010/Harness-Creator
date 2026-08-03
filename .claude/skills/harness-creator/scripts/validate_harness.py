@@ -370,6 +370,20 @@ def _node_available():
     return _NODE_CHECKED
 
 
+def _workflow_syntax_probe(source):
+    """Rewrite a workflow script into a form node can syntax-check.
+
+    Two things are legal in a workflow body and illegal in a bare module, so
+    checking the file as-is reports syntax errors that aren't: a **top-level
+    `return`** (the body runs inside an async function, and returning a result
+    is the documented way to hand data back) and top-level `await`. Wrapping
+    the body in an async function makes both legal while leaving every real
+    syntax error in place. `export` is stripped because it is illegal inside a
+    function -- the separate meta check is what verifies it was there."""
+    stripped = re.sub(r"^export\s+", "", source, flags=re.MULTILINE)
+    return "async function __workflow__() {\n" + stripped + "\n}\n"
+
+
 def _check_workflow_syntax(loc, wf_file, findings):
     import subprocess
     # Plain `node --check` false-fails on ESM `export` syntax when the
@@ -378,7 +392,7 @@ def _check_workflow_syntax(loc, wf_file, findings):
     try:
         result = subprocess.run(
             ["node", "--input-type=module", "--check"],
-            input=hc.read_text(wf_file),
+            input=_workflow_syntax_probe(hc.read_text(wf_file)),
             capture_output=True, text=True, timeout=10,
         )
     except Exception as e:
