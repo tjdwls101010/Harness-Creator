@@ -121,6 +121,37 @@ class SpecNotOnDiskDriftTests(unittest.TestCase):
         self.assertTrue(ah.run(self.root)["suggested_mode"].startswith("sync"))
 
 
+class SpecDriftGranularityTests(unittest.TestCase):
+    """B13. Found by dogfooding: writing this repo's own harness-spec.md
+    reported all sixteen components as missing. The check compared spec rows
+    only against component-level inventory paths, so a spec naming a file
+    *inside* a component -- a skill's SKILL.md, one of its references -- drew
+    a false 'not on disk' for a path that plainly exists. A check that fires
+    on a correct harness is worse than no check."""
+
+    def test_this_repo_reports_no_drift(self):
+        drift = ah.check_spec_drift(REPO_ROOT, ah.run(REPO_ROOT)["inventory"])
+        self.assertEqual(drift["in_spec_not_on_disk"], [])
+
+    def test_a_path_that_exists_is_never_reported(self):
+        spec = (
+            "## Behavior inventory\n"
+            "| id | b | layer | component | status |\n"
+            "| B1 | x | skill | `.claude/skills/harness-creator/SKILL.md` | validated |\n"
+            "| B2 | y | skill | `.claude/skills/harness-creator/references/hooks.md` | validated |\n"
+        )
+        self.assertEqual(ah._spec_rows_without_files(REPO_ROOT, spec, set()), [])
+
+    def test_a_path_that_does_not_exist_is_still_reported(self):
+        spec = (
+            "## Behavior inventory\n"
+            "| id | b | layer | component | status |\n"
+            "| B1 | x | skill | `.claude/skills/harness-creator/nope.md` | validated |\n"
+        )
+        rows = ah._spec_rows_without_files(REPO_ROOT, spec, set())
+        self.assertEqual([r["id"] for r in rows], ["B1"])
+
+
 class SpecDriftJsonContractTests(unittest.TestCase):
     """B11. `in_spec_not_on_disk` was returned in the no-spec branch but
     omitted when a spec existed, so a --json consumer keying on it broke in

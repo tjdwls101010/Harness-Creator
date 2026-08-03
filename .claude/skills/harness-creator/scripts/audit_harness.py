@@ -168,7 +168,7 @@ def check_spec_drift(root, inventory):
     return {
         "spec_exists": True,
         "on_disk_not_in_spec": on_disk_not_in_spec,
-        "in_spec_not_on_disk": _spec_rows_without_files(spec_text, on_disk),
+        "in_spec_not_on_disk": _spec_rows_without_files(root, spec_text, on_disk),
     }
 
 
@@ -178,7 +178,7 @@ def check_spec_drift(root, inventory):
 _STATUSES_CLAIMING_A_FILE = frozenset({"generated", "validated"})
 
 
-def _spec_rows_without_files(spec_text, on_disk):
+def _spec_rows_without_files(root, spec_text, on_disk):
     """Rows in the Behavior inventory whose status claims a file exists,
     where no such file is on disk.
 
@@ -204,6 +204,15 @@ def _spec_rows_without_files(spec_text, on_disk):
         # spec written before that convention was documented.
         name = component.strip().strip("`").rstrip("/")
         if not name or name.startswith("<"):
+            continue
+        # The claim under test is "the spec says this exists and it doesn't",
+        # so a path that is simply present on disk settles it -- regardless of
+        # whether it is one of the component-level paths this script
+        # inventories. A spec may legitimately name a file *inside* a
+        # component (a skill's SKILL.md, one of its references) at a finer
+        # granularity than the inventory's unit, and reporting those as
+        # missing would fire on a correct harness.
+        if (Path(root) / name).exists():
             continue
         stem = Path(name).stem
         if name in on_disk or Path(name).name in disk_names or stem in disk_stems:
