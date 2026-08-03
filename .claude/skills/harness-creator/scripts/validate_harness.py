@@ -35,7 +35,6 @@ _BROAD_ALLOW_RE = re.compile(
     r"^(Bash|PowerShell)\((\*|[a-zA-Z0-9_.\-]+\*)\)$|^Agent(\(.*\))?$"
 )
 
-_AT_IMPORT_RE = re.compile(r"(?<!`)@([\w./\-]+\.\w+)(?!`)")
 _TRIGGER_PHRASE_RE = re.compile(
     r"\b(use|when|whenever|trigger|invoke)\b|할\s*때|사용", re.IGNORECASE
 )
@@ -413,15 +412,38 @@ def check_claude_md(root, findings):
             "still overflows after splitting into rules/)",
         )
 
-    for m in re.finditer(_AT_IMPORT_RE, text):
-        target = root / m.group(1)
-        if not target.exists():
-            add(findings, "E", loc, f"@{m.group(1)} import target does not exist")
+    _check_at_imports(root, claude_md, loc, text, findings)
 
     known_names = {d.name for d in hc.iter_skill_dirs(root)} | {
         f.stem for f in hc.iter_agent_files(root)
     }
     _check_inventory_listing(loc, lines, known_names, findings)
+
+
+def _check_at_imports(root, containing_file, loc, text, findings):
+    """Every @import in an instruction file has to resolve, because a
+    missing one expands to nothing at launch and the instruction it was
+    carrying is silently absent."""
+    root = Path(root).resolve()
+    for target in hc.parse_at_imports(text):
+        path, external = hc.resolve_import(target, containing_file)
+        if external:
+            # A home-directory or absolute import is machine-local by
+            # design -- the docs recommend exactly this shape for sharing
+            # personal notes across worktrees -- so its absence here says
+            # nothing about whether the harness is correct. What is worth
+            # saying once is that it triggers an approval dialog whose
+            # decline is permanent and never re-offered.
+            add(
+                findings, "W", loc,
+                f"@{target} resolves outside the project -- Claude Code shows a "
+                "one-time approval dialog for external imports in a project memory "
+                "file, and declining disables them permanently with no repeat "
+                "prompt (imports in user-scope files skip the dialog)",
+            )
+            continue
+        if not path.exists():
+            add(findings, "E", loc, f"@{target} import target does not exist")
 
 
 def _check_inventory_listing(loc, lines, known_names, findings):

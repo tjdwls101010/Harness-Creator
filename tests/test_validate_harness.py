@@ -166,6 +166,75 @@ class FrontmatterParserTests(unittest.TestCase):
         self.assertFalse(fm.ok)
 
 
+class AtImportParsingTests(unittest.TestCase):
+    """B1. The old regex required a dot-extension and only guarded against
+    backticks, so it read `ops@acme.com` and `react@18.2.0` as imports and
+    raised an E for each -- which made Hard line 2 unsatisfiable for any
+    CLAUDE.md that named a maintainer or pinned a version. It also missed the
+    documented extensionless `@README` form and matched inside fenced blocks."""
+
+    def _parse(self, text):
+        return list(vh.hc.parse_at_imports(text))
+
+    def test_email_address_is_not_an_import(self):
+        self.assertEqual(self._parse("contact ops@acme.com"), [])
+
+    def test_pinned_version_is_not_an_import(self):
+        self.assertEqual(self._parse("stay on react@18.2.0"), [])
+
+    def test_extensionless_target_is_an_import(self):
+        self.assertEqual(
+            self._parse("See @README for project overview and @package.json too."),
+            ["README", "package.json"],
+        )
+
+    def test_backticked_target_is_literal(self):
+        self.assertEqual(self._parse("see `@docs/x.md` literally"), [])
+
+    def test_fenced_block_is_skipped(self):
+        text = "before @docs/real.md\n```\n@docs/nope.md\n```\nafter @docs/two.md\n"
+        self.assertEqual(self._parse(text), ["docs/real.md", "docs/two.md"])
+
+    def test_tilde_fence_is_skipped(self):
+        self.assertEqual(self._parse("~~~\n@docs/nope.md\n~~~\n"), [])
+
+    def test_trailing_sentence_punctuation_is_stripped(self):
+        self.assertEqual(self._parse("read @docs/foo.md."), ["docs/foo.md"])
+        self.assertEqual(self._parse("read (@docs/bar.md) now"), ["docs/bar.md"])
+
+    def test_home_import_is_external_and_not_root_relative(self):
+        path, external = vh.hc.resolve_import(
+            "~/.claude/notes.md", REPO_ROOT / "CLAUDE.md"
+        )
+        self.assertTrue(external)
+        self.assertNotIn("~", str(path))
+
+    def test_relative_import_resolves_against_the_containing_file(self):
+        path, external = vh.hc.resolve_import(
+            "notes.md", REPO_ROOT / ".claude" / "CLAUDE.md"
+        )
+        self.assertFalse(external)
+        self.assertEqual(path, REPO_ROOT / ".claude" / "notes.md")
+
+
+class GoodHarnessImportTests(unittest.TestCase):
+    """The good-harness fixture carries all four traps in one file. It must
+    exit 0 and resolve exactly one real import."""
+
+    def setUp(self):
+        self.claude_md = (
+            REPO_ROOT / "tests" / "fixtures" / "good-harness" / "CLAUDE.md"
+        )
+        self.text = self.claude_md.read_text(encoding="utf-8")
+
+    def test_fixture_still_contains_every_trap(self):
+        for trap in ("ops@acme.com", "react@18.2.0", "@docs/nope.md", "@README.md"):
+            self.assertIn(trap, self.text, trap)
+
+    def test_exactly_one_import_target(self):
+        self.assertEqual(list(vh.hc.parse_at_imports(self.text)), ["README.md"])
+
+
 class MatcherHelperTests(unittest.TestCase):
     def test_exact_matchers(self):
         for m in ("Bash", "Edit|Write", "code-reviewer", "a,b,c"):

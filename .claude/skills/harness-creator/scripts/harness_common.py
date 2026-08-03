@@ -246,6 +246,78 @@ def load_json_lenient(path):
         return None, f"{path}: JSON parse error at line {e.lineno}: {e.msg}"
 
 
+_FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
+_INLINE_CODE_RE = re.compile(r"`+[^`\n]*`+")
+
+# An @import starts at a line start or after whitespace or an opening
+# bracket -- that boundary is the whole reason `contact ops@acme.com` and
+# `pin react@18.2.0` are not imports. The target runs to the next
+# whitespace or backtick; trailing sentence punctuation is stripped after
+# the match. There is deliberately no required dot-extension: the docs
+# state that the extensionless form `@README` imports the file.
+_AT_IMPORT_RE = re.compile(r"(?:^|(?<=[\s(\[]))@([^\s`]+)")
+
+_IMPORT_TRAILING_PUNCT = ".,;:!?)]}\"'"
+
+
+def mask_code(text):
+    """Return text with fenced code blocks and inline code spans replaced by
+    spaces, preserving length and line structure so offsets still line up.
+
+    Import parsing has to see the same thing Claude Code sees: the docs are
+    explicit that "Import parsing skips Markdown code spans and fenced code
+    blocks," which is exactly how an author writes `@README` when they mean
+    to name the file rather than import it."""
+    out = []
+    fence = None
+    for line in text.split("\n"):
+        m = _FENCE_RE.match(line)
+        if fence is None:
+            if m:
+                fence = m.group(1)[0]
+                out.append(" " * len(line))
+                continue
+        else:
+            out.append(" " * len(line))
+            if m and m.group(1)[0] == fence:
+                fence = None
+            continue
+        out.append(_INLINE_CODE_RE.sub(lambda mm: " " * len(mm.group(0)), line))
+    return "\n".join(out)
+
+
+def parse_at_imports(text):
+    """Yield each `@path` import target in text, in order, skipping code.
+
+    Returns raw target strings exactly as written -- resolution is the
+    caller's job, because relative targets resolve against the directory of
+    the file containing the import, not the working directory."""
+    seen_spans = set()
+    for m in _AT_IMPORT_RE.finditer(mask_code(text)):
+        target = m.group(1).rstrip(_IMPORT_TRAILING_PUNCT)
+        if not target or m.start() in seen_spans:
+            continue
+        seen_spans.add(m.start())
+        yield target
+
+
+def resolve_import(target, containing_file):
+    """Resolve an @import target to a Path, or None if it is not
+    project-relative.
+
+    Returns (path, is_external). A `~/...` or absolute target is external:
+    it is a legitimate and documented pattern (the docs recommend
+    `@~/.claude/my-project-instructions.md` for sharing personal notes
+    across worktrees), so its absence on this machine is not a defect."""
+    containing_dir = Path(containing_file).parent
+    if target.startswith("~"):
+        return Path(target).expanduser(), True
+    p = Path(target)
+    if p.is_absolute():
+        return p, True
+    return (containing_dir / p), False
+
+
 def iter_skill_dirs(root):
     """Yield each `.claude/skills/<name>/` directory that exists under root."""
     skills_root = Path(root) / ".claude" / "skills"
