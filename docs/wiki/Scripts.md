@@ -27,6 +27,8 @@ validate_harness.py --path /path/to/target-repo --strict
 
 Default output is human-readable: an `== Errors ==` section, a `== Warnings ==` section, a `N error(s), M warning(s).` tally, and a final `PASS` or `FAIL`. `--json` emits `{"errors": N, "warnings": M, "findings": [...]}`. `--strict` promotes warnings to failures — use it in CI.
 
+Every run also prints an unconditional **always-loaded budget report** — every `CLAUDE.md` the harness has, every unscoped rule, and every expanded `@import`, with a line-count total — regardless of `--json` or whether anything else failed, since that total is the number a harness author needs and has no other way to get. `CLAUDE.md` discovery covers `./CLAUDE.md`, `./.claude/CLAUDE.md`, and `./CLAUDE.local.md`, and rule/agent discovery walks the tree recursively rather than assuming a flat directory.
+
 Exit codes: `0` = no errors (warnings can still be present unless `--strict`); `1` = at least one error, or under `--strict` at least one warning; `2` = the script couldn't run.
 
 The skill runs this immediately after generating or editing any component and does not treat the work as done until it exits `0`; it runs again as a whole-harness pass at wrap-up. Run it yourself after hand-editing a harness, or wire `--strict` into CI to keep a harness from rotting.
@@ -40,7 +42,7 @@ audit_harness.py --path /path/to/target-repo
 audit_harness.py --path /path/to/target-repo --json
 ```
 
-Default output is a Markdown report with five sections: a component inventory (`CLAUDE.md`, rules, skills, agents, workflows, settings), `harness-spec.md` drift (components on disk the spec never mentions), user-scope conflict candidates (a user-level `~/.claude/CLAUDE.md` or a same-named user skill that could shadow the project's), hygiene signals (dead links, duplicate agent names, non-executable hook scripts, and the lint error/warning counts — it calls `validate_harness.py` internally for these), and a suggested mode. `--json` emits the same data as a nested object.
+Default output is a Markdown report with five sections: a component inventory (`CLAUDE.md`, rules, skills, agents, workflows, settings, discovered at `./CLAUDE.md`, `./.claude/CLAUDE.md`, and `./CLAUDE.local.md`, with rules/agents walked recursively), `harness-spec.md` drift in **both directions** — a component on disk the spec never mentions, and a spec row whose `status` is `generated`/`validated` with nothing on disk (the latter parses the Behavior inventory table's `status` column, so an interrupted generation or a component that quietly vanished shows up too, not only the reverse) — user-scope conflict candidates (a user-level `~/.claude/CLAUDE.md` or a same-named user skill that could shadow the project's), hygiene signals (dead links, duplicate agent names, non-executable hook scripts, and the lint error/warning counts — it calls `validate_harness.py` internally for these), and a suggested mode. `--json` emits the same data as a nested object.
 
 The suggested mode is one of `new`, `extend`, `improve`, or `sync`, chosen from what the audit finds — but the audit says outright that it cannot distinguish `extend` from `improve` on its own, so the skill confirms that choice with you.
 

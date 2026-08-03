@@ -11,8 +11,18 @@
 | `hooks-events.md` | 30개 이벤트 전수 테이블(1차 소스의 이벤트 목록 전부가 기준): 발화 시점 / matcher / 주요 입력 / 결정 채널 / 대표 용도 / 버전 주의. 대표 8개 이벤트는 입출력 JSON 예시 포함 | ~300줄 (테이블 위주) | 위와 동일 |
 | `agents.md` | 03 문서 §5: 에이전트 자격 심사(개수=비용), 본문=시스템 프롬프트 전체 교체, frontmatter 실무 표, Explore/Plan의 CLAUDE.md 미로드와 3가지 보완, skills 프리로드 비용, 좋은 에이전트 정의 예시 1개 | ~120줄 | `.tmp/docs_claude/02-build-with-claude-code/01-agents-and-parallel-work/01-create-custom-subagents.md`; research/research-dynamic-workflows.md §3 |
 | `workflows.md` | 03 문서 §6: 사전 정의 vs 즉석 판단 기준(D12), 얇은 워크플로우 원칙, 파일 형식·결정론 제약, acceptEdits·allowlist 함정, 가용성 게이트와 폴백 서술법, fan-out→verify→synthesize 기본형, 얇은 워크플로우 예시 1개(주석 포함) | ~150줄 | `.tmp/docs_claude/02-build-with-claude-code/01-agents-and-parallel-work/04-dynamic-workflows.md`; research/research-dynamic-workflows.md |
-| `interview.md` | 02 문서 §4·5: 단계별 목적·질문 소재·게이트, AskUserQuestion 제약과 운영 규칙, 숙련도 캘리브레이션, 발산은 대화·수렴은 선택지 원칙, 재진입 모드별 변형, harness-spec.md 전체 템플릿 | ~200줄 | 02-skill-design.md(이 계획), revfactory의 Phase 0·proficiency 아이디어(research/research-harness-revfactory.md) |
+| `interview.md` | 02 문서 §4·5: 단계별 목적·질문 소재·게이트, AskUserQuestion 제약과 운영 규칙, 숙련도 캘리브레이션, 발산은 대화·수렴은 선택지 원칙, harness-spec.md 전체 템플릿 | ~200줄 | 02-skill-design.md(이 계획), revfactory의 Phase 0·proficiency 아이디어(research/research-harness-revfactory.md) |
+| `re-entry.md` *(v2 신규, WS8)* | 재진입 세 모드(확장/개선/동기화)의 전체 절차. 확장·개선이 `interview.md`의 어느 단계를 어떻게 재진입하는지, 동기화의 전체 drift 해소 절차(양방향 drift, status 값별 의미 표 — `declined`/`retired` 포함, "스펙을 고칠지 파일을 고칠지"부터 물어야 하는 이유, sync가 볼 수 없는 것 두 가지). `interview.md`가 모든 호출에서 무조건 로드되던 걸 분기시키기 위해 신설(D22) — sync 모드는 이 파일만 읽고 `interview.md`는 전혀 열지 않는다. **실측 920단어.** | — | `docs/plan/v2/00-overview.md` D22, D6 v2 개정; `research/mechanics-2026-08.md`(양방향 drift 근거) |
 | `e2e-testing.md` | 04 문서 §5: 2층 검증 구조, run_e2e 사용법, 즉석 워크플로우 골격 예시, 단언 유형 표, 채점 agent 프롬프트 골격(증거 인용·표면 준수 FAIL), 피드백 라우팅 테이블, 폴백 경로, headless 권한 처리 실측 결과(V3 해소 후 기록), CLAUDECODE 제거·stream-json 파싱 등 headless 기법, **인터뷰 자체는 e2e 불가 고지**(AskUserQuestion은 headless/서브에이전트 불가 — R6, 도그푸딩=수동 검증), description 자동 튜닝(train/test 홀드아웃)은 v1 범위 밖이며 필요 시 재도입 가능하다는 한 줄 언급 | ~200줄 | `.tmp/skill-creator/scripts/run_eval.py`(기법 지식), `.tmp/skill-creator/agents/grader.md`(채점 독트린); research/research-skill-creator.md §3 (skill-creator 스냅샷 부재 시 이 요약이 대체 소스) |
+
+> **v2 개정(D22, WS8)**: `interview.md`는 이제 재진입 세 모드의 변형 절차를 담지 않는다 —
+> 그 내용은 위 `re-entry.md`로 옮겨졌다. Phase 0은 이제 `new`일 때만 `interview.md`를
+> 로드하고, `extend`/`improve`는 `re-entry.md`를 먼저 읽고 필요한 단계만 `interview.md`로
+> 넘어가며, `sync`는 `re-entry.md`만 읽고 `interview.md`는 전혀 열지 않는다. 이 표는 이제
+> 9개 reference 파일을 나열한다(v1 계획 당시 8개). 실측 분량은 `docs/plan/v2/00-overview.md`
+> §4 표를 참고 — 위 "목표 분량"은 v1 계획 당시의 밀도 어림값으로 남겨두고, v2는 실측치를
+> 그 문서에 별도로 기록한다(총량은 게이트가 아니라는 D26 때문에 이 표를 실측치로 덮어쓰지
+> 않는다).
 
 ## 승계 지도 (.tmp/skill-creator → harness-creator)
 

@@ -189,14 +189,76 @@ Wave 5 (j) WS7 ─── L4-WS7 + L5
 L4의 시나리오별 체크리스트 결과를 아래에 남긴다. **실패한 항목도 그대로 기록한다** —
 `e2e-testing.md:136-138`의 re-run discipline과 같은 이유로, 다음 사람이 현재 상태가 아니라 이력을 봐야 한다.
 
-```markdown
-## L4 실행 결과 (YYYY-MM-DD)
+## L4 실행 결과 (2026-08-03)
 
-| 시나리오 | gotcha | before | after | 판정 |
-|---|---|---|---|---|
-| A1 | hook+deny 쌍 (hooks.md:15) | | | |
-| A1 | exit 2만 블로킹 (:66) | | | |
-| ... | | | | |
+D25 범위: **A1·A2는 before/after A/B, A3·A4는 after-only 체크리스트.** 헤드리스 `claude -p
+--dangerously-skip-permissions`로 실행. 스킬이 심링크 하나로 등록되므로 before 런 동안
+`~/.claude/skills/harness-creator`를 baseline 워크트리로 재지정했다가 되돌리는 **직렬** 절차.
+채점은 시나리오별 sonnet 에이전트가 생성 파일을 읽고 gotcha별로 증거 인용.
 
-WS4 test_hook.py 준수율: before N/5, after N/5
-```
+### A1 — "`db/migrations/`를 절대 못 건드리게"
+
+| gotcha | before | after | 판정 |
+|---|:---:|:---:|---|
+| hook + `permissions.deny` 쌍 | ✓ | ✓ | 중립 |
+| exit 2만 블로킹 | ✓ | ✓ | 중립 |
+| `Edit(...)` 사용, `Write(...)` 아님 | ✓ | ✓ | 중립 |
+| matcher에 `Bash` 포함 | ✓ | ✓ | 중립 |
+| **workspace trust 경고** | ✗ | ✓ | **개선** |
+| 보호 경로 사전승인 시도 없음 | ✓ | ✓ | 중립 |
+
+before는 "allow만 trust-gated, deny는 무관"이라고 적었다 — 맞지만 **훅 자체가 gated라는 절반이
+빠져 있어서**, Bash 우회를 막는 실제 메커니즘이 신뢰 전 fresh clone에서 안 돈다는 사실이 누락됐다.
+after는 그걸 "Known limits"에 명시한다. WS5-1이 실제로 도달했다는 증거.
+
+### A2 — "코드 리뷰 전용 에이전트, 파일 수정 금지"
+
+4개 항목 전부 **before ✓ / after ✓ (중립)**. 회귀 없음.
+단 `memory:` 항목은 **약한 검사**였다 — 부재도 "올바른 처리"로 세므로, before가 통과한 것이
+새 gotcha가 도달했다는 증거는 아니다. 정직하게 기록한다.
+
+### A3 — 모노레포 (after-only)
+
+**1차 실행은 픽스처 결함으로 무효.** 프롬프트는 `packages/api/`를 말했는데 픽스처에 `packages/`가
+없었고, 스킬은 지어내는 대신 **사실을 되물었다**(설계된 동작). 컴포넌트가 0개라 4항목 전부 GAP으로
+찍혔지만 이건 스킬 문제가 아니다. 실제 모노레포 픽스처로 재실행한 결과:
+
+| gotcha | after |
+|---|:---:|
+| rule에 `paths:` 스코프 | ✓ |
+| **중첩 CLAUDE.md·`paths:` rule의 compaction 취약성 인지** | ✓ |
+| catch-all glob 없음 | ✓ |
+| 서브디렉터리 CLAUDE.md vs `rules/` 의도적 선택 | ✓ |
+
+생성된 spec의 Design rationale이 WS3의 compaction 생존 매트릭스를 사실상 그대로 재현했다 —
+"`paths:` 스코프 규칙은 컴팩션 후 재주입되지 않는다 … 절대 사라지면 안 된다면 루트 CLAUDE.md로
+올려야 하고, 그 대가로 웹 세션도 매 요청 비용을 낸다." 트레이드오프까지 포함해서. 또
+`permissions.allow`를 **`declined` 상태로 기록**하며 WS7의 근거("allow는 사용자가 가진 체크포인트를
+제거하고 팀 전체에 배포된다")를 인용했다 — WS3·WS7 신규 항목의 도달 증거.
+
+### A4 — 릴리스 워크플로우 (after-only)
+
+| gotcha | after |
+|---|:---:|
+| pure-literal `meta` | ✓ |
+| `Date.now()`/`Math.random()` 없음 | ✓ |
+| **워크플로우 에이전트가 `acceptEdits`로 돈다는 인지** | ✗ |
+| 워크플로우 불가 시 폴백 문서화 | ✓ |
+
+유일하게 남은 GAP. `workflows.md:36`에 산문은 있으나 생성물에 반영되지 않았다. 회귀가 아니라
+**기존 미달**이므로 되돌릴 것이 없다. v3 후보로 기록.
+
+### 판정
+
+**회귀 0건** (before ✓ / after ✗ 인 항목 없음) → 수용 기준 9 충족. 개선 1건 확인, 신규 항목 도달
+증거 2건(A1 trust, A3 compaction·declined).
+
+**WS4 `test_hook.py` 준수율 (D25).** 훅을 생성한 런에서 배포 메시지 전 `test_hook.py` 호출:
+before 1/1, after 1/1 (A1). A3b-after도 훅 생성 후 호출. D23의 강조 문구 삭제가 준수율을 떨어뜨린
+징후는 없다 — 다만 표본이 계획의 N≥5보다 작으므로 **결론이 아니라 신호**로 읽어야 한다.
+
+### 부수 확인
+
+`e2e-testing.md`가 "unverified best guess"로 표시한 헤드리스 인증 전파는 **이 세션에서 실제로
+동작했다** — Bash로 띄운 `claude -p`가 정상 인증되어 완주했다. 다만 이건 이 머신의 한 사례이므로
+파일의 정직한 한계 서술은 그대로 둔다.
