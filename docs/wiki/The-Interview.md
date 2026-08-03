@@ -10,7 +10,7 @@ The consequence for you is simple. You are never surprised by what gets built, b
 
 ## The five stages
 
-A fresh build walks through five stages. They cover everything a spec needs filled in — think of them as a map of the territory, not a script read top to bottom.
+A fresh build walks through five stages. They cover everything a spec needs filled in — think of them as a map of the territory, not a script read top to bottom. This page describes the `new` path — Phase 0's audit found nothing, so `references/interview.md` loads directly and runs the full five stages below. If Phase 0 instead found an existing harness, the skill loads `references/re-entry.md` first: for `extend` and `improve` it sends you back into these same five stages for just the ones that need re-running, and for `sync` it never opens `interview.md` at all — sync's whole job is walking a drift list, not asking I1–I5. See [Re-entry Modes](Re-entry-Modes.md) for that branch.
 
 | Stage | Name | What it establishes |
 |-------|------|---------------------|
@@ -81,7 +81,7 @@ Every stage feeds one file, `.claude/harness-spec.md`, built up with you across 
 | **Validation** | The end-to-end scenario list and the result of the most recent run. |
 | **Change history** | Date, mode, and a summary of what changed, appended every time the harness is touched. |
 
-Each inventory row carries a **status** that advances in one direction: `proposed` (surfaced during I2) → `approved` (survived its stage gate) → `generated` (a file now exists for it) → `validated` (it passed the checks). That status trail is what makes the spec auditable: on a later run, `audit_harness.py` reads this file and compares it against what's actually on disk, so a row stuck at `approved` with no file, or a file with no row, is caught rather than silently ignored.
+Each inventory row carries a **status**: `proposed` (surfaced during I2) → `approved` (survived its stage gate) → `generated` (a file now exists for it) → `validated` (it passed the checks) is the main forward path, and a row can also land on `declined` (considered and deliberately not built — the row stays as the record of that decision) or `retired` (it existed and was deliberately removed later). That status trail is what makes the spec auditable: on a later run, `audit_harness.py` reads this file and compares it against what's actually on disk, so a row stuck at `approved` with no file, or a file with no row, is caught rather than silently ignored. `proposed`, `approved`, `declined`, and `retired` never claim a file exists, so none of them count as drift on their own — only `generated`/`validated` rows with nothing on disk do. See [Re-entry Modes](Re-entry-Modes.md) for how `sync` mode reads this column.
 
 This is why the spec is the persisted single source of truth. Because harness-creator keeps it in sync with the files on every pass, a future run — extending, improving, or reconciling the harness — starts from an accurate record instead of guessing at your setup. See **[Re-entry Modes](Re-entry-Modes.md)** for how those later runs use it.
 

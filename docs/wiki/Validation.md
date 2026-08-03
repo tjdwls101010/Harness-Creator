@@ -24,15 +24,21 @@ Findings are split into errors (`E`) that must be fixed and warnings (`W`) that 
 | Component | Representative checks |
 |---|---|
 | `settings.json` (+ `.local`) hooks | E: bad JSON, unknown event name, `matcher` on an event that fires unconditionally, missing/unknown handler type, a `command` pointing at a script that doesn't exist or isn't executable. W: matcher with regex characters but no `^…$` anchor, an `if` field on an event that carries no tool input, two `updatedInput` hooks on the same tool |
-| permissions | E: rule references an unknown tool name (checked against the canonical tool list). W: a broad `allow` like `Bash(*)` that auto mode silently drops |
+| permissions | E: rule references an unknown tool name (checked against the canonical tool list). W: a broad `allow` like `Bash(*)` that auto mode silently drops, or a project-scope `deny` whose prefix wildcard already covers a same-tool `allow` rule the harness ships (deny wins first regardless of specificity, so the allow rule is dead weight) |
 | skills | E: directory with no `SKILL.md`, frontmatter that won't parse (auto-triggering is silently dead), a dead relative link, a referenced `scripts/`/`references/` file that's missing. W: no `description`, `description`+`when_to_use` over 1536 chars, body over 500 lines, combined description budget over ~1% of the context window |
 | agents | E: missing `name`/`description`, duplicate `name` in one scope, unknown tool in `tools`. W: unrecognized `model` value |
 | workflows | E: no `export const meta` with a `name`, or a `Date.now()`/`Math.random()`/arg-less `new Date()` call (breaks resume determinism). W (or E if node finds a real syntax error): ESM syntax checked with `node --input-type=module --check`, skipped if node is unavailable |
-| rules | E: `paths:` glob with unbalanced braces. W: no `paths:` frontmatter (the rule loads at launch, same as if it weren't split out) |
-| CLAUDE.md | E: an `@import` whose target is missing. W: over 200 lines, or a bare-name bullet list that looks like a component inventory (lines with trigger phrasing like "use X when Y" are exempt) |
+| rules | E: `paths:` glob with unbalanced braces. W: no `paths:` frontmatter (the rule loads at launch, same as if it weren't split out), or a `paths:` glob like `**`/`*` that matches everything and so scopes nothing (it still loads lazily rather than at launch, just unpredictably) |
+| CLAUDE.md | E: an `@import` whose target is missing. W: over 200 lines, a bare-name bullet list that looks like a component inventory (lines with trigger phrasing like "use X when Y" are exempt), or a sentence of generic engineering advice a capable model already follows ("write clean code", "follow best practices," and similar) that costs context every session without changing behavior. Checked at every CLAUDE.md the harness has — `./CLAUDE.md`, `./.claude/CLAUDE.md`, and `./CLAUDE.local.md` — not just the root file |
 | harness-spec.md | W: missing when components exist on disk, or a component on disk the spec never mentions (drift) |
 
+Rule and agent discovery walks the tree recursively (an explicit visited-set walk, not `rglob` — Python's symlink-recursion behavior differs across 3.12/3.13 and Claude Code does follow a symlinked rules directory), so a nested `.claude/rules/**/*.md` or `.claude/agents/**/*.md` layout is checked exactly like a flat one.
+
 Exit codes are consistent across all four [scripts](Scripts.md): `0` = no errors, `1` = at least one error (or, under `--strict`, at least one warning), `2` = the script itself couldn't run. `--strict` promotes warnings to failures for CI; `--json` emits machine-readable output for a grading agent or a pipeline.
+
+### The always-loaded budget report
+
+Every run — clean or not, `--json` or not — also prints an unconditional report of what actually enters context before the first prompt: every `CLAUDE.md` the harness has, plus every `.claude/rules/*.md` file with no `paths:` frontmatter, plus anything an `@import` pulls in. It's a measurement, not a pass/fail gate on its own — the number is what a harness author needs to see and usually doesn't have, since nothing else in the workflow totals it up. If the total crosses a line-count guideline, that shows up as one more `W` finding alongside everything else, with the same monorepo exception the per-file CLAUDE.md check gets (a repo that still overflows after path-scoping what it can pays the cost of its own layout, not a defect). The report explicitly lists what it does *not* count — user-scope `~/.claude/CLAUDE.md` and `~/.claude/rules/`, ancestor-directory `CLAUDE.md` files above the repo, auto memory's `MEMORY.md`, and managed-policy CLAUDE.md — because those are real costs too, just not ones a project-scope lint can see.
 
 ## Free middle tier: hook unit-testing
 

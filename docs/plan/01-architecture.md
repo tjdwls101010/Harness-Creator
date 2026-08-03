@@ -96,15 +96,16 @@ ln -s /Users/seongjin/Documents/Coding/harness-creator/.claude/skills/harness-cr
 
 ```
 .claude/skills/harness-creator/
-├── SKILL.md                     # 오케스트레이터: 철학·라우팅·운영 플로우 (< 500줄, 목표 ~350줄)
+├── SKILL.md                     # 오케스트레이터: 철학·라우팅·운영 플로우 (v2: 줄 수가 아니라 단어 수로 게이팅 — §아래)
 ├── references/
-│   ├── claude-md-and-rules.md   # CLAUDE.md + rules 작성 가이드 (생성 시점 로드)
+│   ├── claude-md-and-rules.md   # CLAUDE.md + rules + 스코프 축/auto memory (생성 시점 로드)
 │   ├── skills.md                # 스킬 작성 가이드 (생성 시점 로드)
-│   ├── hooks.md                 # hooks 설계 가이드 + gotchas (생성 시점 로드)
+│   ├── hooks.md                 # hooks 설계 가이드 + permissions + 보호 경로 (생성 시점 로드)
 │   ├── hooks-events.md          # 30개 이벤트 × I/O 계약 밀도 테이블 (hook 세부 설계 시 로드)
 │   ├── agents.md                # 서브에이전트 작성 가이드 (생성 시점 로드)
 │   ├── workflows.md             # dynamic workflow 작성·활용 가이드 (생성 시점 로드)
-│   ├── interview.md             # 인터뷰 프로토콜 상세 + 스펙 문서 템플릿 (인터뷰 시작 시 로드)
+│   ├── interview.md             # 5단계 인터뷰 + 스펙 템플릿 (v2: new/extend/improve 경로에서만 로드)
+│   ├── re-entry.md              # v2 신규 — extend/improve/sync 3모드 + sync 절차 (재진입 경로에서만 로드)
 │   └── e2e-testing.md           # e2e 검증 설계 + headless claude -p 기법 (검증 단계 로드)
 └── scripts/
     ├── validate_harness.py      # 결정론적 린트 (04 문서)
@@ -116,6 +117,13 @@ ln -s /Users/seongjin/Documents/Coding/harness-creator/.claude/skills/harness-cr
 ### 분할 근거 (progressive disclosure — 로드 시점 기준)
 
 - SKILL.md: 모든 경로에서 필요한 것만 — 철학, 레이어 라우팅 프레임워크, 운영 플로우(감사→인터뷰→생성→검증→반복), 스크립트 사용법 요약. 컴포넌트별 세부는 담지 않는다.
+
+> **v2 개정.** 줄 수 목표("< 500줄, 목표 ~350줄")는 **단어 수 게이트로 대체**됐다. 실제 제약은 길이가
+> 아니라 auto-compaction이 스킬 본문 앞 **5,000토큰**만 재부착한다는 절벽이고, 그 너머는 저하가 아니라
+> 조용한 소실이다. 그래서 D21(SKILL.md < 3,750단어)과 D22(always-loaded < 2,500단어)가 실효 기준이며,
+> 후자가 대표 지표다. 그리고 `interview.md`의 무조건 로드를 끊은 것(WS8)이 always-loaded를
+> 4,833 → 2,411단어로 만든 실제 레버다 — 그 전까지 SKILL.md/interview.md 사이의 분할은
+> **아무것도 사지 못했다.** 상세는 `docs/plan/v2/00-overview.md` §4.
 - references/는 **"어떤 컴포넌트를 생성하는가"라는 분기**에 대응한다. CLAUDE.md만 만드는 세션이
   hooks 이벤트 테이블을 로드할 이유가 없다 — 로드 시점이 명확히 다르므로 분할이 정당하다.
 - `hooks.md` vs `hooks-events.md` 분할: 설계 원칙·gotcha(항상 필요)와 30개 이벤트 전수

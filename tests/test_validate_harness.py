@@ -166,6 +166,285 @@ class FrontmatterParserTests(unittest.TestCase):
         self.assertFalse(fm.ok)
 
 
+class AtImportParsingTests(unittest.TestCase):
+    """B1. The old regex required a dot-extension and only guarded against
+    backticks, so it read `ops@acme.com` and `react@18.2.0` as imports and
+    raised an E for each -- which made Hard line 2 unsatisfiable for any
+    CLAUDE.md that named a maintainer or pinned a version. It also missed the
+    documented extensionless `@README` form and matched inside fenced blocks."""
+
+    def _parse(self, text):
+        return list(vh.hc.parse_at_imports(text))
+
+    def test_email_address_is_not_an_import(self):
+        self.assertEqual(self._parse("contact ops@acme.com"), [])
+
+    def test_pinned_version_is_not_an_import(self):
+        self.assertEqual(self._parse("stay on react@18.2.0"), [])
+
+    def test_extensionless_target_is_an_import(self):
+        self.assertEqual(
+            self._parse("See @README for project overview and @package.json too."),
+            ["README", "package.json"],
+        )
+
+    def test_backticked_target_is_literal(self):
+        self.assertEqual(self._parse("see `@docs/x.md` literally"), [])
+
+    def test_fenced_block_is_skipped(self):
+        text = "before @docs/real.md\n```\n@docs/nope.md\n```\nafter @docs/two.md\n"
+        self.assertEqual(self._parse(text), ["docs/real.md", "docs/two.md"])
+
+    def test_tilde_fence_is_skipped(self):
+        self.assertEqual(self._parse("~~~\n@docs/nope.md\n~~~\n"), [])
+
+    def test_trailing_sentence_punctuation_is_stripped(self):
+        self.assertEqual(self._parse("read @docs/foo.md."), ["docs/foo.md"])
+        self.assertEqual(self._parse("read (@docs/bar.md) now"), ["docs/bar.md"])
+
+    def test_home_import_is_external_and_not_root_relative(self):
+        path, external = vh.hc.resolve_import(
+            "~/.claude/notes.md", REPO_ROOT / "CLAUDE.md"
+        )
+        self.assertTrue(external)
+        self.assertNotIn("~", str(path))
+
+    def test_relative_import_resolves_against_the_containing_file(self):
+        path, external = vh.hc.resolve_import(
+            "notes.md", REPO_ROOT / ".claude" / "CLAUDE.md"
+        )
+        self.assertFalse(external)
+        self.assertEqual(path, REPO_ROOT / ".claude" / "notes.md")
+
+
+class GoodHarnessImportTests(unittest.TestCase):
+    """The good-harness fixture carries all four traps in one file. It must
+    exit 0 and resolve exactly one real import."""
+
+    def setUp(self):
+        self.claude_md = (
+            REPO_ROOT / "tests" / "fixtures" / "good-harness" / "CLAUDE.md"
+        )
+        self.text = self.claude_md.read_text(encoding="utf-8")
+
+    def test_fixture_still_contains_every_trap(self):
+        for trap in ("ops@acme.com", "react@18.2.0", "@docs/nope.md", "@README.md"):
+            self.assertIn(trap, self.text, trap)
+
+    def test_exactly_one_import_target(self):
+        self.assertEqual(list(vh.hc.parse_at_imports(self.text)), ["README.md"])
+
+
+class DiscoveryPathTests(unittest.TestCase):
+    """B3. Both scripts hardcoded ./CLAUDE.md, and rules/agents globs were
+    non-recursive -- so a project using .claude/CLAUDE.md inventoried as
+    having no instructions at all, and a nested rule that loads at launch was
+    invisible to the linter, the inventory, and the drift check."""
+
+    def setUp(self):
+        self.root = REPO_ROOT / "tests" / "fixtures" / "harness-in-dot-claude"
+
+    def test_dot_claude_location_is_discovered(self):
+        names = [p.name for p in vh.hc.claude_md_paths(self.root)]
+        self.assertIn("CLAUDE.md", names)
+        self.assertTrue(
+            any(p.parent.name == ".claude" for p in vh.hc.claude_md_paths(self.root))
+        )
+
+    def test_nested_rule_is_discovered(self):
+        rels = [str(p.relative_to(self.root)) for p in vh.hc.iter_rule_files(self.root)]
+        self.assertIn(".claude/rules/frontend/style.md", rels)
+
+    def test_nested_agent_is_discovered(self):
+        rels = [str(p.relative_to(self.root)) for p in vh.hc.iter_agent_files(self.root)]
+        self.assertIn(".claude/agents/sub/reviewer.md", rels)
+
+    def test_walk_terminates_on_a_symlink_cycle(self):
+        import tempfile, shutil, os
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            (tmp / "a").mkdir()
+            (tmp / "a" / "note.md").write_text("x", encoding="utf-8")
+            try:
+                os.symlink(tmp, tmp / "a" / "loop")
+            except (OSError, NotImplementedError):
+                self.skipTest("symlinks unavailable")
+            found = [p.name for p in vh.hc.walk_markdown(tmp)]
+            self.assertIn("note.md", found)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+class AlwaysLoadedReportTests(unittest.TestCase):
+    """The measurement a harness author needs and almost never has. Printed
+    unconditionally, so it must be right on a correct harness too."""
+
+    def test_counts_claude_md_and_unscoped_rules_only(self):
+        root = REPO_ROOT / "tests" / "fixtures" / "harness-in-dot-claude"
+        report = vh.always_loaded_report(root)
+        paths = {e["path"] for e in report["entries"]}
+        self.assertIn(".claude/CLAUDE.md", paths)
+        self.assertIn(".claude/rules/frontend/style.md", paths)
+        # A path-scoped rule loads on a matching read, not at launch.
+        self.assertNotIn(".claude/rules/scoped.md", paths)
+
+    def test_expands_imports(self):
+        root = REPO_ROOT / "tests" / "fixtures" / "good-harness"
+        report = vh.always_loaded_report(root)
+        entry = next(e for e in report["entries"] if e["path"] == "README.md")
+        self.assertIn("import", entry["note"])
+
+    def test_names_what_it_cannot_count(self):
+        report = vh.always_loaded_report(REPO_ROOT / "tests" / "fixtures" / "good-harness")
+        joined = " ".join(report["uncounted"]).lower()
+        for surface in ("user scope", "ancestor", "auto memory"):
+            self.assertIn(surface, joined)
+
+    def test_totals_match_the_entries(self):
+        report = vh.always_loaded_report(REPO_ROOT / "tests" / "fixtures" / "good-harness")
+        self.assertEqual(report["total_lines"], sum(e["lines"] for e in report["entries"]))
+
+
+class HeuristicFalsePositiveTests(unittest.TestCase):
+    """A check that fires on a correct harness is worse than no check, so
+    every heuristic gets its must-not-fire case first."""
+
+    def _advice(self, text):
+        findings = []
+        vh._check_generic_advice("CLAUDE.md", text, findings)
+        return findings
+
+    def test_generic_advice_fires_on_generic_advice(self):
+        self.assertTrue(self._advice("Write clean code. Handle errors properly.\n"))
+        self.assertTrue(self._advice("- Follow best practices\n"))
+
+    def test_generic_advice_silent_on_project_specific_lines(self):
+        for line in (
+            "Be consistent with the existing handler naming (`handleFooRequest`).",
+            "Handle errors properly by returning a `Result`, never by throwing across FFI.",
+            "Write clean code in `src/legacy/` only after checking the migration guide.",
+        ):
+            self.assertEqual(self._advice(line), [], line)
+
+    def _deny_allow(self, permissions):
+        findings = []
+        vh._check_deny_subsumes_allow("settings.json", permissions, findings)
+        return findings
+
+    def test_deny_subsumes_allow_fires(self):
+        self.assertTrue(
+            self._deny_allow({"deny": ["Bash(aws *)"], "allow": ["Bash(aws s3 ls)"]})
+        )
+
+    def test_deny_subsumes_allow_silent_on_disjoint_rules(self):
+        self.assertEqual(
+            self._deny_allow({"deny": ["Bash(rm *)"], "allow": ["Bash(npm test)"]}), []
+        )
+        # An allow identical to the deny is a different (already-reported) problem.
+        self.assertEqual(
+            self._deny_allow({"deny": ["Bash(aws *)"], "allow": ["Bash(aws *)"]}), []
+        )
+
+    def _glob(self, pattern):
+        findings = []
+        vh._check_catch_all_glob("rule.md", pattern, findings)
+        return findings
+
+    def test_catch_all_glob_fires(self):
+        for pattern in ("**", "**/*", "*"):
+            self.assertTrue(self._glob(pattern), pattern)
+
+    def test_catch_all_glob_silent_on_a_real_scope(self):
+        for pattern in ("src/**/*.ts", "docs/*.md", "src/api/**"):
+            self.assertEqual(self._glob(pattern), [], pattern)
+
+    def test_catch_all_message_does_not_claim_launch_loading(self):
+        # The obvious phrasing is wrong: a catch-all glob loads on the first
+        # matching read, not at launch. Shipping the wrong reason repeats B5.
+        message = self._glob("**")[0][2]
+        self.assertIn("first matching file read", message)
+
+
+class SpecMentionConventionTests(unittest.TestCase):
+    """B9. The lint required a backticked repo-relative path before a
+    component counted as 'mentioned', while the audit accepted a bare stem --
+    so the same repo could get opposite verdicts, and a spec written with bare
+    names drew a false 'isn't mentioned in the spec' on a correct harness."""
+
+    def setUp(self):
+        self.root = REPO_ROOT / "tests" / "fixtures" / "spec-bare-name-skill"
+        self.findings, _ = vh.run(self.root, strict=False)
+        self.messages = [f[2] for f in self.findings]
+
+    def test_bare_name_is_not_reported_as_missing(self):
+        for message in self.messages:
+            self.assertNotIn("isn't mentioned in the spec", message)
+
+    def test_bare_name_draws_a_convention_nudge_instead(self):
+        self.assertTrue(any("bare name" in m for m in self.messages), self.messages)
+
+    def test_both_scripts_agree_the_component_is_accounted_for(self):
+        import audit_harness as ah
+        drift = ah.check_spec_drift(self.root, ah.run(self.root)["inventory"])
+        self.assertEqual(drift["in_spec_not_on_disk"], [])
+        self.assertEqual(drift["on_disk_not_in_spec"], [])
+
+    def test_a_genuinely_absent_component_is_still_reported(self):
+        findings = []
+        vh.check_harness_spec(REPO_ROOT / "tests" / "fixtures" / "good-harness", findings)
+        # good-harness's spec names every component, so nothing should be
+        # reported as missing there either -- the control for this check.
+        self.assertEqual(
+            [f for f in findings if "isn't mentioned in the spec" in f[2]], []
+        )
+
+
+class WorkflowSyntaxProbeTests(unittest.TestCase):
+    """B12, found while trimming the examples in WS6. The node syntax gate
+    checked the workflow file as a bare module, so a top-level `return` --
+    which the workflow runtime supports, and which BOTH of this skill's own
+    reference examples use -- was reported as an E. That made Hard line 2
+    unsatisfiable for a correct workflow, the same shape of bug as B1."""
+
+    def _check(self, source):
+        import shutil, subprocess
+        if not shutil.which("node"):
+            self.skipTest("node unavailable")
+        return subprocess.run(
+            ["node", "--input-type=module", "--check"],
+            input=vh._workflow_syntax_probe(source),
+            capture_output=True, text=True, timeout=10,
+        ).returncode
+
+    def test_top_level_return_is_valid(self):
+        source = (
+            "export const meta = { name: 'x', description: 'y' }\n"
+            "const r = await agent('go', { schema: {} })\n"
+            "if (!r) return { ok: false }\n"
+            "return { ok: true }\n"
+        )
+        self.assertEqual(self._check(source), 0)
+
+    def test_top_level_await_is_valid(self):
+        self.assertEqual(
+            self._check("export const meta = { name: 'x' }\nconst a = await agent('go')\n"), 0
+        )
+
+    def test_a_real_syntax_error_is_still_caught(self):
+        self.assertNotEqual(
+            self._check("export const meta = { name: 'x' }\nconst r = await agent('go'\n"), 0
+        )
+
+    def test_shipped_examples_pass_the_gate(self):
+        """The examples in references/ must survive the linter that this skill
+        tells the model to run. They didn't."""
+        import re as _re
+        for name in ("workflows.md", "e2e-testing.md"):
+            text = (SCRIPTS_DIR.parent / "references" / name).read_text(encoding="utf-8")
+            for i, block in enumerate(_re.findall(r"```javascript\n(.*?)```", text, _re.S)):
+                self.assertEqual(self._check(block), 0, f"{name} block {i}")
+
+
 class MatcherHelperTests(unittest.TestCase):
     def test_exact_matchers(self):
         for m in ("Bash", "Edit|Write", "code-reviewer", "a,b,c"):

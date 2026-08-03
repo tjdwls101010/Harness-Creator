@@ -36,11 +36,12 @@ None of these are guessable. You learn them by being burned. A harness built wit
 
 ## The core judgment: layer routing
 
-Every requirement you have maps to exactly one layer, and picking the wrong layer is the most common way a harness underperforms. harness-creator makes the choice with three questions:
+Every requirement you have maps to exactly one layer, and picking the wrong layer is the most common way a harness underperforms. harness-creator makes the choice with four questions:
 
 1. **Enforced or advisory?** Is it fine if Claude *usually* gets this right, or must it *never* fail? Advisory things go in prose (`CLAUDE.md`, rules, skills). Things that must never fail go in code (hooks + permissions), because prose has no enforcement power — a model can and occasionally will deviate from it.
 2. **When does it need to load?** Every session → `CLAUDE.md`. Only in one part of the tree → a rule. Only when a specific job comes up → a skill. Only on a lifecycle event → a hook.
-3. **What does it cost?** `CLAUDE.md` is paid on every request. A skill's description competes in a shared budget. A hook costs nothing until it produces output. An agent costs a routing decision every time it merely exists as an option.
+3. **Who needs it, and who writes it?** Every clone of the repo, or only one developer's machine? A fact only this developer needs — not something the whole team should pay to load — routes to `CLAUDE.local.md` (gitignored, deterministic), not the shared `CLAUDE.md`. This is also why auto-generated memory (`MEMORY.md`) isn't a routing destination for anything the harness *needs* to be true: it's advisory and non-deterministic, so a fact the developer must reliably have belongs in `CLAUDE.local.md`, not left to whether auto memory decided to keep it.
+4. **What does it cost?** The always-loaded bill is `CLAUDE.md` plus every rule without a `paths:` scope plus every expanded `@import` plus auto memory's own budget — all paid on every request. A skill's description competes in a shared budget. A hook costs nothing until it produces output. An agent costs a routing decision every time it merely exists as an option.
 
 A single requirement often splits across layers. "Always run tests before committing" becomes a **hook** (the guarantee) *plus* a one-line `CLAUDE.md` note explaining why that hook exists (so a block doesn't read as a mysterious failure). The full framework, with a routing table, is in **[The Layer-Routing Framework](Layer-Routing.md)**.
 

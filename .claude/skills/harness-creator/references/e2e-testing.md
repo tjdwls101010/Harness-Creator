@@ -36,56 +36,52 @@ export const meta = {
   description: 'Run the spec Validation scenarios as headless sessions against the generated harness and grade each transcript.',
 }
 
-// --- Phase Run: one agent per scenario, run_e2e.py does the actual spawning.
-// Judgment about *what the scenario checks* lives in the spec, not in this script;
-// the script only knows "run N scenarios, one call each."
+// Resolve this in the composing session and paste the absolute path in.
+// `${CLAUDE_SKILL_DIR}` is NOT substituted inside a workflow's prompt strings
+// (see the gotcha below) -- it would reach the subagent as literal text.
+const SKILL_DIR = '/absolute/path/to/the/harness-creator/skill'
+
+// One entry per scenario in the spec's Validation section. Each `expect` is
+// copied from the spec -- the grading agent must never invent what "correct"
+// means, and at least one scenario should be a near-miss whose expectation is
+// that nothing triggers.
 const scenarios = [
-  { id: 'V1', prompt: 'Add a new API route for deleting a user account.', isolate: true },
-  { id: 'V2', prompt: 'What testing framework does this project use?', isolate: false },
-  { id: 'V3', prompt: 'Refactor the auth module to use async/await.', isolate: false }, // near-miss: should NOT trigger the migration-safety skill
+  { id: 'V1', isolate: true,  prompt: 'Add a new API route for deleting a user account.',
+    expect: 'Should trigger the api-route-conventions skill and follow its error-handling pattern.' },
+  { id: 'V2', isolate: false, prompt: 'What testing framework does this project use?',
+    expect: 'Should answer "pytest" by reading CLAUDE.md, not by guessing or searching.' },
+  { id: 'V3', isolate: false, prompt: 'Refactor the auth module to use async/await.',
+    expect: 'Should NOT trigger the migration-safety skill -- this is a near-miss prompt.' },
 ]
 
-const runs = await pipeline(scenarios, s =>
-  agent(
-    `Run: python "\${CLAUDE_SKILL_DIR}/scripts/run_e2e.py" --project . --prompt ${JSON.stringify(s.prompt)} ` +
+const VERDICT = { type: 'object', required: ['verdict', 'evidence'], properties: {
+  verdict: { type: 'string', enum: ['pass', 'fail'] }, evidence: { type: 'string' } } }
+
+// Two stages over the same item. The second stage reads `s`, the original
+// scenario -- not the first stage's return value, which is a plain string
+// because that agent() call has no schema and so has no `.label` to read.
+const grades = await pipeline(
+  scenarios,
+  s => agent(
+    `Run: python "${SKILL_DIR}/scripts/run_e2e.py" --project . --prompt ${JSON.stringify(s.prompt)} ` +
     `--out .claude/.e2e-runs/${s.id} --json ${s.isolate ? '--isolate' : ''}. ` +
     `Report the summary.json contents back verbatim.`,
-    { label: s.id },
+    { label: `run:${s.id}` },
   ),
-)
-
-// --- Phase Grade: one grading agent per transcript, evidence-cited verdicts only.
-// The expected-behavior text per scenario comes straight from the spec's Validation
-// section — do not let the grading agent invent what "correct" means.
-const expected = {
-  V1: 'Should trigger the api-route-conventions skill and follow its error-handling pattern.',
-  V2: 'Should answer "pytest" by reading CLAUDE.md, not by guessing or searching.',
-  V3: 'Should NOT trigger the migration-safety skill (this is a near-miss prompt).',
-}
-
-const grades = await pipeline(runs, run =>
-  agent(
-    `Grade .claude/.e2e-runs/${run.label}/transcript.jsonl against this expectation: ` +
-    `"${expected[run.label]}". Cite specific tool_use events or response text as evidence. ` +
+  (_summary, s) => agent(
+    `Grade .claude/.e2e-runs/${s.id}/transcript.jsonl against this expectation: "${s.expect}". ` +
+    `Cite specific tool_use events or response text as evidence. ` +
     `Surface-level compliance without real supporting evidence is a FAIL, not a PASS.`,
-    { label: run.label, schema: { type: 'object', required: ['verdict', 'evidence'], properties: {
-      verdict: { type: 'string', enum: ['pass', 'fail'] }, evidence: { type: 'string' } } } },
-  ),
+    { label: `grade:${s.id}`, schema: VERDICT },
+  ).then(v => ({ ...v, id: s.id })),
 )
 
-// --- Phase Report: synthesize, one repair suggestion per failure.
-const failures = grades.filter(g => g.verdict === 'fail')
-if (failures.length === 0) return { summary: `All ${grades.length} scenarios passed.`, grades }
-
-const report = await agent(
-  `Write a short report: ${grades.length - failures.length}/${grades.length} scenarios passed. ` +
-  `For each failure, name the specific layer to fix (skill description, skill body, CLAUDE.md, ` +
-  `hook matcher) using this routing table: ${JSON.stringify(failures)}`,
-)
-return { summary: report, grades }
+return { passed: grades.filter(g => g.verdict === 'pass').length, total: grades.length, grades }
 ```
 
-Notice what the script never does: it never decides whether a transcript shows real trigger evidence, and it never decides what "correct behavior" means for a scenario — both of those judgments live inside the prompt strings and the spec, exactly as every other workflow in this skill keeps judgment out of control flow.
+Notice what the script never does: it never decides whether a transcript shows real trigger evidence, and it never decides what "correct behavior" means — both judgments live in the prompt strings and the spec, keeping judgment out of control flow. Route each failure to a repair target yourself using the feedback-routing table below; don't hand that table to another agent inside the workflow, since you're the one who then has to act on it.
+
+**Two failure modes in this shape are worth naming, because both are silent.** First, `${CLAUDE_SKILL_DIR}` is substituted in a skill's own markdown body and in `allowed-tools` Bash rules — **not** in a workflow's prompt strings, and not in a subagent's shell environment. Written there, it arrives as literal text and becomes either a permission stall or a `python "/scripts/run_e2e.py"` file-not-found, which reads like a permissions problem and isn't one. Resolve the absolute path in the composing session. Second, an `agent()` call **without** a `schema` returns its final text as a plain string, so reading a property off it (`run.label`, `run.id`) silently yields `undefined` and you get a path like `.e2e-runs/undefined/`. Either attach a schema, or carry the identity from the original item the way the second stage above does.
 
 ### Fallback when dynamic workflows are unavailable
 
@@ -111,6 +107,14 @@ Every scenario's expected behavior should map to one of these five checkable ass
 | CLAUDE.md knowledge reflected | Ask a project-fact question the CLAUDE.md is supposed to answer (test runner, build command, an architecture decision) and check the final response for correctness — not for the presence of the right words, for the actual right fact. |
 | Artifact quality | Inspect files the session actually created or modified, ideally in an isolated copy so a bad run never touches the real project. Read the file, don't trust the transcript's description of the file — a transcript can claim it wrote correct code while the file itself is empty or wrong. |
 
+**Two of these five want a rubric; the other three don't.** *Skill trigger*, *hook fired*, and *CLAUDE.md knowledge* are binary — an event is in the transcript or it isn't, a fact is right or wrong — so a rubric adds ceremony without adding resolution. *Behavior compliance* and *artifact quality* are the two where a grader can reasonably return "mostly," and they're also the two most prone to a lazy PASS, so for those add a `rubric:` to the spec's scenario listing the dimensions that matter and have the grader score each one:
+
+```markdown
+| V4 | Artifact quality | Generated migration has a rollback path | rubric: has-rollback; idempotent; names the table |
+```
+
+If you widen the grader's schema to return per-dimension scores rather than one verdict, **update whatever filters the results in the same edit** — the skeleton above filters on `g.verdict`, and a schema that no longer returns `verdict` makes that filter silently match nothing, so the workflow reports a clean pass over zero scenarios.
+
 ## Grading doctrine: evidence-citation required, surface compliance is a FAIL
 
 This is the single most important grading habit, because it's the difference between an e2e tier that catches real problems and one that produces reassuring-looking JSON that means nothing.
@@ -132,6 +136,13 @@ Every failure should resolve to one specific layer to edit — never "make it wo
 | Hook over-fires (blocks legitimate work) | Narrow the matcher, or downgrade the hook from a hard block to a warning if the underlying concern doesn't actually justify blocking. |
 | An agent ignores a rule that CLAUDE.md clearly states | Check first whether the agent is a built-in Explore or Plan agent — both never load CLAUDE.md at all, by design, regardless of how the rule is worded. If so, the fix is a restated delegation prompt that repeats the relevant constraint directly, or a custom agent with the rule baked into its own system prompt. |
 | The session feels slow or expensive | Check hook count and their timeouts, CLAUDE.md length, and the total skill-description budget across all installed skills — any of the three can silently inflate every single turn's cost, not just the turns that use them. |
+| A component seems to earn nothing | Raise retirement as a question, never as an action — see below. |
+
+### Retiring a component
+
+A harness only grows unless something makes it shrink, and every layer charges rent whether or not it earns it — an unfired skill's description still occupies the listing budget, a rule without `paths:` still loads at launch, an agent still costs a routing decision every time it exists as an option. So an improve pass looks for what to remove, not only what to add.
+
+**Every candidate is a question with its cost stated, never an action.** There is no invocation telemetry, so "unused" isn't observable from disk — only the user knows. And deleting something they deliberately added is worse than leaving it. Ask like this: "`changelog-helper`'s description costs listing budget every session — still earning it?" Offer `disable-model-invocation: true` before deletion; it keeps the skill under its explicit `/name` while dropping auto-triggering, which fits the usual answer. Mark the spec row `status: retired` rather than deleting it, for the same reason as `declined`.
 
 ## Re-run discipline
 

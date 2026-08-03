@@ -246,6 +246,78 @@ def load_json_lenient(path):
         return None, f"{path}: JSON parse error at line {e.lineno}: {e.msg}"
 
 
+_FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
+_INLINE_CODE_RE = re.compile(r"`+[^`\n]*`+")
+
+# An @import starts at a line start or after whitespace or an opening
+# bracket -- that boundary is the whole reason `contact ops@acme.com` and
+# `pin react@18.2.0` are not imports. The target runs to the next
+# whitespace or backtick; trailing sentence punctuation is stripped after
+# the match. There is deliberately no required dot-extension: the docs
+# state that the extensionless form `@README` imports the file.
+_AT_IMPORT_RE = re.compile(r"(?:^|(?<=[\s(\[]))@([^\s`]+)")
+
+_IMPORT_TRAILING_PUNCT = ".,;:!?)]}\"'"
+
+
+def mask_code(text):
+    """Return text with fenced code blocks and inline code spans replaced by
+    spaces, preserving length and line structure so offsets still line up.
+
+    Import parsing has to see the same thing Claude Code sees: the docs are
+    explicit that "Import parsing skips Markdown code spans and fenced code
+    blocks," which is exactly how an author writes `@README` when they mean
+    to name the file rather than import it."""
+    out = []
+    fence = None
+    for line in text.split("\n"):
+        m = _FENCE_RE.match(line)
+        if fence is None:
+            if m:
+                fence = m.group(1)[0]
+                out.append(" " * len(line))
+                continue
+        else:
+            out.append(" " * len(line))
+            if m and m.group(1)[0] == fence:
+                fence = None
+            continue
+        out.append(_INLINE_CODE_RE.sub(lambda mm: " " * len(mm.group(0)), line))
+    return "\n".join(out)
+
+
+def parse_at_imports(text):
+    """Yield each `@path` import target in text, in order, skipping code.
+
+    Returns raw target strings exactly as written -- resolution is the
+    caller's job, because relative targets resolve against the directory of
+    the file containing the import, not the working directory."""
+    seen_spans = set()
+    for m in _AT_IMPORT_RE.finditer(mask_code(text)):
+        target = m.group(1).rstrip(_IMPORT_TRAILING_PUNCT)
+        if not target or m.start() in seen_spans:
+            continue
+        seen_spans.add(m.start())
+        yield target
+
+
+def resolve_import(target, containing_file):
+    """Resolve an @import target to a Path, or None if it is not
+    project-relative.
+
+    Returns (path, is_external). A `~/...` or absolute target is external:
+    it is a legitimate and documented pattern (the docs recommend
+    `@~/.claude/my-project-instructions.md` for sharing personal notes
+    across worktrees), so its absence on this machine is not a defect."""
+    containing_dir = Path(containing_file).parent
+    if target.startswith("~"):
+        return Path(target).expanduser(), True
+    p = Path(target)
+    if p.is_absolute():
+        return p, True
+    return (containing_dir / p), False
+
+
 def iter_skill_dirs(root):
     """Yield each `.claude/skills/<name>/` directory that exists under root."""
     skills_root = Path(root) / ".claude" / "skills"
@@ -256,13 +328,59 @@ def iter_skill_dirs(root):
             yield child
 
 
-def iter_agent_files(root):
-    """Yield each `.claude/agents/*.md` file under root."""
-    agents_root = Path(root) / ".claude" / "agents"
-    if not agents_root.is_dir():
+def claude_md_paths(root):
+    """Return the project-scope instruction files that exist at the root.
+
+    A project CLAUDE.md may live at either `./CLAUDE.md` or
+    `./.claude/CLAUDE.md` -- both load, and they concatenate rather than
+    override. `CLAUDE.local.md` loads alongside CLAUDE.md, after it."""
+    root = Path(root)
+    candidates = [
+        root / "CLAUDE.md",
+        root / ".claude" / "CLAUDE.md",
+        root / "CLAUDE.local.md",
+    ]
+    return [p for p in candidates if p.is_file()]
+
+
+def walk_markdown(directory):
+    """Yield every `.md` file at or below directory, following symlinks but
+    visiting each resolved path once.
+
+    Deliberately not `rglob`: Claude Code documents and supports symlinked
+    rule directories ("circular symlinks are detected and handled
+    gracefully"), and Python's own recursive-glob symlink behavior differs
+    across the 3.12/3.13 versions this has to run on. An explicit walk with a
+    resolved-path visited set behaves the same everywhere and terminates on a
+    cycle."""
+    directory = Path(directory)
+    if not directory.is_dir():
         return
-    for child in sorted(agents_root.glob("*.md")):
-        yield child
+    visited = set()
+    stack = [directory]
+    while stack:
+        current = stack.pop()
+        try:
+            resolved = current.resolve()
+        except OSError:
+            continue
+        if resolved in visited:
+            continue
+        visited.add(resolved)
+        try:
+            children = sorted(current.iterdir())
+        except OSError:
+            continue
+        for child in children:
+            if child.is_dir():
+                stack.append(child)
+            elif child.suffix == ".md":
+                yield child
+
+
+def iter_agent_files(root):
+    """Yield each `.claude/agents/**/*.md` file under root."""
+    yield from sorted(walk_markdown(Path(root) / ".claude" / "agents"))
 
 
 def iter_workflow_files(root):
@@ -275,12 +393,13 @@ def iter_workflow_files(root):
 
 
 def iter_rule_files(root):
-    """Yield each `.claude/rules/*.md` file under root."""
-    rules_root = Path(root) / ".claude" / "rules"
-    if not rules_root.is_dir():
-        return
-    for child in sorted(rules_root.glob("*.md")):
-        yield child
+    """Yield each `.claude/rules/**/*.md` file under root.
+
+    Rules are discovered recursively, including subdirectories like
+    `frontend/`. A nested rule without `paths:` loads at launch exactly like
+    `.claude/CLAUDE.md`, so a non-recursive scan hides files that are being
+    paid for on every session."""
+    yield from sorted(walk_markdown(Path(root) / ".claude" / "rules"))
 
 
 def settings_paths(root):

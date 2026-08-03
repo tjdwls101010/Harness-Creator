@@ -33,9 +33,11 @@ Its suggestion follows a fixed decision ladder, checked top to bottom:
 |---------------|----------------|
 | No harness components found at all | `new` |
 | Components exist, but there is no `harness-spec.md` | `improve` or `sync` — treat the first pass as recovering a spec from what's on disk |
-| Components on disk that the spec never mentions | `sync` — confirm whether to update the spec or the files |
+| Components on disk that the spec never mentions, **or** a spec row at `generated`/`validated` with nothing on disk | `sync` — confirm whether to update the spec or the files |
 | `validate_harness.py` finds real errors in the existing harness | `improve` — likely a pass to fix them |
 | A spec exists, matches disk, and lints clean | `extend` or `improve` — ask the user directly |
+
+That third row covers both drift directions — a file the spec never mentions, and a spec row claiming a file that isn't there. Earlier builds of `audit_harness.py` only caught the first direction; the second (a validated component that quietly vanished, or a generation that was interrupted partway) went unreported because nothing parsed the Behavior inventory table's `status` column against the filesystem. Both directions are now first-class audit findings — see the status table below.
 
 The audit is a report, not a verdict — it always exits 0 unless `--path` itself is invalid. It never *decides* the mode; it hands you the most likely one and the evidence behind it.
 
@@ -55,9 +57,29 @@ That escalation from prose to a hook is the [Layer-Routing.md](Layer-Routing.md)
 
 ## How sync mode resolves drift
 
-`sync` is the smallest mode. Phase 0's audit already produced the drift list — components on disk that the spec doesn't mention (for example, a hand-added skill or a rule someone dropped in outside the harness-creator flow). There is no goals-to-validation traversal. The interview is just that list, walked one item at a time, asking per item: correct the spec to match reality, or regenerate the files to match the spec? Whichever direction you pick, the pass finishes with the spec and the disk back in agreement.
+`sync` is the smallest mode, and the one place the "tool" framing in this handbook deliberately drops out: the drift `sync` reconciles isn't only harness-creator's own doing. Phase 0's audit already produced the drift list, in **both** directions:
 
-One direction of drift the audit reports conservatively: it flags files on disk that the spec omits, but it does not try to flag spec entries whose files have gone missing, because the spec's behavior-inventory table is free-form prose the script won't parse for that. Reading the spec's inventory against the audit's on-disk list — a job for the interviewing Claude, or you — is the reliable way to catch that other direction.
+- **A file on disk the spec never mentions** — a hand-added skill, a rule someone dropped in outside the harness-creator flow, or any other edit the harness picked up between passes.
+- **A spec row whose `status` claims a file that isn't there** — a row at `generated` or `validated` with nothing on disk.
+
+There is no goals-to-validation traversal in `sync`. The interview is just that list, walked one item at a time, asking per item: correct the spec to match reality, or regenerate the files to match the spec? The status column carries the meaning the filesystem alone can't:
+
+| Status | Claims a file exists? | A missing file means |
+|---|---|---|
+| `proposed` | No | Nothing — surfaced during I2, not yet approved |
+| `approved` | No | Nothing — locked as intent, generation not started |
+| `generated` | Yes | Generation was interrupted or failed partway |
+| `validated` | Yes | It existed and passed, then something removed it |
+| `declined` | No | Nothing — deliberately not built; keep the row, it's the record of that decision |
+| `retired` | No | Nothing — deliberately removed |
+
+`proposed`, `approved`, `declined`, and `retired` are never drift — a harness paused mid-interview is full of `proposed`/`approved` rows, and reporting those on every re-entry would make a perfectly normal pause look broken. Only `generated`/`validated` rows without a matching file, or a file without a matching row, get flagged.
+
+**Default to correcting the spec, not the files, and ask before doing anything else.** Divergence is not automatically corruption — a component on disk the spec doesn't mention is usually a teammate's ordinary work, another tool's, or a deliberate hand-edit, not damage to revert. "The spec is behind" is the common case; "the files are wrong" is the rare one. Record whichever resolution you land on in the spec's Change history as what it was — an external edit the spec now reflects — not as a file restoration, so the next reader can see the harness has more than one author.
+
+Two things sync still cannot see, worth saying out loud when you present the list so a clean report doesn't read as "nothing changed": edits to the *contents* of `CLAUDE.md` (root or nested) never appear, because the audit inventories instruction files without diffing their prose against the spec; and edits to the *contents* of an existing component don't appear either — a skill whose body was quietly rewritten is still a file at the path the spec names, so it reads as perfectly in sync. The drift check is about existence, not correctness; `validate_harness.py` covers structural correctness; neither one confirms a component still does what its spec row says it does.
+
+Whichever mode ran, the pass still ends the way a fresh build does: spec updated, `validate_harness.py` clean, and a Change-history entry recording what happened and in which mode — the Change history matters more after a re-entry than after a fresh build, since it's the only place the next pass learns this harness has been touched by more than one process.
 
 ## See also
 

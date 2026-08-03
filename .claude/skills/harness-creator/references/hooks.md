@@ -8,6 +8,8 @@ Permissions are folded into this same file rather than split out on their own. A
 
 Before writing a hook, ask: **must this never be violated?** If the answer is "it's fine if Claude usually gets it right," the item belongs in CLAUDE.md, a rule file, or a skill — not a hook. Route it back through the layer-routing framework in SKILL.md instead of reaching for a hook by default.
 
+That question can't do the work alone, because asked whether something matters, people say yes. Ask a second one that can come back negative: **what does a violation cost, and is something already catching it?** CI, a review, or a type checker already catching it means the hook only moves the failure earlier and bills every tool call for the privilege; cheap to undo means the same. What's left — expensive or irreversible *and* uncaught downstream — is the set worth generating. "We'd fix it in review" is the signal to route back to prose.
+
 This test matters because hooks are not free. Every hook adds a process spawn to the relevant lifecycle point, which is latency the user pays on every matching event whether or not anything was actually wrong. A `PreToolUse` hook on `Bash` runs on every single shell command for the rest of the session. Beyond latency, a harness with hooks scattered across every plausible concern starts fighting the model instead of guiding it — legitimate edge cases the interview didn't anticipate get blocked alongside the genuine violations, and the user ends up fighting their own harness. Reserve hooks for the small set of points where determinism is worth that cost: protecting a path from ever being edited, guaranteeing a formatter always runs, blocking a category of command outright. Everything softer is advisory, and advisory belongs in a layer that's cheap to override when the 16th case you didn't think of shows up.
 
 ## Hard guarantees need a permission-rule pair, not a hook alone
@@ -75,7 +77,7 @@ Everything below is a place where an already-capable model's default assumptions
 
 **A Bash-driven file edit doesn't trip an `Edit|Write` matcher.** Claude can modify a file via `Bash` (`sed -i`, `echo >> file`, a script that writes output) without ever calling the `Edit` or `Write` tool, so a `PostToolUse` hook matching `Edit|Write` never sees it. Compensate one of two ways: include `Bash` in the same matcher group and inspect the command inside the hook script, or add a `Stop`-time hook that runs `git status --porcelain` once per turn and reacts to any unexpected diff regardless of which tool produced it. The `Stop`-time approach is coarser (once per turn, not per edit) but catches every path; the `Bash`-inclusive approach is precise but requires parsing the command yourself.
 
-**`PreToolUse` deny holds even under `bypassPermissions` mode — but a hook can never override a deny from any scope.** This cuts both ways and both directions matter. In the direction that helps you: a hook that returns `permissionDecision: "deny"` (or exits 2) blocks the tool call even in the strongest permission mode available, `bypassPermissions` — a user cannot escape a hook-enforced policy just by switching modes. In the direction that constrains you: the reverse never holds. A hook returning `"allow"` never overrides a `deny` or `ask` rule that already exists in *any* settings scope, including managed/enterprise settings. Hooks can only tighten what permissions already allow; they can never loosen a deny. Design accordingly — if you need a hook to auto-approve something, verify first that no deny rule anywhere would have blocked it regardless.
+**`PreToolUse` deny holds even under `bypassPermissions` mode — but a hook can never override a deny from any scope.** This cuts both ways and both directions matter. In the direction that helps you: a hook that returns `permissionDecision: "deny"` (or exits 2) blocks the tool call even in the strongest permission mode available, `bypassPermissions` — a user cannot escape a hook-enforced policy just by switching modes. In the direction that constrains you: the reverse never holds. A hook returning `"allow"` never overrides a `deny` or `ask` rule that already exists in *any* settings scope, including managed/enterprise settings. Hooks can only tighten what permissions already allow; they can never loosen a deny. Design accordingly — if you need a hook to auto-approve something, verify first that no deny rule anywhere would have blocked it regardless. The reason the blocking direction is absolute: a hook that exits 2 stops the tool call **before** Claude Code evaluates permission rules at all, so there is no allow rule anywhere — any scope, any mode — that gets a chance to override it.
 
 **Two `updatedInput`-mutating hooks on the same tool race.** When multiple `PreToolUse` hooks match the same tool call and more than one returns `updatedInput`, they all run in parallel and the **last one to finish wins** — non-deterministic, since "last to finish" depends on process scheduling, not declaration order. Never generate two input-rewriting hooks for the same tool. If two concerns both need to touch the same tool's input (e.g. one hook redacts secrets, another normalizes paths), combine them into a single hook script that does both, in a defined order you control.
 
@@ -83,7 +85,13 @@ Everything below is a place where an already-capable model's default assumptions
 
 **`additionalContext` must read as a fact, not a command.** Phrase it "This repo uses `bun test`," not "Run `bun test`." The reasoning is not stylistic: `additionalContext` is injected as an invisible system reminder, and text phrased as an out-of-band imperative instruction can trip Claude's own prompt-injection defenses — designed to catch exactly this shape of "instruction smuggled in through a non-user channel" — which causes the text to be surfaced to the user instead of silently trusted and acted on. A factual statement about project state reads as legitimate context; an imperative reads as a suspicious command sneaking in through a side channel.
 
-**Default timeouts are wildly uneven, and mismatched expectations cause silent truncation.** Most hook types (`command`, `http`, `mcp_tool`) default to 600 seconds — ten minutes — which is generous enough that people stop thinking about it. Two events break that pattern hard: `UserPromptSubmit` lowers the default to **30 seconds** (because it blocks every single prompt from reaching Claude, so a slow hook stalls the whole session on every turn), and `SessionEnd` defaults to **1.5 seconds** — not 15, not 150, one and a half — because it runs during session teardown where the user is already trying to exit. A `SessionEnd` hook that shells out to something slow (a network call, a large file write) will silently get truncated well before it finishes unless you explicitly raise its `timeout` field or set `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS`. Check the timeout column in hooks-events.md for the event you're generating; don't assume 600 seconds.
+**Default timeouts are wildly uneven, and mismatched expectations cause silent truncation.** Most hook types (`command`, `http`, `mcp_tool`) default to 600 seconds — ten minutes — which is generous enough that people stop thinking about it. Three events depart from that, and the last one departs in kind, not just in magnitude:
+
+- `UserPromptSubmit` — **30 seconds**, because it blocks every prompt from reaching Claude, so a slow hook stalls the session on every turn.
+- `MessageDisplay` — **10 seconds**, because it sits in the render path.
+- `SessionEnd` — **1.5 seconds, and it is a budget shared across all `SessionEnd` hooks, not a per-hook default.** This is the one whose mechanism differs from every other event. Raising a per-hook `timeout` raises the shared budget to match, up to 60 seconds; `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` overrides it in milliseconds. A timeout set on a *plugin-provided* hook does not raise the budget.
+
+The practical consequence is concentrated in that last one: a `SessionEnd` hook that shells out to anything slow (a network call, a large file write) gets truncated during teardown, and adding a *second* `SessionEnd` hook eats into the same budget rather than getting its own. Check which of these three you're generating before assuming 600 seconds.
 
 **Hook processes have no tty, and shell-profile stdout noise breaks JSON parsing.** Hooks run in their own session without a controlling terminal — they cannot write to `/dev/tty` (use `terminalSequence` in JSON output for desktop notifications instead). More insidious: if the hook runs in shell form (no `args`) and the shell sources a profile (`.bashrc`, `.zshrc`) that unconditionally echoes something on startup — a "Shell ready" banner, a version notice — that text lands on stdout *before* your hook's JSON, and Claude Code's JSON parser chokes on the combined output. Guard any profile echo with an interactive-shell check (`[[ $- == *i* ]]`) so it only fires in a real interactive terminal, never in the non-interactive shell a hook spawns.
 
@@ -101,13 +109,41 @@ Permission rules are evaluated in a fixed order — deny rules first, then ask r
 
 Critically, an `Edit` rule also governs `Write` and `NotebookEdit` — you don't need three separate rules for the three file-mutating tools, one `Edit` rule covers the family. Symmetrically, a `Read` rule also governs `Grep`, `Glob`, and IDE-shared file context. When the interview surfaces "never let Claude touch `.env`," one `Edit(.env)` deny rule (plus, if read access should also be blocked, one `Read(.env)` deny rule) is the complete answer — don't generate redundant per-tool rules.
 
-### Project allow rules are gated on workspace trust; deny/ask are not
+**The stronger form of that, because it fails silently in the direction a generator naturally reaches:** file permission checks consult `Edit(path)` and `Read(path)` rules *only*. A path rule written for `Write`, `NotebookEdit`, `Glob`, or `MultiEdit` is accepted and then **never consulted** — `deny: ["Write(docs/**)"]` looks like it protects `docs/`, parses fine, and protects nothing. Since v2.1.210 Claude Code prints a startup warning naming the offending rule, but that scrolls past in a fresh clone and the harness reads as working. Write `Edit(docs/**)` instead of `Write(docs/**)`, and `Read(docs/**)` instead of `Glob(docs/**)`. A rule with no path at all, like a bare `Write` deny, is different — that one matches at the tool level everywhere and does what it looks like.
 
-A project's `.claude/settings.json` **allow** rules only take effect after the user has accepted the workspace-trust dialog for that directory — until then, Claude Code reads the rules but does not apply them. Deny and ask rules have no such gate; they apply immediately regardless of trust, since they only restrict, never grant. This asymmetry is the direct explanation for a specific, otherwise-confusing bug report: "I cloned the repo, the committed settings.json has an allow rule for `npm test`, but Claude still prompts me for it." The rule is real and correctly written; it just hasn't taken effect yet because the workspace hasn't been trusted in this environment. State this explicitly in any harness documentation you generate that ships allow rules in project settings, so a fresh clone doesn't read as a broken harness.
+### Workspace trust gates everything the repo *grants*, not just allow rules
+
+**Trust gates what a repo *grants*, never what it *restricts*.** That one line predicts every case, and the cases are wider than permissions: `permissions.allow` and `additionalDirectories`, **project hooks**, a project `statusLine`, a project skill's `allowed-tools`, a project subagent's frontmatter hooks (v2.1.218+, the agent still runs), and `autoMemoryDirectory`. Deny and ask rules are ungated, because restricting needs no permission — and neither are user-level subagents in `~/.claude/agents/`, because the user wrote those.
+
+So **on an untrusted fresh clone the enforcing half of a harness is inert while the restricting half is fully live** — and silently: the skipped hook says so only in a debug log nobody has running. Whenever you ship project allow rules or hooks, say this in what you generate, or a fresh clone reads as broken and, worse, a guarantee looks like it's holding when it isn't.
+
+Two edges: `.claude/settings.local.json` is normally exempt as the user's own file, but goes through the gate when the repo could have supplied it (committed, or `.claude` is a symlink); and a `--add-dir` folder needs trusting separately rather than inheriting the workspace's grant.
+
+### Protected paths: `.claude/` writes can't be pre-approved, and one mode refuses them outright
+
+`.claude` is protected (except `.claude/worktrees`), along with `.git`, `.vscode`, `.idea`, `.husky`, `.devcontainer`, `.mcp.json`, `.claude.json`, shell rc files, `.npmrc`, `.pre-commit-config.yaml`, and others — treat the list as open, not exhaustive.
+
+**The safety check runs before allow rules are evaluated, so `Edit(.claude/**)` does nothing.** That is precisely the repair a generator reaches for when a user complains about the prompt, and it is a no-op that looks like a fix.
+
+| Mode | Protected-path write |
+|---|---|
+| `default`, `acceptEdits` | Prompted |
+| `plan` | Prompted (allowed where bypass is available; classifier where auto mode is) |
+| `auto` | Routed to the classifier |
+| `dontAsk` | **Denied** |
+| `bypassPermissions` | Allowed |
+
+Design around the `dontAsk` row: it's the CI mode, so a harness that writes into `.claude/` during setup works on a laptop and silently fails in the pipeline. In the prompting modes, the one detail worth passing on is that the `.claude/` prompt offers **"Yes, and allow Claude to edit its own settings for this session."**
 
 ### Only narrow allow rules are worth generating — broad ones get dropped in auto mode
 
 When a session enters auto mode, Claude Code automatically suspends broad allow rules that grant arbitrary code execution: a blanket `Bash(*)` or `PowerShell(*)`, wildcarded interpreters like `Bash(python*)`, package-manager run commands, and `Agent` allow rules. Narrow rules like `Bash(npm test)` carry over untouched. The practical consequence for a generator: **a broad allow rule has no durable value** in a harness that might ever run under auto mode — it works in `default`/`acceptEdits` mode and silently stops covering anything the moment the user switches to auto. Generate narrow, specific allow rules (`Bash(npm test)`, `Bash(git status)`) rather than broad ones (`Bash(*)`), both because narrow rules are what the interview should actually be surfacing (specific, named, safe commands) and because narrow rules are the only kind guaranteed to keep working across every permission mode.
+
+### `defaultMode: "auto"` is ignored in the settings file this skill writes
+
+A repository cannot grant itself auto mode. Since v2.1.142, Claude Code **ignores `permissions.defaultMode: "auto"`** when it appears in `.claude/settings.json` or `.claude/settings.local.json`; the session starts in `default` with no error and no warning. Only `~/.claude/settings.json` (or managed settings) can set it.
+
+This matters here more than most gotchas because project `settings.json` is a file this skill generates. If the interview lands on "I don't want to be prompted constantly," writing `defaultMode: "auto"` into the project settings produces a harness that appears configured and behaves exactly as if it weren't. Route that request to the user's own settings and say so in the spec's Design rationale; `acceptEdits` and `plan` are honored in project settings and are the values worth generating there.
 
 ### Compound commands need every sub-command matched, and a trailing wildcard enforces a word boundary
 
@@ -184,45 +220,10 @@ Each recipe below is deliberately dense: the `settings.json` entry plus a one-li
 
 ### Recipe 2 — post-edit auto-formatter
 
-```json
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/format.sh",
-            "args": []
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-`format.sh` reads `tool_input.file_path`, runs the project's formatter against just that file (e.g. `npx prettier --write "$FILE"`), and exits 0 whether or not formatting changed anything — this is not a gate, it's a side effect, so there's no reason to ever exit 2 here. No matching permission rule is needed because nothing is being blocked; this recipe is pure automation, not enforcement. If the formatter is slow enough to matter, add `"async": true` so it runs in the background rather than blocking the next tool call, keeping in mind async hooks can't return decisions.
+`PostToolUse` on `Edit|Write` (same JSON shape as Recipe 1) pointing at `format.sh`, which reads `tool_input.file_path`, formats that one file, and **exits 0 whether or not anything changed**. This is a side effect, not a gate, so it never exits 2 and needs no permission-rule pair — nothing is being blocked. If the formatter is slow enough to matter, add `"async": true`, remembering async hooks can't return decisions.
 
 ### Recipe 3 — Stop-time validation gate
 
-```json
-{
-  "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/check-tests.sh",
-            "args": []
-          }
-        ]
-      }
-    ]
-  }
-}
-```
+`Stop` (no matcher — it isn't a tool event) pointing at `check-tests.sh`, which reads `stop_hook_active` from stdin first and exits 0 immediately if it's `true` (loop guard — see the gotcha above); otherwise it runs the test suite, and if tests fail, prints a JSON object with `decision: "block"` and a `reason` describing what's failing, then exits 0 (JSON decision channel, not the exit-2 channel, since `Stop` reads the top-level `decision` field rather than relying on exit code alone for this event). No permission-rule pair is needed here — a `Stop` hook isn't blocking a *tool call*, it's keeping the turn going, so there's no allow/deny rule that would express the same guarantee more strongly. The loop guard plus the built-in 8-consecutive-block cap are what keep this safe from becoming an infinite loop if the tests never pass.
 
-`check-tests.sh` reads `stop_hook_active` from stdin first and exits 0 immediately if it's `true` (loop guard — see the gotcha above); otherwise it runs the test suite, and if tests fail, prints a JSON object with `decision: "block"` and a `reason` describing what's failing, then exits 0 (JSON decision channel, not the exit-2 channel, since `Stop` reads the top-level `decision` field rather than relying on exit code alone for this event). No permission-rule pair is needed here — a `Stop` hook isn't blocking a *tool call*, it's keeping the turn going, so there's no allow/deny rule that would express the same guarantee more strongly. The loop guard plus the built-in 8-consecutive-block cap are what keep this safe from becoming an infinite loop if the tests never pass.
+**Price this one before generating it.** `Stop` is a once-per-turn event, so unlike a `PreToolUse` hook that only wakes on a matching tool, this cost lands on *every* turn — including the turns where Claude answered a question and touched nothing. A hook that shells out to a full test suite turns every reply into a test run. And the usual escape hatch doesn't apply here: `async: true` makes a hook non-blocking, but Claude Code then ignores its output completely — no stdout, no JSON parsing, no exit codes — so an async `Stop` hook cannot block, which is the entire point of this recipe. (`asyncRewake: true` is a middle path: it runs in the background and wakes Claude on exit 2, which suits a slow check that should interrupt later rather than gate now.) Either scope the check to something cheap, gate it inside the script on whether any relevant file actually changed this turn, or accept the per-turn cost deliberately.

@@ -35,12 +35,18 @@ def _file_summary(path, root):
 
 
 def inventory_claude_md(root):
-    path = root / "CLAUDE.md"
-    if not path.is_file():
-        return None
-    summary = _file_summary(path, root)
-    summary["over_200_lines"] = (summary["lines"] or 0) > vh.MAX_CLAUDE_MD_LINES
-    return summary
+    """Every project-scope instruction file, not just ./CLAUDE.md.
+
+    Returns a list. A project using only `.claude/CLAUDE.md` previously
+    inventoried as having no CLAUDE.md at all, which made the audit report
+    it absent and -- worse -- made suggest_mode classify an established
+    harness as `new`."""
+    out = []
+    for path in hc.claude_md_paths(root):
+        summary = _file_summary(path, root)
+        summary["over_200_lines"] = (summary["lines"] or 0) > vh.MAX_CLAUDE_MD_LINES
+        out.append(summary)
+    return out
 
 
 def inventory_rules(root):
@@ -162,13 +168,78 @@ def check_spec_drift(root, inventory):
     return {
         "spec_exists": True,
         "on_disk_not_in_spec": on_disk_not_in_spec,
-        # "in spec but not on disk" would require parsing the spec's
-        # Behavior inventory table, which is free-form prose by design (see
-        # references/interview.md) -- conservatively not attempted here to
-        # avoid a false "missing" report; a human (or the interviewing
-        # Claude) reading the spec's Behavior inventory table against this
-        # on-disk list is the reliable way to catch that direction.
+        "in_spec_not_on_disk": _spec_rows_without_files(root, spec_text, on_disk),
     }
+
+
+# Only these two statuses assert that a file exists. `proposed` and
+# `approved` are intent, not artifacts, so a row at either is not drift --
+# reporting them would fire on every harness mid-interview.
+_STATUSES_CLAIMING_A_FILE = frozenset({"generated", "validated"})
+
+
+def _spec_rows_without_files(root, spec_text, on_disk):
+    """Rows in the Behavior inventory whose status claims a file exists,
+    where no such file is on disk.
+
+    The other half of drift. Previously declined here on the grounds that the
+    spec is free-form prose, but it is not: the Behavior inventory table's
+    columns are fixed by the spec template that this skill itself writes
+    (see references/interview.md), and the status column exists precisely so
+    this check can be made. `status` stuck at `generated` with no matching
+    file is the signal that generation was interrupted, or that something
+    deleted the component out from under the spec."""
+    missing = []
+    disk_names = {Path(p.rstrip("/")).name for p in on_disk}
+    disk_stems = {Path(p.rstrip("/")).stem for p in on_disk}
+
+    for row in _iter_inventory_rows(spec_text):
+        if len(row) < 5:
+            continue
+        component, status = row[3], row[4].lower()
+        if status not in _STATUSES_CLAIMING_A_FILE:
+            continue
+        # The spec convention is a backticked repo-relative path, but accept
+        # a bare name too rather than reporting a false "missing" against a
+        # spec written before that convention was documented.
+        name = component.strip().strip("`").rstrip("/")
+        if not name or name.startswith("<"):
+            continue
+        # The claim under test is "the spec says this exists and it doesn't",
+        # so a path that is simply present on disk settles it -- regardless of
+        # whether it is one of the component-level paths this script
+        # inventories. A spec may legitimately name a file *inside* a
+        # component (a skill's SKILL.md, one of its references) at a finer
+        # granularity than the inventory's unit, and reporting those as
+        # missing would fire on a correct harness.
+        if (Path(root) / name).exists():
+            continue
+        stem = Path(name).stem
+        if name in on_disk or Path(name).name in disk_names or stem in disk_stems:
+            continue
+        missing.append({"id": row[0].strip(), "component": name, "status": status})
+    return missing
+
+
+def _iter_inventory_rows(spec_text):
+    """Yield the data rows of the `## Behavior inventory` markdown table as
+    lists of cell strings, skipping the header and separator rows."""
+    in_section = False
+    for line in spec_text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            # A new heading ends the section; match on the heading text so a
+            # different heading level doesn't break the parse.
+            in_section = stripped.lstrip("#").strip().lower() == "behavior inventory"
+            continue
+        if not in_section or not stripped.startswith("|"):
+            continue
+        cells = [c.strip() for c in stripped.strip("|").split("|")]
+        if not cells or set("".join(cells)) <= set("-: "):
+            continue  # separator row
+        if cells[0].lower() == "id":
+            continue  # header row
+        yield cells
 
 
 def check_user_scope_conflicts(root, inventory):
@@ -183,7 +254,52 @@ def check_user_scope_conflicts(root, inventory):
             candidate = user_skills / s["name"]
             if candidate.exists():
                 conflicts.append(f"a user-scope skill named '{s['name']}' also exists at {candidate} -- verify this isn't an unintentional shadow/duplicate")
+
+    # User rules apply to every project on this machine and load before
+    # project rules. One without `paths:` is in context for this session
+    # whether or not it has anything to do with this repo.
+    user_rules = home / ".claude" / "rules"
+    unscoped = []
+    for f in hc.iter_rule_files(home):
+        fm = hc.parse_frontmatter(hc.read_text(f))
+        if not (fm.ok and fm.data.get("paths")):
+            unscoped.append(f.name)
+    if unscoped:
+        conflicts.append(
+            f"{len(unscoped)} user-level rule(s) in {user_rules} have no 'paths:' and so load "
+            f"into every project including this one ({', '.join(sorted(unscoped)[:5])}"
+            f"{', ...' if len(unscoped) > 5 else ''}) -- check they don't contradict what "
+            "this harness is about to say"
+        )
+
+    for name, path in _foreign_instruction_files(root):
+        conflicts.append(
+            f"{name} exists at {path} -- another coding agent's instructions. Claude Code does "
+            "not read it, so its content is interview material rather than a component; if the "
+            "project wants one source of truth, make '@" + name + "' the first line of CLAUDE.md"
+        )
     return conflicts
+
+
+# Reported, never parsed, and never treated as harness components: these
+# belong to other tools, and the audit's job here is to surface that a second
+# set of instructions exists so the interview can ask about it.
+_FOREIGN_INSTRUCTION_PATHS = (
+    "AGENTS.md",
+    ".cursorrules",
+    ".cursor/rules",
+    ".github/copilot-instructions.md",
+    ".windsurfrules",
+    ".windsurf/rules",
+    ".clinerules",
+)
+
+
+def _foreign_instruction_files(root):
+    for rel in _FOREIGN_INSTRUCTION_PATHS:
+        path = Path(root) / rel
+        if path.exists():
+            yield rel, path
 
 
 def hygiene_signals(root):
@@ -209,6 +325,8 @@ def suggest_mode(inventory, drift, hygiene):
         return "new -- no harness components found at all."
     if not drift["spec_exists"]:
         return "improve or sync -- components exist but there's no harness-spec.md; treat the first pass as recovering a spec from what's actually on disk."
+    if drift["in_spec_not_on_disk"]:
+        return "sync -- the spec claims components that aren't on disk; generation was interrupted, or something removed them. Confirm with the user before regenerating."
     if drift["on_disk_not_in_spec"]:
         return "sync -- components exist on disk that the spec doesn't mention; confirm with the user whether to update the spec or these files."
     if hygiene["total_lint_errors"] > 0:
@@ -241,7 +359,11 @@ def print_markdown(result):
     print("# Harness audit\n")
 
     print("## Component inventory\n")
-    print(f"- CLAUDE.md: {'present, ' + str(inv['claude_md']['lines']) + ' lines' if inv['claude_md'] else 'absent'}")
+    if inv["claude_md"]:
+        for entry in inv["claude_md"]:
+            print(f"- {entry['path']}: present, {entry['lines']} lines")
+    else:
+        print("- CLAUDE.md: absent (checked ./CLAUDE.md, ./.claude/CLAUDE.md, ./CLAUDE.local.md)")
     print(f"- rules/: {len(inv['rules'])} file(s)")
     for r in inv["rules"]:
         print(f"  - {r['path']} ({'has paths' if r['has_paths'] else 'NO paths -- loads at launch'})")
@@ -269,12 +391,19 @@ def print_markdown(result):
     drift = result["spec_drift"]
     if not drift["spec_exists"]:
         print("- No harness-spec.md found.")
-    elif drift["on_disk_not_in_spec"]:
-        print("- Components on disk but not mentioned in the spec:")
-        for p in drift["on_disk_not_in_spec"]:
-            print(f"  - {p}")
     else:
-        print("- No drift detected (every on-disk component is mentioned somewhere in the spec).")
+        if drift["in_spec_not_on_disk"]:
+            print("- Spec claims these components exist, but they are not on disk:")
+            for row in drift["in_spec_not_on_disk"]:
+                print(f"  - {row['component']} (row {row['id']}, status: {row['status']})")
+        if drift["on_disk_not_in_spec"]:
+            print("- Components on disk but not mentioned in the spec:")
+            for p in drift["on_disk_not_in_spec"]:
+                print(f"  - {p}")
+            print("    (a component here may be a normal edit made outside this flow, not")
+            print("     corruption -- ask before proposing to regenerate or remove anything)")
+        if not drift["in_spec_not_on_disk"] and not drift["on_disk_not_in_spec"]:
+            print("- No drift detected in either direction.")
 
     print("\n## User-scope conflict candidates\n")
     if result["user_scope_conflicts"]:

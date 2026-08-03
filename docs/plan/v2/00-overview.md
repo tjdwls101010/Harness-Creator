@@ -75,6 +75,15 @@ CLAUDE.md로 라우팅하는 것과 **정확히 같은 내용 범주**를 담는
 | **D23** | `test_hook.py` 강조 | **자른다.** 소유자 도그푸딩에서 이 단계를 건너뛰는 걸 관찰한 적 없다 — 예방적으로 들어간 문구다. **단, why 문장은 전부 남긴다**: `SKILL.md:45`의 "validate_harness.py cannot check this for you"는 다른 어디에도 없는 사실이고, Hard line 2의 "A checklist that isn't mechanically enforced doesn't get enforced"는 그 줄의 유일한 why다. WS4 검증이 실제 준수율을 측정한다. |
 | **D24** | 검증 규칙 | 이 repo의 `CLAUDE.md`는 개선 대상이 아니므로 **수정하지 않는다.** 대신 **버전 민감 메커니즘**(타임아웃, matcher 값 목록, 버전 플로어, frontmatter 필드 집합)은 스냅샷이 아니라 **라이브 문서로 확인**한다는 지침을 §11 킥오프에 둔다. B5는 스킬이 기존 규칙을 지켰는데도 틀린 gotcha를 출하한 사례다. |
 
+### 3.1b 구현 세션(2026-08-03)의 결정
+
+| # | 결정 | 내용 |
+|---|---|---|
+| **D25** | 검증 범위 | **A1·A2만 before/after A/B, A3·A4는 after-only 가드레일 체크리스트.** WS4의 `test_hook.py` 준수율도 after 런 + 컷한 문구의 보존 판단으로. 근거: 스킬이 심링크 하나로 등록되므로 baseline/after 런이 직렬이고, 원안은 ~22세션이었다. 수용 기준 9를 이에 맞춰 개정. |
+| **D26** | 분량 vs 정확성 | **always-loaded(< 2,500단어)만 hard gate.** 총 단어 수는 실측해 기록하되 통과/실패를 가르지 않는다. §4가 이미 "총량은 지표가 아니다"라고 말하고, 초과분은 전부 조건부 로드되는 reference에 들어간다. **수용 기준 4 개정.** |
+| **D27** | 미배정 ⚠ 행 | `mechanics-2026-08.md`의 ⚠ 7행 중 4행(A6·A11·D8·D12)이 어느 워크스트림에도 배정돼 있지 않았다 — 수용 기준 7은 전부 해소를 요구하는데. **WS1-8로 편입.** 추가로 D5(`defaultMode: "auto"`가 프로젝트 settings.json에서 무시됨 — 이 스킬이 생성하는 바로 그 파일)와 D10(`Write(path)` 규칙 미매칭)을 WS5에 편입. 둘 다 WS5의 "조용한 실패" 정의 그대로다. |
+| **D28** | 수용 기준 1 | **이 repo용 `.claude/harness-spec.md`를 만든다.** `--strict`는 경고를 실패로 승격하므로 spec 부재 경고 때문에 기준 1이 충족 불가능이었다. 도그푸딩 효과도 실제로 나왔다 — spec을 쓰자마자 WS1-2의 drift 검사가 컴포넌트 내부 파일을 오탐하는 버그(B13)가 드러났다. |
+
 ### 3.2 v1 결정(D1-D12)에 대한 개정
 
 | v1 결정 | 상태 | 사유 |
@@ -97,24 +106,51 @@ CLAUDE.md로 라우팅하는 것과 **정확히 같은 내용 범주**를 담는
 측정치(`wc -w`, 2026-08-01)와 항목별 목표. 상세 근거는
 [`research/audit-synthesis.md`](research/audit-synthesis.md) §1b.
 
-| 파일 | 현재 | 목표 | Δ |
-|---|---:|---:|---:|
-| `SKILL.md` | 2,185 | **1,970** | −215 |
-| `references/agents.md` | 3,003 | **2,928** | −75 |
-| `references/claude-md-and-rules.md` | 1,885 | **2,161** | **+276** |
-| `references/e2e-testing.md` | 3,160 | **3,132** | −28 |
-| `references/hooks-events.md` | 3,766 | **3,790** | +24 |
-| `references/hooks.md` | 4,760 | **4,860** | **+100** |
-| `references/interview.md` | 2,648 | **2,758** | +110 |
-| `references/skills.md` | 3,085 | **2,975** | −110 |
-| `references/workflows.md` | 2,445 | **2,209** | −236 |
-| **합계** | **26,937** | **26,783** | **−154 (−0.6%)** |
+| 파일 | 계획 전 | 계획 목표 | **실측 (2026-08-03)** | Δ |
+|---|---:|---:|---:|---:|
+| `SKILL.md` | 2,185 | 1,970 | **2,411** | +226 |
+| `references/agents.md` | 3,003 | 2,928 | **3,377** | +374 |
+| `references/claude-md-and-rules.md` | 1,885 | 2,161 | **3,196** | +1,311 |
+| `references/e2e-testing.md` | 3,160 | 3,132 | **3,735** | +575 |
+| `references/hooks-events.md` | 3,766 | 3,790 | **3,777** | +11 |
+| `references/hooks.md` | 4,760 | 4,860 | **5,976** | +1,216 |
+| `references/interview.md` | 2,648 | 2,758 | **2,961** | +313 |
+| `references/re-entry.md` *(신규, WS8)* | — | — | **920** | +920 |
+| `references/skills.md` | 3,085 | 2,975 | **3,089** | +4 |
+| `references/workflows.md` | 2,445 | 2,209 | **2,295** | −150 |
+| **합계** | **26,937** | 26,783 | **30,712** | **+3,775 (+14.0%)** |
 
-**총량은 지표가 아니다.** 실제 비용을 지배하는 건 always-loaded 표면이다.
+> **압축 패스 (2026-08-03, 2차).** 위 실측치는 압축 패스 **이후**다. 1차 구현 직후는 31,737이었고,
+> −1,025를 회수했다. 회수한 곳은 **내가 principle을 rail처럼 길게 쓴 부분**이다 — workspace trust
+> 395→~180, 스코프 축 515→~330, "기본값과 모순되는가" 248→~140, 은퇴 라운드 249→~120, 훅 자격
+> 두 번째 질문, 보호 경로 절, `re-entry.md`. 그리고 WS6가 범위 축소로 건너뛴 예제 트림(레시피 2·3의
+> 중복 JSON, `skills.md` 재논증, Bad CLAUDE.md 블록)을 집행했다.
+>
+> **적대적 검증에서 손실 4건이 잡혔고 3건을 복원했다**: user-level 서브에이전트 trust 면제,
+> 에이전트의 라우팅 비용, 보호 경로 목록의 "and others" 헷지, 그리고 가장 중요한 것 —
+> *"이 줄을 지우면 클로드가 틀리나?"* 라는 **검사 자체**. 원칙만 남기고 검사를 잘랐던 건 이 스킬이
+> 경고하는 rail/principle 역전 그대로였다. 의도적으로 안 되돌린 것 1건: statusLine의 디버그 로그
+> 문자열(생성 범위 밖 표면의 진단 문자열).
+>
+> **26,783까지 내려가지 않는 이유**는 그 숫자가 workspace trust·auto memory·보호 경로·`Write(path)`
+> 미매칭 같은 검증된 메커니즘 ~2,000단어를 **추가하기 전** 기준이기 때문이다. 그걸 빼서 숫자를 맞추는
+> 건 "틀린 gotcha보다 없는 gotcha가 낫다"를 거꾸로 적용하는 것이라 하지 않았다.
 
-| | 현재 | 위 예산만 적용 | D22까지 적용 |
-|---|---:|---:|---:|
-| always-loaded | **4,833** | 4,618 | **~1,970 (−59%)** |
+**총량은 지표가 아니고, D26에 따라 게이트도 아니다.** 증가분은 거의 전부 WS1/WS3/WS5가 추가한
+**검증된 제품 메커니즘**이다 — workspace trust가 게이트하는 것들, 보호 경로, `defaultMode: "auto"` 무시,
+`Write(path)` 미매칭, auto memory와 스코프 축, compaction 생존 매트릭스, SessionEnd 공유 예산.
+전부 조건부 로드되는 reference에 들어가므로 **세션당 비용은 0**이다. 계획이 예상한 −154단어는
+WS6가 ~930단어를 회수한다는 전제였고, 그 전제는 (a) D26이 총량 게이트를 없애고 (b) WS6 범위가
+"레일 제거, 분량 목표 없음"으로 좁혀지면서 무효가 됐다.
+
+**실제 비용을 지배하는 건 always-loaded 표면이고, 그건 목표대로 줄었다.**
+
+| | 계획 전 | **실측** |
+|---|---:|---:|
+| always-loaded (`SKILL.md` + 무조건 로드되던 `interview.md`) | **4,833** | **2,411 (−50%)** |
+
+`interview.md`는 이제 `new`/`extend`/`improve` 경로에서만, `re-entry.md`는 재진입 경로에서만 로드된다.
+sync 모드는 둘 중 `re-entry.md`만 읽는다.
 
 압축 천장이 구조적인 이유: reference 표면의 26.3%가 보호된 non-derivable 메커니즘이고,
 `hooks.md`는 52.9%가 보호 대상이라 압축 예산에서 면제이며, `hooks-events.md`는 사실상 100% 인터페이스다.
@@ -213,16 +249,16 @@ line 102와 134에서 **코드를 레퍼런스로 쓰는 것을 적극 권장**�
 
 ## 9. 수용 기준
 
-1. `python scripts/validate_harness.py --path . --strict` 가 이 repo에 대해 오류 0으로 통과한다.
-2. 버그 8건 각각에 **수정 전 실패 / 수정 후 통과**하는 회귀 테스트가 `tests/fixtures/`에 있다.
-3. 스킬 표면에서 `grep -rniE "doctor|checkup"` 가 0건이다 (D14).
-4. 총 단어 수 < 26,937 (D15). 실측치를 §4 표에 기록.
-5. `SKILL.md` < 3,750단어 (D21), 목표 ~1,970.
-6. **always-loaded 표면 < 2,500단어** (D22). 이게 이번 개정의 대표 지표다.
-7. `research/mechanics-2026-08.md`의 모든 ⚠ 행이 해소됐다.
-8. `research/audit-synthesis.md` §4의 가드레일 중 **어느 것도 삭제되지 않았다.**
-9. **L4 A/B가 머지 전에 실행됐고 회귀 판정이 0건이다.** 회귀가 나오면 그 항목은 되돌린다.
-10. 계획과 충돌하는 사실을 발견했다면 계획 문서를 고치고 사유를 남겼다.
+1. `python scripts/validate_harness.py --path . --strict` 가 이 repo에 대해 **exit 0**이다 (D28의 spec 작성 포함). ✅
+2. 버그 각각에 **수정 전 실패 / 수정 후 통과**하는 회귀 테스트가 있다. 원안은 11건이었고 구현 중 2건이 추가됐다(B12 워크플로우 top-level `return`, B13 drift 검사 granularity). ✅
+3. 스킬 표면에서 `grep -rniE "doctor|checkup"` 가 0건이다 (D14). ✅ (`tests/test_skill_surface.py`가 강제)
+4. ~~총 단어 수 < 26,937~~ → **총 단어 수를 실측해 §4 표에 기록한다** (D26). 통과/실패 기준이 아니다.
+5. `SKILL.md` < 3,750단어 (D21). ✅
+6. **always-loaded 표면 < 2,500단어** (D22). **이번 개정의 대표 지표이자 유일한 분량 hard gate.** ✅ 4,833 → 2,411 (−50%)
+7. `research/mechanics-2026-08.md`의 모든 ⚠ 행이 해소됐다 (D27로 4건 추가 배정). ✅
+8. `research/audit-synthesis.md` §4의 가드레일 중 **어느 것도 삭제되지 않았다.** ✅ (`tests/test_skill_surface.py`의 `GuardrailTests`가 강제)
+9. **L4가 머지 전에 실행됐고 회귀 판정이 0건이다** — D25 기준으로 A1·A2는 before/after A/B, A3·A4는 after-only 체크리스트.
+10. 계획과 충돌하는 사실을 발견했다면 계획 문서를 고치고 사유를 남겼다. ✅ (B9 처리 방식은 `01-changes.md` WS2-3에, WS5-1의 근거 정정은 커밋 메시지에 기록)
 
 ## 10. 가드레일
 
