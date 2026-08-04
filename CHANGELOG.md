@@ -31,6 +31,11 @@ Doctrine. The skill taught two filters for what earns its tokens and left a hole
 - **The always-loaded budget rose from 2,500 to 2,650 words**, deliberately, rather than cutting the new doctrine to fit. 2,500 was a target set while *removing* an unconditional file load; the mechanic is the 5,000-token compaction ceiling, which did not move and still sits over a thousand words away. This project also teaches that a number stripped of its reason is a rail wearing a digit, so holding one after its justification changed would have been the skill failing its own test.
 
 
+### Known limitations
+
+- **The claim that this release's doctrine reaches generated harnesses is not end-to-end verified.** The doctrine is present in `SKILL.md` and the skill's own prose was compressed against it, both checked mechanically. Whether a *generated* harness comes out shorter-paragraphed with its reasons attached in a clause can only be answered by running the interview to completion, and `AskUserQuestion` does not exist in headless or subagent contexts, so no automated test can do it. The runbook and a prepared target repo ship in `docs/plan/v3/`; the run itself is outstanding.
+- Carried forward from 0.2.0: the interview cannot be end-to-end tested for the same reason, and installing the plugin from a local directory path copies gitignored files into the plugin cache (harmless; GitHub-source installs are unaffected).
+
 ## [0.2.0] — 2026-08-03
 
 Correctness and context. Twelve defects are fixed — including one that made a correct harness fail the skill's own delivery gate — and the context a session pays for before its first prompt is cut in half. Every product mechanic asserted by the skill was re-verified against live documentation, because the previous release shipped one that was wrong.
@@ -99,6 +104,7 @@ First public release. harness-creator is usable end to end: it audits, interview
 - The interview cannot be end-to-end tested (`AskUserQuestion` is unavailable in headless and subagent contexts); it is validated by manual dogfooding.
 - Installing the plugin from a **local directory path** (rather than the GitHub source) copies gitignored files into the plugin cache — harmless, and it does not affect GitHub-source installs.
 
-[Unreleased]: https://github.com/tjdwls101010/Harness-Creator/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/tjdwls101010/Harness-Creator/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/tjdwls101010/Harness-Creator/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/tjdwls101010/Harness-Creator/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/tjdwls101010/Harness-Creator/releases/tag/v0.1.0
