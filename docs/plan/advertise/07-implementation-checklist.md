@@ -23,7 +23,7 @@
 - [x] Claude plugin validation passes.
 - [x] `git diff --check` passes.
 - [x] Internal links and image references pass.
-- [ ] External-link workflow completes once before merge.
+- [x] External-link workflow completes once before merge.
 - [x] Every canonical page is indexed.
 - [x] Every legacy page points to a valid replacement.
 - [x] Poster dimensions and SHA-256 match.
