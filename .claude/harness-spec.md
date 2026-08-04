@@ -11,7 +11,7 @@ The binding design record is `docs/plan/` (v1, D1-D12) as revised by `docs/plan/
 ## Goals
 
 - Ship a meta-skill that designs, generates, and validates a complete harness for another project through a structured interview.
-- Hold the always-loaded surface — what enters context on every invocation before the first prompt — under 2,500 words, because past roughly 5,000 tokens content is dropped silently at compaction rather than degrading.
+- Hold the always-loaded surface — what enters context on every invocation before the first prompt — under 2,650 words, because past roughly 5,000 tokens (~3,750 words) content is dropped silently at compaction rather than degrading. The 5,000-token ceiling is the product fact; 2,650 is the self-imposed margin, raised from v2's 2,500 when v3 added the compression doctrine (see Design rationale).
 - Never assert a product mechanic the live docs don't support. A wrong gotcha is worse than no gotcha, and this skill's entire value is gotcha density.
 - Never let the skill claim an enforcement that doesn't exist. Hard line 1 forbids it, and the v2 audit found five violations of it.
 
@@ -40,11 +40,17 @@ The binding design record is `docs/plan/` (v1, D1-D12) as revised by `docs/plan/
 
 ## Component specs
 
-Each reference file is loaded only when the matching component type is being generated; `SKILL.md` is the sole always-loaded surface, and `interview.md` and `re-entry.md` are gated behind the Phase 0 mode branch. That gating is the point of the v2 revision — it took the always-loaded surface from 4,833 words to under 2,500.
+Each reference file is loaded only when the matching component type is being generated; `SKILL.md` is the sole always-loaded surface, and `interview.md` and `re-entry.md` are gated behind the Phase 0 mode branch. That gating is the point of the v2 revision — it took the always-loaded surface from 4,833 words to under 2,500. v3 spent 206 of the words that bought back, on doctrine the generated harnesses inherit.
 
 The four CLIs are plain-argument, stdlib-only, and invoked as `${CLAUDE_SKILL_DIR}/scripts/<name>.py` so they work from a plugin cache as well as a checkout.
 
 ## Design rationale
+
+**The always-loaded budget rose from 2,500 to 2,650 words in v3, deliberately.** v3 adds four pieces of authoring doctrine to `SKILL.md` — the "don't write what the model knows" filter extended to cover the *why*, the parameter space as a teaching surface, references that can be a failing test or a schema rather than prose, and a check's failure message as an interface. They live in `SKILL.md` rather than `references/skills.md` because a pass that generates only CLAUDE.md or only hooks never opens that file, and because auto-compaction re-attaches the skill body while a reference read is summarized away — `SKILL.md` holds the only copy that survives.
+
+Fitting them under 2,500 was measured and rejected. The four long paragraphs yield about 51 words to whole-clause deletion once paraphrase-shortening is off the table (which it is: that is where meaning dilutes), and closing the remaining gap would have meant cutting roughly half the new doctrine. Two things made keeping it the better trade. The number was never a mechanic — the mechanic is the 5,000-token compaction ceiling, still 1,148 words away — and this skill teaches that a number without its reason is a rail wearing a digit, so holding 2,500 after its justification changed would have been the skill failing its own test. Meanwhile the metric v3 actually targets improved: words trapped in paragraphs of 110 or more went from 788 to 580.
+
+Worth naming for whoever revises this next: tabulating a short passage *costs* words, because table pipes and the separator row count. Converting `SKILL.md`'s four-question paragraph to a table took it from 198 words to 203; bullets, which discretize just as well, run about five words per item cheaper.
 
 **B17 declined.** The no-hard-wrap rule is real and load-bearing (hard wraps break Edit's exact-string matching), but it's stated in `CLAUDE.md` and in `SKILL.md`, and a violation is cosmetic and trivially reversible. By this skill's own second hook-eligibility question — what does a violation cost, and is something already catching it — this doesn't clear the bar. Revisit only if it actually recurs.
 
