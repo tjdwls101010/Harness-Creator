@@ -1,0 +1,44 @@
+name: Documentation issue
+description: Report missing, unclear, outdated, or incorrect documentation.
+title: "[Docs]: "
+labels:
+  - documentation
+body:
+  - type: input
+    id: location
+    attributes:
+      label: Page or section
+      description: Link the affected README or canonical wiki page.
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Problem type
+      options:
+        - Incorrect information
+        - Missing information
+        - Unclear instructions
+        - Broken link or image
+        - Outdated Claude Code behavior
+        - Accessibility or rendering problem
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong or difficult?
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested correction
+      description: Include a primary source when correcting Claude Code mechanics.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I checked the canonical page in `docs/wiki/`, not only a legacy compatibility pointer.
+          required: true

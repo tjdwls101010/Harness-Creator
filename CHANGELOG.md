@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+### Added
+
+- A research-backed discoverability dossier covering positioning, documentation architecture, visual direction, community distribution, launch sequencing, and directional measurement.
+- A canonical Diátaxis documentation set under `docs/wiki/`, with tutorials, how-to guides, reference, explanation, compact navigation, and compatibility pointers for the former flat pages through v1.0.
+- Repository-owned graphical abstracts, a verified archival copy of the original poster, support and security policies, Contributor Covenant 3.0, structured Issue Forms, and a pull-request template.
+- Python 3.10 and 3.14 CI, pull-request internal-link validation, non-blocking pull-request plus weekly/manual external-link validation, and weekly Dependabot updates for GitHub Actions. Every action is pinned to an immutable commit SHA.
+
+### Changed
+
+- Rewrote the README around the discovery-to-install path, with the interview-driven positioning, recommended plugin install, secondary skills CLI install, deliberate layer comparison, validation boundaries, and canonical documentation map.
+- Aligned plugin and marketplace metadata at version 0.3.0 with repository, homepage, and MIT license fields where supported.
+- Updated contribution guidance for the current test, validation, CI, documentation, support, and security workflows.
+- Prepared the approved repository description, topics, Wiki setting, and private vulnerability reporting changes for application after merge; no live setting or external channel was changed by this pull request.
+
 ## [0.3.0] — 2026-08-04
 
 Doctrine. The skill taught two filters for what earns its tokens and left a hole between them: nothing screened the sentences that *justify* a claim. A generator following both faithfully wrote a one-clause rule under three sentences of argument — and every harness this skill produces inherited that shape. This release closes the hole and then applies it to the skill's own surface.

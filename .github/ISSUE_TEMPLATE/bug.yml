@@ -1,0 +1,66 @@
+name: Bug report
+description: Report a reproducible Harness Creator defect.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Harness Creator. Remove secrets and private repository content from all examples.
+  - type: input
+    id: version
+    attributes:
+      label: Harness Creator version
+      description: Provide a release tag or commit SHA.
+      placeholder: v0.3.0
+    validations:
+      required: true
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Installation path
+      options:
+        - Claude Code plugin
+        - skills CLI
+        - Development symlink
+        - Source checkout only
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include Claude Code, Python, operating system, and shell versions when relevant.
+      placeholder: Claude Code …; Python …; macOS/Linux/Windows …
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: List the smallest exact commands, prompts, and fixture files that reproduce the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include sanitized error output or validation findings.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues and the troubleshooting guide.
+          required: true
+        - label: This report does not contain a security vulnerability or sensitive data.
+          required: true

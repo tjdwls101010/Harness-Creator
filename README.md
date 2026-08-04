@@ -1,194 +1,260 @@
 <div align="center">
 
-# harness-creator
+# Harness Creator
 
-**A meta-skill for [Claude Code](https://claude.com/claude-code) that designs, generates, validates, and maintains a complete harness for your project — through a structured interview.**
+**The interview-driven harness creator for Claude Code.**
 
-[![Version](https://img.shields.io/badge/version-0.1.0-blue)](CHANGELOG.md)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin%20%2B%20skill-8A63D2)](https://claude.com/claude-code)
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
+Preserve Claude’s judgment. Enforce only what must not fail.
 
-![](https://raw.githubusercontent.com/tjdwls101010/tjdwls101010/refs/heads/main/Images/ChatGPT%20Image%202026%E1%84%82%E1%85%A7%E1%86%AB%207%E1%84%8B%E1%85%AF%E1%86%AF%209%E1%84%8B%E1%85%B5%E1%86%AF%20%E1%84%8B%E1%85%A9%E1%84%92%E1%85%AE%2001_13_27.png)
+[![Latest release](https://img.shields.io/github/v/release/tjdwls101010/Harness-Creator?display_name=tag)](https://github.com/tjdwls101010/Harness-Creator/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-8A63D2)](https://claude.com/claude-code)
+[![Python](https://img.shields.io/badge/python-3.10%20%7C%203.14-blue.svg)](https://www.python.org/)
+[![CI](https://github.com/tjdwls101010/Harness-Creator/actions/workflows/ci.yml/badge.svg)](https://github.com/tjdwls101010/Harness-Creator/actions/workflows/ci.yml)
+
+[In 60 seconds](#1-harness-creator-in-60-seconds) · [Install](#2-install) · [Compare](#3-choose-your-approach) · [Layers](#4-seven-possible-layers) · [Docs](#8-documentation)
+
+<img src="https://github.com/tjdwls101010/tjdwls101010/blob/main/Images/Harness%20Creator.png?raw=true" alt="Harness Creator poster showing a Claude Code harness as the connection between a project and dependable agent behavior" width="440" />
+
+Canonical repository: **[github.com/tjdwls101010/Harness-Creator](https://github.com/tjdwls101010/Harness-Creator)**
 
 </div>
 
----
+## 1. Harness Creator in 60 seconds
 
-## The idea in one line
+Claude Code can already reason about a project. The hard part is deciding which project facts should always be present, which procedures should load only when needed, and which boundaries must be enforced by code rather than remembered from prose.
+
+Harness Creator handles that design work through a structured interview. It audits the repository, turns your intent into explicit needs, routes each need to the right Claude Code layer, generates the approved files, and validates their structure.
+
+Think of this as a design heuristic, not a literal definition:
 
 > **`ai-agent = ai-model + ai-harness`**
 
-The *model* is fixed — you get Claude's intelligence out of the box. What actually determines how well Claude works in **your** repo is the **harness**: the `CLAUDE.md`, rules, skills, hooks, permissions, agents, and workflows that tell it what this project needs and quietly keep it on the rails.
+The model supplies general capability. The harness supplies project-specific context, procedures, tools, permissions, and verification.
 
-A good harness is worth a lot. But building one by hand means knowing dozens of non-obvious mechanics — which hook exit code actually blocks (it's not the one you'd guess), when a matcher silently becomes a regex, why an `@path` import doesn't save context, which subagents skip your `CLAUDE.md` entirely — *and* asking yourself the right interview questions about your own project. Most people never get there, and the harnesses that do get built tend to rot.
+![Graphical abstract showing Project facts, User intent, and Non-negotiable constraints flowing through Audit, Interview, Route, Generate, and Validate to a Project-specific Claude Code harness, with outcomes of Judgment preserved and Boundaries enforced.](docs/assets/figures/intent-to-autonomy.png)
 
-**harness-creator** is the meta-layer that does it for you. You invoke it in a project; it interviews you, routes each thing you want to the right layer, generates the files, and refuses to call itself done until a deterministic linter passes with zero errors.
+*Harness Creator turns project facts, user intent, and hard constraints into adaptable behavior inside verified boundaries.*
 
-## Table of contents
+The result is not a generic bundle of files. It is a recorded answer to two questions:
 
-- [What it produces](#what-it-produces)
-- [Install](#install)
-- [Quickstart](#quickstart)
-- [How it works](#how-it-works)
-- [The tools it ships with](#the-tools-it-ships-with)
-- [Project layout](#project-layout)
-- [Documentation](#documentation)
-- [Status & limitations](#status--limitations)
-- [Design philosophy](#design-philosophy)
-- [Contributing](#contributing)
-- [License](#license)
+- Where should each identified need live?
+- What evidence will show that the resulting harness is structurally sound?
 
-## What it produces
+## 2. Install
 
-harness-creator can generate any subset of the seven harness layers, choosing each one deliberately rather than by default:
+### 2.1. Claude Code plugin — recommended
 
-| Layer | What it's for |
-|---|---|
-| **`CLAUDE.md`** | Project facts and constraints relevant to nearly every session. |
-| **`.claude/rules/*.md`** | Rules scoped to part of the tree via a `paths:` glob — loaded only when a matching file is touched. |
-| **`.claude/skills/`** | Procedures, playbooks, and domain knowledge that load on demand. |
-| **hooks + permissions** | The *enforcement* layer — deterministic guarantees for things that must (or must never) happen. |
-| **`.claude/agents/*.md`** | Context-isolated subagents for read-heavy roles (research, review, QA). |
-| **`.claude/workflows/*.js`** | Fixed-shape, repeatable orchestrations run as a one-button `/command`. |
-| **`.claude/harness-spec.md`** | A persisted spec — the single source of truth for what the harness contains and why. |
+Requirements:
 
-The heart of the skill is a **layer-routing framework**: for each behavior you want, it asks *is this enforced or advisory? when does it need to load? what does it cost?* — and those three answers name the layer. See **[The Layer-Routing Framework](docs/wiki/Layer-Routing.md)**.
+- [Claude Code](https://claude.com/claude-code)
+- Python 3.10 or later for the bundled standard-library scripts
+- Git
 
-## Install
-
-### Option A — plugin (recommended for using it across your projects)
+Add this repository as a Claude Code marketplace:
 
 ```bash
 claude plugin marketplace add tjdwls101010/Harness-Creator
+```
+
+Install the plugin:
+
+```bash
 claude plugin install harness-creator@harness-creator
 ```
 
-Invoked as `/harness-creator:harness-creator` (or just describe what you want in natural language — auto-triggering works the same).
+From the project that needs a harness, invoke:
 
-### Option B — symlink (recommended if you're hacking on this repo)
-
-```bash
-ln -s /path/to/harness-creator/.claude/skills/harness-creator ~/.claude/skills/harness-creator
-```
-
-Invoked as bare `/harness-creator`. Edits are reflected immediately in a fresh session — no plugin cache to refresh. Don't run both install paths on the same machine at once; the skill would register under two different names.
-
-**Requirements:** Claude Code, Python 3.10+ (for the bundled scripts — standard library only, no dependencies to install), and git.
-
-## Quickstart
-
-From inside the project you want a harness for:
-
-```
+```text
 /harness-creator:harness-creator
 ```
 
-or just:
+You can also describe the goal naturally:
 
-> "Set up a Claude Code harness for this project."
-
-What happens next:
-
-1. **Audit** — it inventories any existing `.claude/` setup and decides whether this is a new build, an extension, an improvement, or a drift-sync.
-2. **Interview** — a staged conversation (goals → behavior inventory → layer routing → component detail → validation plan), using structured questions to converge and open dialogue to explore. A running spec (`.claude/harness-spec.md`) records every decision.
-3. **Generate** — it writes the components, running its linter until zero errors.
-4. **Validate** — it offers free hook unit-tests and, with your consent, an end-to-end pass over real headless sessions.
-5. **Wrap up** — it records the change history, updates pointers, and proposes a commit.
-
-You stay in control the whole way: it asks before it assumes, and the spec is a written record of everything you agreed to.
-
-## How it works
-
-```
-Invocation
- └─ Phase 0. Audit           inventory .claude/, detect drift, pick a mode
- └─ Phase 1–N. Interview     staged questions, each gated on your approval, spec updated as you go
- └─ Generate                 load the right reference per component, write files, lint to zero errors
- └─ Offer validation         hook unit tests (free) + optional end-to-end run (with consent)
- └─ Wrap-up                  change history, pointer updates, propose a commit
+```text
+Set up a Claude Code harness for this project.
 ```
 
-The skill body stays small (~110 lines) and loads deeper guidance only when it's needed — one reference file per component type, at the moment it generates that component. This is **progressive disclosure**: split by *when content is needed*, not by volume. Read more in **[Concepts](docs/wiki/Concepts.md)**.
+### 2.2. Skills CLI — secondary
 
-## The tools it ships with
+Install only the skill for Claude Code with the skills CLI:
 
-Four parameterized command-line tools (Python 3.10+, standard library only) that the skill drives — and that you can run yourself:
+```bash
+npx skills add tjdwls101010/Harness-Creator --agent claude-code --skill harness-creator
+```
 
-| Tool | What it does |
+Invoke the installed skill as `/harness-creator` in a fresh Claude Code session.
+
+> [!WARNING]
+> Keep exactly one installation active. The Claude Code plugin, skills CLI installation, and development symlink must not be active at the same time; otherwise the same skill can be registered more than once under different names.
+
+### 2.3. Development symlink
+
+Contributors who are editing this repository can link the source directory directly:
+
+```bash
+ln -s "$(pwd)/.claude/skills/harness-creator" ~/.claude/skills/harness-creator
+```
+
+Use the symlink only for development. Remove or disable plugin and skills CLI installations first.
+
+### 2.4. First run
+
+Harness Creator begins with a read-only audit. It identifies the current harness state and suggests one of four re-entry modes:
+
+- `new` for a project without a harness;
+- `extend` for adding a new behavior;
+- `improve` for fixing an existing behavior;
+- `sync` for reconciling the persisted spec with files on disk.
+
+The interview then asks only for decisions the repository cannot answer on its own. Before generation, you approve the resulting spec.
+
+Follow the full guided path in [Create your first harness](docs/wiki/tutorials/first-harness.md).
+
+## 3. Choose your approach
+
+Harness Creator is one way to build a Claude Code harness. The right choice depends on how much discovery, routing, and maintenance support you need.
+
+| Approach | Project discovery | Layer decisions | Generation | Validation | Best fit |
+|---|---|---|---|---|---|
+| Manual configuration | You inspect everything | You make every decision | You write each file | You design the checks | Experts who want direct control |
+| Static template | Minimal | Mostly predetermined | Copy and edit | Usually manual | Similar projects with known conventions |
+| Component collection | Partial | You assemble the pieces | Reuse selected parts | Varies by component | Teams with an established internal system |
+| Harness Creator | Repository audit plus interview | Each need is routed deliberately | Approved project-specific components | Structural by default; behavioral E2E optional | Claude Code users who want a guided, inspectable process |
+
+Harness Creator does not remove judgment from the user or the model. It makes routing decisions explicit and records why each generated layer exists.
+
+## 4. Seven possible layers
+
+A harness can use any subset of seven layers:
+
+| Layer | Deliberate home for |
 |---|---|
-| [`validate_harness.py`](.claude/skills/harness-creator/scripts/validate_harness.py) | Deterministic lint of a harness: hooks, permissions, skills, agents, workflows, rules, `CLAUDE.md`, spec drift. Exits non-zero on any error. |
-| [`audit_harness.py`](.claude/skills/harness-creator/scripts/audit_harness.py) | Inventories an existing harness, reports spec-vs-disk drift, and suggests a re-entry mode. |
-| [`test_hook.py`](.claude/skills/harness-creator/scripts/test_hook.py) | Unit-tests a hook without a live session — reproduces matcher evaluation and explains what each exit code actually means. |
-| [`run_e2e.py`](.claude/skills/harness-creator/scripts/run_e2e.py) | Launches a headless `claude -p` session and parses its transcript for grading. |
+| `CLAUDE.md` | Project facts and conventions relevant to most sessions |
+| `.claude/rules/*.md` | Constraints scoped to particular paths or concerns |
+| `.claude/skills/` | Reusable procedures and domain knowledge loaded on demand |
+| Hooks and permissions | Deterministic checks, blocks, and tool boundaries |
+| `.claude/agents/*.md` | Context-isolated roles for focused work |
+| `.claude/workflows/*.js` | Repeatable orchestration with a fixed execution shape |
+| `.claude/harness-spec.md` | The persisted inventory, rationale, status, and change history |
 
-See **[The Scripts](docs/wiki/Scripts.md)** for full usage.
+> **Complete does not mean every layer. It means every identified need has a deliberate home, and no layer is generated without a reason.**
 
-## Project layout
+A small project may need only `CLAUDE.md`, a skill, and a spec. A hard security boundary may justify a hook or permission rule. A workflow or subagent is generated only when the interview identifies a case that benefits from it.
 
+See [Generated components](docs/wiki/reference/generated-components.md) for the exact responsibilities and tradeoffs of each layer.
+
+## 5. How it works
+
+The operating loop is:
+
+1. **Audit** — inspect existing Claude Code files, detect drift, and suggest a re-entry mode.
+2. **Interview** — establish goals, inventory needs, resolve component details, and define validation evidence.
+3. **Route** — assign each approved need to the least costly layer with enough authority.
+4. **Generate** — create only the approved components and update `.claude/harness-spec.md`.
+5. **Validate** — run deterministic structural checks, then offer optional behavioral end-to-end scenarios.
+
+Each interview stage ends in an approval gate. Simple requests compress the conversation, but generation still waits for explicit approval of the spec.
+
+The persisted spec matters because files show what exists, while the spec also records why a need was routed to one layer instead of another.
+
+Read [Interview and re-entry reference](docs/wiki/reference/interview-and-reentry.md) for the state model and [Layer routing](docs/wiki/explanation/layer-routing.md) for the decision framework.
+
+## 6. Validation
+
+Harness Creator separates two kinds of evidence.
+
+### 6.1. Structural validation
+
+Structural validation is deterministic and runs locally:
+
+```bash
+python3 .claude/skills/harness-creator/scripts/validate_harness.py --path .
 ```
-Harness-Creator/
-├── .claude-plugin/           # plugin + marketplace manifests
-├── .claude/skills/harness-creator/
-│   ├── SKILL.md              # the orchestrator
-│   ├── references/           # 8 per-component authoring guides (loaded on demand)
-│   └── scripts/              # 5 CLIs + a shared helper module
-├── docs/
-│   ├── plan/                 # design-rationale record (decisions + research)
-│   └── wiki/                 # this project's handbook
-├── tests/                    # 169 stdlib unittest cases + fixture harnesses
-├── CHANGELOG.md
-├── CONTRIBUTING.md
-└── LICENSE
+
+It checks harness shape: frontmatter, paths, references, hooks, permissions, rules, agents, workflows, imports, spec drift, and the always-loaded instruction budget. A clean result means the files satisfy those structural contracts.
+
+It does **not** prove that Claude will behave correctly in every task.
+
+### 6.2. Hook testing
+
+Generated command hooks can be exercised without a live session:
+
+```bash
+python3 .claude/skills/harness-creator/scripts/test_hook.py \
+  --settings .claude/settings.json \
+  --event PreToolUse \
+  --tool Bash
 ```
 
-## Documentation
+The tool reproduces matcher evaluation, runs the selected hook with realistic input, and explains the effect of its exit code and output channel.
 
-The full handbook lives in **[`docs/wiki/`](docs/wiki/Home.md)**:
+### 6.3. Optional behavioral end-to-end validation
 
-- **[Concepts](docs/wiki/Concepts.md)** — what a harness is and the mental model behind the skill
-- **[Getting Started](docs/wiki/Getting-Started.md)** — install and your first run, step by step
-- **[The Interview & Spec](docs/wiki/The-Interview.md)** — how the staged interview works
-- **[The Layer-Routing Framework](docs/wiki/Layer-Routing.md)** — the decision at the heart of the skill
-- **[Generated Components](docs/wiki/Generated-Components.md)** — the seven layers in detail
-- **[The Scripts](docs/wiki/Scripts.md)** — the four command-line tools
-- **[Validation & Testing](docs/wiki/Validation.md)** — the two-tier validation model
-- **[Re-entry Modes](docs/wiki/Re-entry-Modes.md)** — new / extend / improve / sync
-- **[Architecture & Internals](docs/wiki/Architecture.md)** — how the repo is wired and dogfoods itself
-- **[FAQ & Troubleshooting](docs/wiki/FAQ.md)**
+With your consent, `run_e2e.py` can launch a real headless Claude Code session against an isolated project copy and record a transcript for grading against the approved spec.
 
-The **design rationale** — the twelve binding decisions and the research behind every gotcha — is preserved separately in [`docs/plan/`](docs/plan/).
+This path can consume model tokens and may execute generated behavior, so it is separate from the default structural gate. See [Run E2E validation](docs/wiki/how-to/run-e2e-validation.md) before using it.
 
-## Status & limitations
+## 7. Philosophy
 
-v0.1.0 is complete and dogfooded end to end, but a few things are worth knowing going in:
+Harness Creator follows a simple division of responsibility:
 
-- **End-to-end permission handling is a documented best guess.** `run_e2e.py`'s headless permission flow (`--isolate` + `--dangerously-skip-permissions`) was built from documented behavior but never confirmed in the build environment (a spawned `claude` process couldn't authenticate there). Treat your first real e2e run as the actual verification.
-- **The interview can't be auto-tested.** `AskUserQuestion` doesn't exist in headless/subagent contexts, so the interview flow is validated by manual use, not automated e2e.
-- **Local-path plugin installs copy gitignored files** into the plugin cache (harmless; the GitHub-source install is clean).
+- Give the model principles and project context for cases that cannot be enumerated.
+- Use hooks, permissions, and tests for behavior that must block or be verified.
+- Load detailed procedures only when the task needs them.
+- Delete redundant instructions when evaluation shows they add no value.
 
-See the **[FAQ](docs/wiki/FAQ.md)** for the full list and workarounds.
+This preserves room for case-specific judgment without confusing advisory prose with enforcement.
 
-## Design philosophy
+![Two-lane graphical abstract: Principles and context flow through Model judgment to Adapt to the case; Non-negotiable constraints flow through Hooks, permissions, and tests to Block or verify; both converge on Adaptable behavior within verified boundaries.](docs/assets/figures/principles-and-verified-boundaries.png)
 
-A few principles shaped every file in this repo, and they're worth stating because they're unusual:
+*Principles guide adaptation; deterministic controls enforce the boundaries that cannot be left to interpretation.*
 
-- **Preserve the model's intelligence; add capability, don't cage it.** Define purpose and direction clearly, but don't hard-code the method — a rule with no reasoning behind it snaps on the first case its author didn't foresee.
-- **Principle over rule.** Explain *why* a choice is good so the model can re-derive it. The litmus test: could a capable model reconstruct the rule from the reasoning alone?
-- **Don't write what the model already knows.** The tokens worth spending are the **gotchas** — the traps you only learn by being burned once.
-- **Progressive disclosure is a trade-off, not a default.** Split a file only when the reader genuinely branches at that seam; over-splitting causes silent routing failures.
-- **Enforcement belongs in code, advice belongs in prose.** Anything that must never be violated is a hook or a permission rule, not a hopeful sentence in `CLAUDE.md`.
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=qyPCVqFUyDo&amp;t=740s">
+    <img src="https://i.ytimg.com/vi/qyPCVqFUyDo/maxresdefault.jpg" alt="Watch Boris Cherny discuss reducing redundant Claude Code prompt constraints" width="720" />
+  </a><br />
+  <sub><a href="https://www.youtube.com/watch?v=qyPCVqFUyDo&amp;t=740s">Watch Boris Cherny discuss the empirical removal of redundant prompt constraints (starts at 12:20).</a></sub>
+</p>
 
-More in [Concepts](docs/wiki/Concepts.md) and [`docs/plan/`](docs/plan/).
+Read [Principles and verified boundaries](docs/wiki/explanation/principles-and-verified-boundaries.md) for the full argument and annotated primary sources.
 
-## Contributing
+## 8. Documentation
 
-Contributions are welcome — see **[CONTRIBUTING.md](CONTRIBUTING.md)**. The short version: develop via the symlink, run `validate_harness.py` and the test suite before a PR, keep the scripts dependency-free, and verify every Claude Code mechanic against a primary source before you write it down.
+The canonical documentation lives in [`docs/wiki/`](docs/wiki/README.md) and is organized by reader need.
 
-## License
+| Need | Start here |
+|---|---|
+| Learn by building | [Create your first harness](docs/wiki/tutorials/first-harness.md) |
+| Improve an existing setup | [Improve an existing harness](docs/wiki/tutorials/improve-an-existing-harness.md) |
+| Complete a specific task | [How-to guides](docs/wiki/README.md#how-to-guides) |
+| Look up exact behavior | [Reference](docs/wiki/README.md#reference) |
+| Understand the design | [Explanation](docs/wiki/README.md#explanation) |
 
-[MIT](LICENSE) © 2026 seongjin
+High-use pages:
 
-## Acknowledgments
+- [Install and update](docs/wiki/how-to/install-and-update.md)
+- [Validate a harness](docs/wiki/how-to/validate-a-harness.md)
+- [Troubleshooting](docs/wiki/how-to/troubleshooting.md)
+- [CLI reference](docs/wiki/reference/cli.md)
+- [Support, compatibility, and limitations](docs/wiki/reference/support-compatibility-and-limitations.md)
+- [Architecture](docs/wiki/explanation/architecture.md)
+- [FAQ](docs/wiki/reference/faq.md)
 
-Built on [Claude Code](https://claude.com/claude-code) and its extension surfaces. The gotcha inventory that gives the skill its value was researched against the official Claude Code documentation; the reasoning behind each decision is preserved in [`docs/plan/`](docs/plan/).
+## 9. Contributing and support
+
+Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup, documentation conventions, and required checks.
+
+Use [SUPPORT.md](SUPPORT.md) to choose the right route for a question, bug, feature request, documentation problem, or security report. General support is best effort and has no response-time guarantee.
+
+Please follow the [Code of Conduct](CODE_OF_CONDUCT.md) in all project spaces.
+
+## 10. Security
+
+Do not report vulnerabilities in a public issue. Follow [SECURITY.md](SECURITY.md) and use GitHub private vulnerability reporting.
+
+Only the latest tagged release receives best-effort security support. No response or fix SLA is promised.
+
+## 11. License
+
+Harness Creator is available under the [MIT License](LICENSE).
