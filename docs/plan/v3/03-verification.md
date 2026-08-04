@@ -174,6 +174,40 @@ claim 추출은 이걸 기계적 문제로 바꾼다. **원본에서 원자적 �
 
 **검출력이 검증되지 않은 안전망은 헛된 안전감이고, 그게 앵커 grep만 믿었던 v2보다 나쁘다.**
 
+### 3.5.1 실행 결과 — **통과** (2026-08-04, `agents.md`)
+
+**씨앗 설계: 삭제가 아니라 약화로 심었다.** `once: true`가 에이전트 프론트매터 훅에서 조용히 무시된다는 `silent-failure` claim을, **리터럴 토큰 `once: true`를 남긴 채** 다음으로 바꿨다:
+
+```
+원문   One field is skill-only and silently does nothing here: `once: true` … is honored
+       on a hook declared in a *skill's* frontmatter, but has no effect on an
+       agent-frontmatter hook — … since nothing will tell you it was ignored.
+씨앗   `once: true` (run once per session, then remove itself) is available on frontmatter hooks.
+```
+
+**이 씨앗은 grep도 `GuardrailTests` 앵커도 통과한다** — 토큰이 그대로 있기 때문이다. ④(b)가 구조적으로 못 잡는 유일한 종류의 손실이고, 그래서 ⑤만이 잡을 수 있다.
+
+| 판정자 | 씨앗 검출 | 등급 |
+|---|---|---|
+| 1 | ✅ | critical |
+| 2 | ✅ | critical |
+| 3 | ✅ | critical |
+
+**3/3 검출. ⑤의 검출력이 확인됐다.** 셋 다 핵심을 정확히 짚었다 — 남은 문장이 claim을 지운 게 아니라 **뒤집는다**는 것. 판정자 2: *"Placed in a section entirely about agent-frontmatter hooks, the remaining sentence reads as asserting `once: true` DOES work there — the opposite of the original claim."*
+
+**거짓 양성률 (의도치 않게 더 나은 대조군으로 측정됨).** 설계한 대조군은 무효가 됐다 — 워크플로우가 도는 중에 압축본을 repo에 적용해서 대조 판정자가 읽은 "원본"이 이미 압축본이었다. **워크플로우가 참조하는 파일을 워크플로우 실행 중에 바꾸지 말 것.** 다만 경쟁 조건 덕에 판정자 3이 *진짜 원본* vs 적용된 압축본을 읽었고, 그게 구현자의 판정을 모르는 독립 대조군이 됐다:
+
+| 판정자 3이 보고한 비-씨앗 항목 | 등급 | 구현자의 사전 판정 |
+|---|---|---|
+| "validation script should catch mechanically" 프레이밍 소실 | moderate | 허용으로 판정했음 → **복원함** (§2.2 moderate = 복원 후 통과) |
+| inherit의 "cost/capability tradeoff" 절 | minor | 허용 |
+| "number fixed before the domain is even known" | minor | 허용 |
+| "default-maximal antipattern" 명명 | minor | 허용 |
+
+**critical 거짓 양성 0건.** 판정자가 깨끗한 압축본에서 없는 critical을 지어내지 않는다는 뜻이고, 이게 ⑤를 신뢰할 수 있는 조건이다. 나머지 4건 중 3건은 구현자와 판정이 일치했고, 불일치한 1건은 계획의 심각도 표에 따라 복원했다.
+
+**결론: 나머지 7개 파일 진행 가능.**
+
 ### 3.6 부수 발견 — 에이전트의 자기 보고 단어 수를 믿지 말 것
 
 압축 에이전트가 `compressedWords: 3093`을 보고했는데 `wc -w`로는 3,180이었다. **단어 수는 반드시 파일에서 직접 측정한다.**
