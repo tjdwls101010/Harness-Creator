@@ -92,6 +92,6 @@ If you touch a script, add or update a case in the matching `tests/test_*.py` an
 
 ## See also
 
-- [Scripts.md](Scripts.md) — the four CLIs and the shared helper, in detail.
+- [Scripts.md](Scripts.md) — the five CLIs and the shared helper, in detail.
 - [Generated-Components.md](Generated-Components.md) — the standard output shape this repo dogfoods.
 - [Concepts.md](Concepts.md) — the mental model behind the whole tool.

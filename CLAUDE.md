@@ -5,7 +5,7 @@ This repo builds `harness-creator`, a meta-skill that designs, generates, and va
 ## Where things live
 
 - The skill itself: [.claude/skills/harness-creator/](.claude/skills/harness-creator/) — `SKILL.md` is the orchestrator, `references/` holds per-component authoring guides, `scripts/` holds the Python CLIs it calls.
-- The binding implementation spec: [docs/plan/](docs/plan/) — `00-overview.md` through `06-milestones.md`, plus `research/` for the primary-source research behind each gotcha. Treat `docs/plan/` as the source of truth for design decisions (D1-D12 in `00-overview.md` §3); if you change one, edit the plan doc and record why.
+- The binding implementation spec: [docs/plan/](docs/plan/), one directory per generation with the newest last — start at the highest-numbered one's `00-overview.md`, which carries that generation's decision log and says which earlier decisions it revises. Earlier generations stay as written; they are the citation record, not a live spec. If you change a decision, edit the newest generation's plan and record why.
 - Self-test fixtures for the scripts: `tests/fixtures/` at the repo root, not inside the skill — anything under the skill directory ships to plugin users, so dev-only fixtures stay outside it.
 - Local reference snapshots the plan was researched against: `.tmp/docs_claude/` and `.tmp/skill-creator/` — gitignored, not part of this repo's own history.
 
