@@ -7,7 +7,7 @@ All notable changes to this project are documented here. The format is based on 
 ### Added
 
 - A research-backed discoverability dossier covering positioning, documentation architecture, visual direction, community distribution, launch sequencing, and directional measurement.
-- A canonical Diátaxis documentation set under `docs/wiki/`, with tutorials, how-to guides, reference, explanation, compact navigation, and compatibility pointers for the former flat pages through v1.0.
+- A canonical Diátaxis documentation set under `docs/wiki/`, with tutorials, how-to guides, reference, explanation, and compact navigation.
 - Repository-owned graphical abstracts, a verified archival copy of the original poster, support and security policies, Contributor Covenant 3.0, structured Issue Forms, and a pull-request template.
 - Python 3.10 and 3.14 CI, pull-request internal-link validation, non-blocking pull-request plus weekly/manual external-link validation, and weekly Dependabot updates for GitHub Actions. Every action is pinned to an immutable commit SHA.
 
@@ -19,6 +19,7 @@ All notable changes to this project are documented here. The format is based on 
 - Prepared the approved repository description, topics, Wiki setting, and private vulnerability reporting changes for post-merge application in the documentation overhaul.
 - Applied the approved repository metadata and security settings after merge, verified isolated skills CLI installation and skills.sh indexing, and updated the distribution plan to Anthropic's current authenticated in-app submission route.
 - Submitted Harness Creator to Anthropic's plugin directory for Claude Code and recorded the review status, channel metrics, and downstream 72-hour distribution gate.
+- Consolidated the tracked wiki from 34 files to 16, removing legacy pointer pages and grouping related maintenance, validation, reference, and design material into clearer reader paths.
 
 ## [0.3.0] — 2026-08-04
 

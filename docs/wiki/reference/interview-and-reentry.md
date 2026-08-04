@@ -58,4 +58,4 @@ After generation, Harness Creator validates the final state, updates component s
 
 ## 8. Next
 
-Read [Harness spec](harness-spec.md) for the file schema or [Layer routing](../explanation/layer-routing.md) for I3's decision model. Return to the [documentation index](../README.md).
+Read [Harness reference](harness.md) for the file schema or [Layer routing](../explanation/layer-routing.md) for I3's decision model. Return to the [documentation index](../README.md).

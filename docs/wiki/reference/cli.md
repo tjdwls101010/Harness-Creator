@@ -92,7 +92,7 @@ python3 /path/to/Harness-Creator/.claude/skills/harness-creator/scripts/run_e2e.
 | `--permission-mode MODE` | Pass a Claude Code permission mode |
 | `--isolate` | Copy the project before running |
 
-Read [Run E2E validation](../how-to/run-e2e-validation.md) before using this command. It can consume tokens and its headless permission behavior is not a universal safety guarantee.
+Read [Behavioral E2E validation](../how-to/validate-a-harness.md#4-behavioral-e2e-validation) before using this command. It can consume tokens and its headless permission behavior is not a universal safety guarantee.
 
 ## 6. Internal helper
 
@@ -100,4 +100,4 @@ Read [Run E2E validation](../how-to/run-e2e-validation.md) before using this com
 
 ## 7. Next
 
-Use [Validate a harness](../how-to/validate-a-harness.md), [Test hooks](../how-to/test-hooks.md), or [Synchronize drift](../how-to/sync-drift.md) for task-oriented instructions. Return to the [documentation index](../README.md).
+Use [Validate a harness](../how-to/validate-a-harness.md) for structural, hook, and E2E evidence, or [Maintain an existing harness](../how-to/maintain-a-harness.md) for extension and drift work. Return to the [documentation index](../README.md).

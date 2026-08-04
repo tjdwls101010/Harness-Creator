@@ -62,4 +62,4 @@ Improve mode applies routing in reverse. If advisory context repeatedly fails fo
 
 ## 8. Next
 
-Look up each destination in [Generated components](../reference/generated-components.md) or see the implementation flow in [Architecture](architecture.md). Return to the [documentation index](../README.md).
+Look up each destination in [Harness reference](../reference/harness.md) or see the implementation flow in [Architecture](architecture.md). Return to the [documentation index](../README.md).

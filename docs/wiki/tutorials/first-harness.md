@@ -90,7 +90,7 @@ python3 /path/to/Harness-Creator/.claude/skills/harness-creator/scripts/validate
 
 A clean result means the generated files satisfy the validator's structural contracts. It does not prove behavior in every future task.
 
-If the harness includes command hooks, continue with [Test hooks](../how-to/test-hooks.md). If you approved behavioral scenarios, read [Run E2E validation](../how-to/run-e2e-validation.md) before spending tokens.
+If the harness includes command hooks, continue with [hook testing](../how-to/validate-a-harness.md#3-test-command-hooks). If you approved behavioral scenarios, read the [behavioral E2E guidance](../how-to/validate-a-harness.md#4-behavioral-e2e-validation) before spending tokens.
 
 ## 8. Record the result
 
