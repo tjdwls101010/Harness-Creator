@@ -18,6 +18,7 @@ All notable changes to this project are documented here. The format is based on 
 - Updated contribution guidance for the current test, validation, CI, documentation, support, and security workflows.
 - Prepared the approved repository description, topics, Wiki setting, and private vulnerability reporting changes for post-merge application in the documentation overhaul.
 - Applied the approved repository metadata and security settings after merge, verified isolated skills CLI installation and skills.sh indexing, and updated the distribution plan to Anthropic's current authenticated in-app submission route.
+- Submitted Harness Creator to Anthropic's plugin directory for Claude Code and recorded the review status, channel metrics, and downstream 72-hour distribution gate.
 
 ## [0.3.0] — 2026-08-04
 
