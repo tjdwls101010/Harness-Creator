@@ -10,13 +10,13 @@ Before writing a hook, ask: **must this never be violated?** If the answer is "i
 
 That question can't do the work alone, because asked whether something matters, people say yes. Ask a second one that can come back negative: **what does a violation cost, and is something already catching it?** CI, a review, or a type checker already catching it means the hook only moves the failure earlier and bills every tool call for the privilege; cheap to undo means the same. What's left — expensive or irreversible *and* uncaught downstream — is the set worth generating. "We'd fix it in review" is the signal to route back to prose.
 
-This test matters because hooks are not free. Every hook adds a process spawn to the relevant lifecycle point, which is latency the user pays on every matching event whether or not anything was actually wrong. A `PreToolUse` hook on `Bash` runs on every single shell command for the rest of the session. Beyond latency, a harness with hooks scattered across every plausible concern starts fighting the model instead of guiding it — legitimate edge cases the interview didn't anticipate get blocked alongside the genuine violations, and the user ends up fighting their own harness. Reserve hooks for the small set of points where determinism is worth that cost: protecting a path from ever being edited, guaranteeing a formatter always runs, blocking a category of command outright. Everything softer is advisory, and advisory belongs in a layer that's cheap to override when the 16th case you didn't think of shows up.
+Hooks are not free. Every hook adds a process spawn to the relevant lifecycle point, which is latency the user pays on every matching event whether or not anything was actually wrong. A `PreToolUse` hook on `Bash` runs on every single shell command for the rest of the session. Beyond latency, a harness with hooks scattered across every plausible concern starts fighting the model instead of guiding it — legitimate edge cases the interview didn't anticipate get blocked alongside the genuine violations. Reserve hooks for the small set of points where determinism is worth that cost: protecting a path from ever being edited, guaranteeing a formatter always runs, blocking a category of command outright. Everything softer is advisory, and advisory belongs in a layer that's cheap to override.
 
 ## Hard guarantees need a permission-rule pair, not a hook alone
 
 A `PreToolUse` hook's `if` field looks like a filter, but it is best-effort: it fails open on Bash commands it can't parse, and the official Claude Code documentation itself says explicitly that hard allow/deny decisions belong in the permission system, not in a hook's `if` condition. A hook is therefore the wrong tool for a guarantee on its own.
 
-The practical implication: whenever the interview surfaces a "must never happen" item — protected file, forbidden command, dangerous directory — generate **both** a `PreToolUse` hook (for the rich feedback message Claude sees when it tries and fails, so it can adapt its approach) **and** a matching `permissions.deny` rule (for the guarantee that actually can't be bypassed, including in `bypassPermissions` mode). The hook without the deny rule is a suggestion with good error messages; the deny rule without the hook is a hard wall with a generic client-side message. Together they give Claude both the wall and the explanation for why it hit the wall.
+Whenever the interview surfaces a "must never happen" item — protected file, forbidden command, dangerous directory — generate **both** a `PreToolUse` hook (for the rich feedback message Claude sees when it tries and fails, so it can adapt its approach) **and** a matching `permissions.deny` rule (for the guarantee that actually can't be bypassed, including in `bypassPermissions` mode). The hook without the deny rule is a suggestion with good error messages; the deny rule without the hook is a hard wall with a generic client-side message.
 
 ## Where hook scripts live and how settings.json references them
 
@@ -32,7 +32,7 @@ Reference that script from `settings.json` using **exec form** — an `args` arr
 }
 ```
 
-Three reasons this specific shape, not something else: first, `${CLAUDE_PROJECT_DIR}` is what makes the hook resolve correctly regardless of the directory Claude Code happens to be `cwd`'d into when the hook fires — a relative path silently breaks the moment a subagent or a `cd` changes the working directory mid-session. Second, `args` being present (even as an empty array) is what switches Claude Code to exec form: no shell, no quoting rules, no risk of a path containing a space or an apostrophe breaking tokenization — the executable is resolved and spawned directly, and each `args` element passes through verbatim. Third, a real file under version control is diffable, testable in isolation with `echo '{...}' | ./script.sh`, and survives being read back by a future session in a way an inline shell string embedded in JSON does not.
+First, `${CLAUDE_PROJECT_DIR}` is what makes the hook resolve correctly regardless of the directory Claude Code happens to be `cwd`'d into when the hook fires — a relative path silently breaks the moment a subagent or a `cd` changes the working directory mid-session. Second, `args` being present (even as an empty array) is what switches Claude Code to exec form: no shell, no quoting rules, no risk of a path containing a space or an apostrophe breaking tokenization — the executable is resolved and spawned directly, and each `args` element passes through verbatim. Third, a real file under version control is diffable, testable in isolation with `echo '{...}' | ./script.sh`, and survives being read back by a future session in a way an inline shell string embedded in JSON does not.
 
 ## Hooks can also live in a skill's or agent's own frontmatter
 
@@ -55,7 +55,7 @@ One field here has no settings.json equivalent: `once: true` on a handler makes 
 
 Command paths here resolve relative to the skill's own directory, not `${CLAUDE_PROJECT_DIR}` — a different convention from every settings.json recipe in this file, so don't copy a `${CLAUDE_PROJECT_DIR}`-anchored command into a skill's frontmatter unchanged. The substitutions actually documented as available inside a hook's `command` field are `${CLAUDE_PROJECT_DIR}`, `${CLAUDE_PLUGIN_ROOT}`, and `${CLAUDE_PLUGIN_DATA}` — `${CLAUDE_SKILL_DIR}` is a convention for referencing scripts from a skill's own *body* text (what the model reads and acts on), not a substitution Claude Code performs inside a hook's execution environment; treat it as unverified in a `command` field until you've confirmed otherwise against a real run.
 
-This mechanism is a real way for a skill to self-enforce something automatically instead of just telling the model to remember to check it — but it isn't automatically the right call just because it's available. Eligibility still runs through the same test as any other hook: a `PostToolUse` hook that fires on every `Edit|Write` a skill's own generation process makes will fire on every incomplete mid-draft edit, not just on a finished component, which is exactly the over-firing failure mode the eligibility test above warns about — the fix for "the model might forget to validate" is usually a clearer instruction at the right checkpoint in the skill's own body, not a hook racing ahead of the model's own judgment about when a component is actually done.
+Eligibility still runs through the same test as any other hook: a `PostToolUse` hook that fires on every `Edit|Write` a skill's own generation process makes will fire on every incomplete mid-draft edit, not just on a finished component, which is exactly the over-firing failure mode the eligibility test above warns about — the fix for "the model might forget to validate" is usually a clearer instruction at the right checkpoint in the skill's own body, not a hook racing ahead of the model's own judgment about when a component is actually done.
 
 ## Every generated hook must be verified with test_hook.py before delivery
 
@@ -133,11 +133,11 @@ Two edges: `.claude/settings.local.json` is normally exempt as the user's own fi
 | `dontAsk` | **Denied** |
 | `bypassPermissions` | Allowed |
 
-Design around the `dontAsk` row: it's the CI mode, so a harness that writes into `.claude/` during setup works on a laptop and silently fails in the pipeline. In the prompting modes, the one detail worth passing on is that the `.claude/` prompt offers **"Yes, and allow Claude to edit its own settings for this session."**
+Design around the `dontAsk` row: it's the CI mode, so a harness that writes into `.claude/` during setup works on a laptop and silently fails in the pipeline. In the prompting modes, the `.claude/` prompt offers **"Yes, and allow Claude to edit its own settings for this session."**
 
 ### Only narrow allow rules are worth generating — broad ones get dropped in auto mode
 
-When a session enters auto mode, Claude Code automatically suspends broad allow rules that grant arbitrary code execution: a blanket `Bash(*)` or `PowerShell(*)`, wildcarded interpreters like `Bash(python*)`, package-manager run commands, and `Agent` allow rules. Narrow rules like `Bash(npm test)` carry over untouched. The practical consequence for a generator: **a broad allow rule has no durable value** in a harness that might ever run under auto mode — it works in `default`/`acceptEdits` mode and silently stops covering anything the moment the user switches to auto. Generate narrow, specific allow rules (`Bash(npm test)`, `Bash(git status)`) rather than broad ones (`Bash(*)`), both because narrow rules are what the interview should actually be surfacing (specific, named, safe commands) and because narrow rules are the only kind guaranteed to keep working across every permission mode.
+When a session enters auto mode, Claude Code automatically suspends broad allow rules that grant arbitrary code execution: a blanket `Bash(*)` or `PowerShell(*)`, wildcarded interpreters like `Bash(python*)`, package-manager run commands, and `Agent` allow rules. Narrow rules like `Bash(npm test)` carry over untouched. **A broad allow rule has no durable value** in a harness that might ever run under auto mode — it works in `default`/`acceptEdits` mode and silently stops covering anything the moment the user switches to auto. Generate narrow, specific allow rules (`Bash(npm test)`, `Bash(git status)`) rather than broad ones (`Bash(*)`), both because narrow rules are what the interview should actually be surfacing (specific, named, safe commands) and because narrow rules are the only kind guaranteed to keep working across every permission mode.
 
 ### `defaultMode: "auto"` is ignored in the settings file this skill writes
 
@@ -149,7 +149,7 @@ This matters here more than most gotchas because project `settings.json` is a fi
 
 Claude Code parses shell compound-command separators (`&&`, `||`, `;`, `|`, `|&`, `&`, newlines) and requires **each sub-command independently** to match an allow rule before the whole compound command is approved without a prompt — a rule like `Bash(npm test)` does not implicitly bless `npm test && rm -rf build` just because the first half matches. When generating allow rules meant to smooth over a specific workflow, remember the workflow's compound commands need every clause covered, not just the first one visible in the interview transcript.
 
-Separately: a trailing `*` preceded by a space, as in `Bash(ls *)`, enforces a **word boundary** — it requires the prefix to be followed by a space or end-of-string, so `Bash(ls *)` matches `ls -la` but does **not** match `lsof`, even though `lsof` starts with the same three characters. Writing `Bash(ls*)` with no space removes that boundary and matches both. This is an easy rule to get backwards when generating allowlists quickly — always include the space before the trailing `*` unless you specifically intend a prefix match with no word boundary.
+Separately: a trailing `*` preceded by a space, as in `Bash(ls *)`, enforces a **word boundary** — it requires the prefix to be followed by a space or end-of-string, so `Bash(ls *)` matches `ls -la` but does **not** match `lsof`, even though `lsof` starts with the same three characters. Writing `Bash(ls*)` with no space removes that boundary and matches both. Always include the space before the trailing `*` unless you specifically intend a prefix match with no word boundary.
 
 ## The router: which event for which job
 
@@ -158,7 +158,7 @@ Full schema for every event lives in `references/hooks-events.md`. This table is
 | Event | One-line purpose |
 |---|---|
 | `SessionStart` | Inject context or set up environment when a session begins or resumes. |
-| `Setup` | One-time preparation on `--init-only`/`--init`/`--maintenance`, outside normal session start. |
+| `Setup` | One-time preparation for CI or scripts. Never on normal startup. |
 | `InstructionsLoaded` | Observe when CLAUDE.md or a rules file loads — audit/logging only, no decision control. |
 | `UserPromptSubmit` | Inject context alongside a prompt, or block the prompt before Claude sees it. |
 | `UserPromptExpansion` | Catch the direct `/skillname` path that bypasses `PreToolUse` on the Skill tool. |
@@ -184,9 +184,9 @@ Full schema for every event lives in `references/hooks-events.md`. This table is
 | `WorktreeRemove` | Clean up after a non-git `WorktreeCreate`. |
 | `PreCompact` | Block compaction, or let it proceed. |
 | `PostCompact` | React after compaction completes — log the summary, refresh external state. |
-| `SessionEnd` | Cleanup/logging on session end. Very short default timeout — see gotchas above. |
 | `Elicitation` | Answer an MCP server's mid-task input request programmatically, skipping the dialog. |
 | `ElicitationResult` | Observe or override the user's elicitation response before it reaches the MCP server. |
+| `SessionEnd` | Cleanup/logging on session end. Very short default timeout — see gotchas above. |
 
 ## Three recipes
 
@@ -216,7 +216,7 @@ Each recipe below is deliberately dense: the `settings.json` entry plus a one-li
 }
 ```
 
-`protect-files.sh` reads `tool_input.file_path` from stdin, checks it against a protected-pattern list, and `exit 2` with a stderr reason on a match, `exit 0` otherwise — this is the belt. The `permissions.deny` block is the suspenders: even if the hook script has a bug, or a permission mode change bypasses the hook layer somehow, the deny rule holds on its own, including under `bypassPermissions`. Generate both, per the hard-guarantee principle above. Note the matcher covers `Edit|Write` but not `Bash` — if the interview flagged that Claude sometimes edits files via shell redirection in this project, add `Bash` to the matcher and inspect the command in the script, or add a `Stop`-time `git status --porcelain` scan as a backstop.
+`protect-files.sh` reads `tool_input.file_path` from stdin, checks it against a protected-pattern list, and `exit 2` with a stderr reason on a match, `exit 0` otherwise. Generate both, per the hard-guarantee principle above. Note the matcher covers `Edit|Write` but not `Bash` — if the interview flagged that Claude sometimes edits files via shell redirection in this project, add `Bash` to the matcher and inspect the command in the script, or add a `Stop`-time `git status --porcelain` scan as a backstop.
 
 ### Recipe 2 — post-edit auto-formatter
 
@@ -224,6 +224,6 @@ Each recipe below is deliberately dense: the `settings.json` entry plus a one-li
 
 ### Recipe 3 — Stop-time validation gate
 
-`Stop` (no matcher — it isn't a tool event) pointing at `check-tests.sh`, which reads `stop_hook_active` from stdin first and exits 0 immediately if it's `true` (loop guard — see the gotcha above); otherwise it runs the test suite, and if tests fail, prints a JSON object with `decision: "block"` and a `reason` describing what's failing, then exits 0 (JSON decision channel, not the exit-2 channel, since `Stop` reads the top-level `decision` field rather than relying on exit code alone for this event). No permission-rule pair is needed here — a `Stop` hook isn't blocking a *tool call*, it's keeping the turn going, so there's no allow/deny rule that would express the same guarantee more strongly. The loop guard plus the built-in 8-consecutive-block cap are what keep this safe from becoming an infinite loop if the tests never pass.
+`Stop` (no matcher — it isn't a tool event) pointing at `check-tests.sh`, which reads `stop_hook_active` from stdin first and exits 0 immediately if it's `true` (loop guard — see the gotcha above); otherwise it runs the test suite, and if tests fail, prints a JSON object with `decision: "block"` and a `reason` describing what's failing, then exits 0 (JSON decision channel, not the exit-2 channel, since `Stop` reads the top-level `decision` field rather than relying on exit code alone for this event). No permission-rule pair is needed here — a `Stop` hook isn't blocking a *tool call*, it's keeping the turn going, so there's no allow/deny rule that would express the same guarantee more strongly.
 
-**Price this one before generating it.** `Stop` is a once-per-turn event, so unlike a `PreToolUse` hook that only wakes on a matching tool, this cost lands on *every* turn — including the turns where Claude answered a question and touched nothing. A hook that shells out to a full test suite turns every reply into a test run. And the usual escape hatch doesn't apply here: `async: true` makes a hook non-blocking, but Claude Code then ignores its output completely — no stdout, no JSON parsing, no exit codes — so an async `Stop` hook cannot block, which is the entire point of this recipe. (`asyncRewake: true` is a middle path: it runs in the background and wakes Claude on exit 2, which suits a slow check that should interrupt later rather than gate now.) Either scope the check to something cheap, gate it inside the script on whether any relevant file actually changed this turn, or accept the per-turn cost deliberately.
+**Price this one before generating it.** `Stop` is a once-per-turn event, so unlike a `PreToolUse` hook that only wakes on a matching tool, this cost lands on *every* turn — including the turns where Claude answered a question and touched nothing. `async: true` makes a hook non-blocking, but Claude Code then ignores its output completely — no stdout, no JSON parsing, no exit codes — so an async `Stop` hook cannot block, which is the entire point of this recipe. (`asyncRewake: true` is a middle path: it runs in the background and wakes Claude on exit 2, which suits a slow check that should interrupt later rather than gate now.) Either scope the check to something cheap, gate it inside the script on whether any relevant file actually changed this turn, or accept the per-turn cost deliberately.
