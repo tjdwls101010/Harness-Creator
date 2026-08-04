@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Support and troubleshooting
+    url: https://github.com/tjdwls101010/Harness-Creator/blob/main/SUPPORT.md
+    about: Choose the right support route before opening an issue.
+  - name: Private security report
+    url: https://github.com/tjdwls101010/Harness-Creator/security/advisories/new
+    about: Report vulnerabilities privately. Do not open a public issue.

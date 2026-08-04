@@ -1,24 +1,26 @@
-### harness-creator
-
-**[Home](Home.md)**
-
-**Understand it**
-- [Concepts](Concepts.md)
-- [Layer-Routing Framework](Layer-Routing.md)
-- [Generated Components](Generated-Components.md)
-
-**Use it**
-- [Getting Started](Getting-Started.md)
-- [The Interview & Spec](The-Interview.md)
-- [Re-entry Modes](Re-entry-Modes.md)
-- [Validation & Testing](Validation.md)
-- [The Scripts](Scripts.md)
-
-**Go deeper**
-- [Architecture & Internals](Architecture.md)
-- [FAQ & Troubleshooting](FAQ.md)
-
----
-- [README](../../README.md)
-- [Changelog](../../CHANGELOG.md)
-- [Contributing](../../CONTRIBUTING.md)
+- [Documentation home](README.md)
+- [Overview](Overview.md)
+- **Tutorials**
+  - [First harness](tutorials/first-harness.md)
+  - [Improve a harness](tutorials/improve-an-existing-harness.md)
+- **How-to**
+  - [Install and update](how-to/install-and-update.md)
+  - [Extend](how-to/extend-a-harness.md)
+  - [Sync drift](how-to/sync-drift.md)
+  - [Validate](how-to/validate-a-harness.md)
+  - [Test hooks](how-to/test-hooks.md)
+  - [Run E2E](how-to/run-e2e-validation.md)
+  - [Troubleshoot](how-to/troubleshooting.md)
+- **Reference**
+  - [Generated components](reference/generated-components.md)
+  - [CLI](reference/cli.md)
+  - [Interview and re-entry](reference/interview-and-reentry.md)
+  - [Harness spec](reference/harness-spec.md)
+  - [Support and limitations](reference/support-compatibility-and-limitations.md)
+  - [FAQ](reference/faq.md)
+- **Explanation**
+  - [Why harnesses](explanation/why-harnesses.md)
+  - [Layer routing](explanation/layer-routing.md)
+  - [Architecture](explanation/architecture.md)
+  - [Progressive disclosure](explanation/progressive-disclosure.md)
+  - [Principles and boundaries](explanation/principles-and-verified-boundaries.md)
