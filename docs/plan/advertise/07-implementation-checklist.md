@@ -34,9 +34,13 @@
 
 ## After merge
 
-- [ ] Apply approved GitHub metadata and feature settings.
-- [ ] Enable private vulnerability reporting and verify the reporting route.
-- [ ] Complete the isolated skills CLI installation and cleanup.
-- [ ] Confirm skills.sh availability.
-- [ ] Record the immediate post-merge snapshot.
-- [ ] Request approval before each external submission.
+- [x] Apply approved GitHub metadata and feature settings.
+- [x] Enable private vulnerability reporting and verify the reporting route.
+- [x] Complete the isolated skills CLI installation and cleanup.
+- [x] Confirm skills.sh availability.
+- [x] Record the immediate post-merge snapshot.
+- [x] Receive user authorization to continue the remaining distribution work.
+- [ ] Submit through Anthropic's authenticated in-app plugin directory form.
+- [ ] Wait at least 72 hours after submission, then use the human-only awesome-list Issue Form.
+- [ ] Wait another 72 hours, then publish the approved r/ClaudeCode Weekly Showcase comment.
+- [ ] Record day 7, day 14, and day 30 snapshots.

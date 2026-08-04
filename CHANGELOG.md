@@ -16,7 +16,8 @@ All notable changes to this project are documented here. The format is based on 
 - Rewrote the README around the discovery-to-install path, with the interview-driven positioning, recommended plugin install, secondary skills CLI install, deliberate layer comparison, validation boundaries, and canonical documentation map.
 - Aligned plugin and marketplace metadata at version 0.3.0 with repository, homepage, and MIT license fields where supported.
 - Updated contribution guidance for the current test, validation, CI, documentation, support, and security workflows.
-- Prepared the approved repository description, topics, Wiki setting, and private vulnerability reporting changes for application after merge; no live setting or external channel was changed by this pull request.
+- Prepared the approved repository description, topics, Wiki setting, and private vulnerability reporting changes for post-merge application in the documentation overhaul.
+- Applied the approved repository metadata and security settings after merge, verified isolated skills CLI installation and skills.sh indexing, and updated the distribution plan to Anthropic's current authenticated in-app submission route.
 
 ## [0.3.0] — 2026-08-04
 
