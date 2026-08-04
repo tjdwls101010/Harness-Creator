@@ -34,6 +34,7 @@ The binding design record is `docs/plan/` (v1, D1-D12) as revised by `docs/plan/
 | B13 | Exercise a generated hook before it is called delivered | skill | `.claude/skills/harness-creator/scripts/test_hook.py` | validated |
 | B14 | Launch a headless session for an e2e scenario | skill | `.claude/skills/harness-creator/scripts/run_e2e.py` | validated |
 | B15 | Shared discovery, frontmatter parsing, import parsing | skill | `.claude/skills/harness-creator/scripts/harness_common.py` | validated |
+| B19 | Look up one hook event's schema instead of all thirty | skill | `.claude/skills/harness-creator/scripts/hook_event.py` | validated |
 | B16 | Repo conventions for working on this codebase | CLAUDE.md | `CLAUDE.md` | validated |
 | B17 | A pre-commit hook enforcing the no-hard-wrap rule | hook | — | declined |
 | B18 | A rule scoped to `docs/plan/**` | rule | — | declined |
@@ -51,6 +52,12 @@ The four CLIs are plain-argument, stdlib-only, and invoked as `${CLAUDE_SKILL_DI
 Fitting them under 2,500 was measured and rejected. The four long paragraphs yield about 51 words to whole-clause deletion once paraphrase-shortening is off the table (which it is: that is where meaning dilutes), and closing the remaining gap would have meant cutting roughly half the new doctrine. Two things made keeping it the better trade. The number was never a mechanic — the mechanic is the 5,000-token compaction ceiling, still 1,148 words away — and this skill teaches that a number without its reason is a rail wearing a digit, so holding 2,500 after its justification changed would have been the skill failing its own test. Meanwhile the metric v3 actually targets improved: words trapped in paragraphs of 110 or more went from 788 to 580.
 
 Worth naming for whoever revises this next: tabulating a short passage *costs* words, because table pipes and the separator row count. Converting `SKILL.md`'s four-question paragraph to a table took it from 198 words to 203; bullets, which discretize just as well, run about five words per item cheaper.
+
+**hooks-events.md stays markdown, with a query script in front of it.** The access pattern is lookup — a reader takes one event of thirty, about 8% of the file — and markdown's unit of access is the whole file, so the obvious move is a queryable store. `hook_event.py --event <Event>` gets that: 3,777 words become roughly 200-430.
+
+A binary store (SQLite) was considered and declined, and the usual objections to it are weaker than they look: `.gitattributes` textconv gives real diffs, hook events change rarely enough that edit friction barely matters, and almost nobody opens this file by hand. What decided it was auditing. The single most important maintenance operation on this file is re-checking it against live Claude Code docs, which is reading two documents side by side; the cross-file audit that caught two factually wrong router rows in v3 worked by having an agent read both files in full. A rare change is also the one nobody has context for, so its review needs to be cheap, not merely possible. And the direction is asymmetric: markdown converts to a database later with one script, while a database that has accumulated history does not convert back.
+
+The one thing a binary store buys that a script cannot is enforcement — it makes reading the whole file unavailable, which is the interface doctrine applied literally. Whether that matters is unmeasured, so L5 observes it: if a generated hook pass reads hooks-events.md whole despite the script existing, the enforcement argument wins and this decision should be revisited.
 
 **B17 declined.** The no-hard-wrap rule is real and load-bearing (hard wraps break Edit's exact-string matching), but it's stated in `CLAUDE.md` and in `SKILL.md`, and a violation is cosmetic and trivially reversible. By this skill's own second hook-eligibility question — what does a violation cost, and is something already catching it — this doesn't clear the bar. Revisit only if it actually recurs.
 
