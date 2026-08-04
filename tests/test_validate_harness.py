@@ -136,6 +136,119 @@ class BadHarnessTests(unittest.TestCase):
         self._assert_warning_contains("harness-spec.md", "missing")
 
 
+class ConsequenceClauseTests(unittest.TestCase):
+    """v3 attached a consequence to the findings that could carry one, on the
+    theory that a check's failure message is an interface: it is read at
+    exactly the moment it matters and costs nothing the rest of the time, so
+    it can hold what would otherwise be a paragraph in a reference file.
+
+    These assertions anchor the phrasing. Without them the clause is prose
+    like any other and erodes on the next pass -- which is the specific way
+    the v2 compression lost four claims.
+
+    Findings that could NOT be given a consequence are listed at the bottom of
+    this class, with the reason. That list is as load-bearing as the ones
+    above: an unsourced consequence in a linter is a fabricated gotcha, and
+    this skill's whole value proposition is that its gotchas are real."""
+
+    @classmethod
+    def setUpClass(cls):
+        findings, _ = vh.run(REPO_ROOT / "tests" / "fixtures" / "bad-harness", strict=False)
+        cls.messages = [m for _, _, m in findings]
+
+    def _message_containing(self, needle):
+        for m in self.messages:
+            if needle in m:
+                return m
+        self.fail(f"no finding containing {needle!r}")
+
+    def test_glob_error_says_the_rule_never_fires(self):
+        """Documented: a rule loads only when Claude reads a file its `paths:`
+        matches. A pattern that cannot parse therefore costs nothing at launch
+        and silently never fires -- the failure has no runtime signal at all."""
+        m = self._message_containing("unmatched")
+        self.assertIn("never fire", m)
+
+    def test_missing_spec_says_drift_detection_goes_quiet(self):
+        """check_spec_drift returns empty lists in both directions when there
+        is no spec, so the absence disables the check rather than failing it."""
+        m = self._message_containing("a generated harness should carry a spec")
+        self.assertIn("no drift in either direction", m)
+
+    def test_skill_body_length_says_the_cost_recurs(self):
+        """The documented reason for the 500-line guideline is that a skill's
+        body stays in context once it triggers, so length is a recurring cost
+        rather than a one-time one."""
+        import tempfile, shutil
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            skill = tmp / ".claude" / "skills" / "long-skill"
+            skill.mkdir(parents=True)
+            body = "\n".join(f"line {i}" for i in range(vh.MAX_SKILL_BODY_LINES + 1))
+            (skill / "SKILL.md").write_text(
+                f"---\nname: long-skill\ndescription: triggers on x\n---\n{body}\n",
+                encoding="utf-8",
+            )
+            findings, _ = vh.run(tmp, strict=False)
+            m = next(msg for _, _, msg in findings if "-line guideline" in msg)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        self.assertIn("stays in context", m)
+        self.assertIn("recurring cost", m)
+        self.assertIn("references/", m)
+
+    def test_findings_without_a_sourced_consequence_stay_bare(self):
+        """The three the v3 plan wanted to annotate and the docs would not
+        support. Leaving them bare is the finding, not an omission.
+
+        * agent frontmatter that does not parse -- documented for skills
+          ("loads the body with empty metadata"), but the subagent docs never
+          say what happens, and the two are not symmetric by assumption.
+        * a missing @import target -- expansion timing is documented, the
+          missing-file behaviour is not, anywhere, including /errors.
+        * an unrecognized `model:` -- only the org-allowlist case is
+          documented (falls back to inherit). A plain typo is not."""
+        for needle, forbidden in (
+            ("frontmatter did not parse", "silently"),
+            ("import target does not exist", "session"),
+        ):
+            m = self._message_containing(needle)
+            if needle == "frontmatter did not parse" and "skill body still loads" in m:
+                continue                          # the skills one IS documented
+            self.assertNotIn(forbidden, m, f"unsourced consequence crept into: {m}")
+
+
+class ModelFieldTests(unittest.TestCase):
+    """Regression for a validator that went wrong on its own as models shipped.
+
+    The check enumerated model ids, so it rejected two values that were valid
+    when this was found -- the documented alias `fable` and the id
+    `claude-opus-5` -- while still accepting `claude-opus-4-8`. A false
+    positive here is worse than a miss: it fails a correct harness at the
+    delivery gate, which is exactly the class of bug B1 was in v0.2.0."""
+
+    def test_documented_aliases_pass(self):
+        for alias in ("inherit", "sonnet", "opus", "haiku", "fable"):
+            self.assertTrue(vh.is_plausible_model(alias), alias)
+
+    def test_claude_prefixed_ids_pass_without_being_enumerated(self):
+        for model_id in ("claude-opus-5", "claude-sonnet-5", "claude-fable-5",
+                         "claude-opus-4-8", "claude-haiku-4-5-20251001",
+                         "claude-some-model-that-does-not-exist-yet-9"):
+            self.assertTrue(vh.is_plausible_model(model_id), model_id)
+
+    def test_typos_and_other_vendors_still_warn(self):
+        for bad in ("sonnett", "gpt-4o", "opus-5", "", None, 5):
+            self.assertFalse(vh.is_plausible_model(bad), repr(bad))
+
+    def test_message_names_the_rule_it_applied(self):
+        findings = []
+        vh.add(findings, "W", "a.md",
+               f"unrecognized 'model' value 'x' -- not one of "
+               f"{'/'.join(vh.MODEL_ALIASES)} and not a 'claude-' prefixed id")
+        self.assertIn("fable", findings[0][2])
+
+
 class FrontmatterParserTests(unittest.TestCase):
     def test_simple_fields(self):
         fm = vh.hc.parse_frontmatter("---\nname: x\ndescription: y\n---\nbody\n")
