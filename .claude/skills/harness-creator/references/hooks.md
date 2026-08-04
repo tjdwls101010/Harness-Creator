@@ -158,7 +158,7 @@ Full schema for every event lives in `references/hooks-events.md`. This table is
 | Event | One-line purpose |
 |---|---|
 | `SessionStart` | Inject context or set up environment when a session begins or resumes. |
-| `Setup` | One-time preparation on `--init-only`/`--init`/`--maintenance`, outside normal session start. |
+| `Setup` | One-time preparation on `--init-only`, or `--init`/`--maintenance` in `-p` mode. Never on normal startup. |
 | `InstructionsLoaded` | Observe when CLAUDE.md or a rules file loads — audit/logging only, no decision control. |
 | `UserPromptSubmit` | Inject context alongside a prompt, or block the prompt before Claude sees it. |
 | `UserPromptExpansion` | Catch the direct `/skillname` path that bypasses `PreToolUse` on the Skill tool. |
@@ -184,9 +184,9 @@ Full schema for every event lives in `references/hooks-events.md`. This table is
 | `WorktreeRemove` | Clean up after a non-git `WorktreeCreate`. |
 | `PreCompact` | Block compaction, or let it proceed. |
 | `PostCompact` | React after compaction completes — log the summary, refresh external state. |
-| `SessionEnd` | Cleanup/logging on session end. Very short default timeout — see gotchas above. |
 | `Elicitation` | Answer an MCP server's mid-task input request programmatically, skipping the dialog. |
 | `ElicitationResult` | Observe or override the user's elicitation response before it reaches the MCP server. |
+| `SessionEnd` | Cleanup/logging on session end. Very short default timeout — see gotchas above. |
 
 ## Three recipes
 
