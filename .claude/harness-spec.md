@@ -43,7 +43,7 @@ The binding design record is `docs/plan/` (v1, D1-D12) as revised by `docs/plan/
 
 Each reference file is loaded only when the matching component type is being generated; `SKILL.md` is the sole always-loaded surface, and `interview.md` and `re-entry.md` are gated behind the Phase 0 mode branch. That gating is the point of the v2 revision — it took the always-loaded surface from 4,833 words to under 2,500. v3 spent 206 of the words that bought back, on doctrine the generated harnesses inherit.
 
-The four CLIs are plain-argument, stdlib-only, and invoked as `${CLAUDE_SKILL_DIR}/scripts/<name>.py` so they work from a plugin cache as well as a checkout.
+The five CLIs are plain-argument, stdlib-only, and invoked as `${CLAUDE_SKILL_DIR}/scripts/<name>.py` so they work from a plugin cache as well as a checkout.
 
 ## Design rationale
 

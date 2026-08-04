@@ -4,6 +4,33 @@ All notable changes to this project are documented here. The format is based on 
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-08-04
+
+Doctrine. The skill taught two filters for what earns its tokens and left a hole between them: nothing screened the sentences that *justify* a claim. A generator following both faithfully wrote a one-clause rule under three sentences of argument — and every harness this skill produces inherited that shape. This release closes the hole and then applies it to the skill's own surface.
+
+### Added
+
+- **The filter extended to the why.** `SKILL.md` now screens justification the same way it screens claims, and names the five shapes that go: restating what you just said, arguing for it, spelling out a consequence the reader computes anyway, giving the negative case equal weight when the positive implies it, and narrating what the next paragraph will do. Named, because a model cannot recognize "cut the persuasion" in its own prose without them.
+- **The parameter space as a teaching surface, and its link to compression.** An argument that takes three named values teaches the three cases by existing; prose moved into a signature is not shortened, it is relocated to a surface re-read for free.
+- **References need not be prose.** A failing test, a schema, a rubric, or a function in another codebase pins a target more precisely than a paragraph describing it — and the runnable ones fail loudly when the target moves, where a paragraph goes quietly stale.
+- **A check's failure message is an interface too**, read at exactly the moment it matters and free otherwise.
+- **`hook_event.py`** — look up one hook event's schema (`--event PreToolUse`, 432 words) instead of reading all thirty (3,777). Its `--event` choices are generated from the file, so the signature doubles as the authoritative event list; several of these events postdate common training data, and a model that cannot see them enumerated refuses to author one as nonexistent.
+
+### Fixed
+
+- **`validate_harness.py` no longer fails correct harnesses on a valid `model:`.** It enumerated model ids, so the documented alias `fable` and the id `claude-opus-5` both drew "unrecognized" while `claude-opus-4-8` passed. It now checks shape — a documented alias, or any `claude-` prefixed id — so it cannot go wrong on its own as models ship.
+- **`Setup` hook triggers were documented wrong.** The event router listed `--init-only`/`--init`/`--maintenance` as three equivalent flags; the latter two do nothing without `-p`. A generator reading only that file — the one it is told to read first, on every hook task — would wire a `Setup` hook that never fires.
+- **`SessionEnd` was ordered before `Elicitation`** in the router while the schema reference called its own list authoritative. The docs agree with the schema reference.
+- **Workflow permission rules now carry their reason.** The skill told the generator to write matching `permissions.allow` entries and never to record why, so they read as ordinary convenience allowances on disk — and the next person tightening permissions deletes them, leaving a workflow that stalls mid-run on a prompt nobody is watching.
+
+### Changed
+
+- **Three lint findings gained a consequence clause**, on the theory that a check's message is read exactly when it matters: the 500-line skill guideline now says why 500, a malformed `paths:` glob says the rule will never fire, and a missing spec says drift detection reports nothing in either direction.
+- **Three others deliberately did not.** The docs do not say what happens when an `@import` target is missing, or when subagent frontmatter fails to parse, or when a `model:` value is simply a typo. Writing a plausible consequence would have put an invented mechanic in a linter whose entire value is that its gotchas are real; a test now asserts those messages stay bare.
+- **The skill's own prose was compressed against the new filter.** Total words 30,712 → 30,072 (−2.1%); words trapped in paragraphs of 110 or more, 9,476 → 7,861 (−17.0%). The gap between those two numbers is the change: these files did not get shorter, they stopped arguing.
+- **The always-loaded budget rose from 2,500 to 2,650 words**, deliberately, rather than cutting the new doctrine to fit. 2,500 was a target set while *removing* an unconditional file load; the mechanic is the 5,000-token compaction ceiling, which did not move and still sits over a thousand words away. This project also teaches that a number stripped of its reason is a rail wearing a digit, so holding one after its justification changed would have been the skill failing its own test.
+
+
 ## [0.2.0] — 2026-08-03
 
 Correctness and context. Twelve defects are fixed — including one that made a correct harness fail the skill's own delivery gate — and the context a session pays for before its first prompt is cut in half. Every product mechanic asserted by the skill was re-verified against live documentation, because the previous release shipped one that was wrong.

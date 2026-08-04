@@ -2,7 +2,7 @@
 
 harness-creator ships four command-line tools that do the mechanical, deterministic work the model shouldn't do by hand: linting a harness, auditing an existing one, unit-testing a hook, and driving a real headless session. This page is the reference for all four — their exact flags, output, exit codes, and when they run. A fifth file, `harness_common.py`, is a shared helper module, not a CLI.
 
-All four are Python 3.10+ and use only the standard library, so there is nothing to install. Each is a parameterized CLI keyed off a path-like argument (`--path` for `validate_harness.py` and `audit_harness.py`, `--project` for `run_e2e.py`, and `--settings`/`--command` for `test_hook.py`), so nothing is hard-coded to this repo. The skill invokes them by absolute path as `${CLAUDE_SKILL_DIR}/scripts/<name>.py`; the examples below use the plain script name for readability, and you can run any of them yourself with `python3 <path-to-script> ...`.
+All five are Python 3.10+ and use only the standard library, so there is nothing to install. Each is a parameterized CLI keyed off a path-like argument (`--path` for `validate_harness.py` and `audit_harness.py`, `--project` for `run_e2e.py`, and `--settings`/`--command` for `test_hook.py`), so nothing is hard-coded to this repo. The skill invokes them by absolute path as `${CLAUDE_SKILL_DIR}/scripts/<name>.py`; the examples below use the plain script name for readability, and you can run any of them yourself with `python3 <path-to-script> ...`.
 
 ## At a glance
 
@@ -11,6 +11,7 @@ All four are Python 3.10+ and use only the standard library, so there is nothing
 | `validate_harness.py` | Deterministic lint of a harness | `--path <repo> [--json] [--strict]` |
 | `audit_harness.py` | Phase-0 inventory + drift + suggested re-entry mode | `--path <repo> [--json]` |
 | `test_hook.py` | Unit-test a hook without a live session | `(--settings <f> --event <E> [--tool <T>] [--input-field k=v] \| --command <script> --event <E> [--input <f>]) [--matrix] [--json]` |
+| `hook_event.py` | Look up one hook event's schema instead of reading all thirty | `--event <Event> \| --list` |
 | `run_e2e.py` | Spawn a headless `claude -p` session and record it | `--project <repo> --prompt "..." [--prompt-file f] [--model] [--timeout] [--out] [--json] [--permission-mode] [--isolate]` |
 
 Exit-code convention across the scripts: `0` is the clean/expected outcome, `2` (`EXIT_USAGE_ERROR`) always means the script itself couldn't run — a bad `--path`, a missing required flag, unparseable JSON passed on the command line. The meaning of `1` differs per tool and is noted below.
@@ -71,6 +72,24 @@ Default output prints the event, the sample input, and per hook: the command, ex
 
 The skill runs this on every hook it generates or wires before considering the hook delivered. Run it yourself whenever you're unsure whether a matcher fires or whether a hook actually blocks.
 
+## hook_event.py
+
+Prints one hook event's schema — trigger timing, matcher, key input fields, decision channel, typical use, version caveats — instead of the whole of `references/hooks-events.md`.
+
+```bash
+python3 hook_event.py --event PreToolUse
+python3 hook_event.py --list
+```
+
+That file is a lookup table by its own first line: *"load this file once you already know which event you're targeting."* But markdown's unit of access is the whole file, so taking one event of thirty costs all 3,777 words to get the ~300 that apply. `--event PreToolUse` returns 432; `--event Setup` returns 208.
+
+The markdown remains the source of truth and the script parses it, so there is no second copy to drift. Two consequences worth knowing:
+
+- **`--list` is in lifecycle order, not alphabetical**, because that order is information — it is how you see `Setup` sitting outside normal startup and `SessionEnd` landing last.
+- **An invalid `--event` prints all thirty valid names.** Several of these events postdate common training data, so a model that cannot see them enumerated tends to refuse to author one as nonexistent rather than look it up. The argparse enum is what prevents that, and it costs nothing to carry.
+
+Exit codes: `0` on success, `2` on an unknown event or missing argument.
+
 ## run_e2e.py
 
 The second, paid tier of validation: it spawns a real headless `claude -p` session against a project, captures the streamed transcript, and writes it out for a separate grading agent to judge. It does not grade anything itself. Because it costs tokens and touches a live model, the skill only runs it with your consent, composing the prompts from the spec's Validation scenarios.
@@ -89,7 +108,7 @@ Caveat, stated in the script itself: its headless permission handling was never 
 
 ## harness_common.py (shared helper, not a CLI)
 
-The four scripts import this module so they all agree on the same facts instead of each re-implementing them and silently disagreeing. It holds a single conservative frontmatter parser (which returns "could not verify" rather than guess on YAML it can't safely parse), the canonical tool-name list, the table of all 30 hook events (including which ones accept a matcher and which carry a tool context), the matcher-exactness helper, the shared exit-code constants, a lenient JSON loader, and the filesystem iterators for skills, agents, workflows, rules, and settings. You never invoke it directly.
+The five scripts import this module so they all agree on the same facts instead of each re-implementing them and silently disagreeing. It holds a single conservative frontmatter parser (which returns "could not verify" rather than guess on YAML it can't safely parse), the canonical tool-name list, the table of all 30 hook events (including which ones accept a matcher and which carry a tool context), the matcher-exactness helper, the shared exit-code constants, a lenient JSON loader, and the filesystem iterators for skills, agents, workflows, rules, and settings. You never invoke it directly.
 
 ## See also
 

@@ -132,11 +132,11 @@ Harness-Creator/
 ├── .claude/skills/harness-creator/
 │   ├── SKILL.md              # the orchestrator
 │   ├── references/           # 8 per-component authoring guides (loaded on demand)
-│   └── scripts/              # 4 CLIs + a shared helper module
+│   └── scripts/              # 5 CLIs + a shared helper module
 ├── docs/
 │   ├── plan/                 # design-rationale record (decisions + research)
 │   └── wiki/                 # this project's handbook
-├── tests/                    # 78 stdlib unittest cases + fixture harnesses
+├── tests/                    # 169 stdlib unittest cases + fixture harnesses
 ├── CHANGELOG.md
 ├── CONTRIBUTING.md
 └── LICENSE
