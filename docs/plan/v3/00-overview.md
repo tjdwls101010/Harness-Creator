@@ -76,8 +76,8 @@ v2 계획 §4는 "증가분은 전부 조건부 로드되는 reference에 들어
 | **D30** | 교리 거처 | **`SKILL.md` 단일 정본.** (B)가 `skills.md`에만 있는 게 이미 결함이다 — CLAUDE.md만/hooks만 생성하는 패스는 그 파일을 열지 않는다. D18(compaction은 스킬 본문 앞 5,000토큰만 재부착)이 근거를 이미 확정했다. `skills.md`의 심화판은 R2 논리로 유지. |
 | **D31** | 인터페이스 범위 | **교리 교정 + rich references + `validate_harness.py` 체크 메시지 강화.** 스캐폴딩 스크립트(`new_component.py` 류) **신설 안 함** — `agents.md`의 2,022단어는 스키마가 아니라 *판단*이고 스캐폴더는 판단을 담을 수 없다. 회수량은 작은데 "인터뷰로 맞춤 하네스"라는 핵심 가치를 템플릿 쪽으로 민다. JSON Schema 파일도 **신설 안 함** — 현재 프론트매터 표의 가치는 필드 목록이 아니라 judgment 컬럼이다. |
 | **D32** | rich references | **추가한다.** 아티클의 빠진 7번째 전환. `SKILL.md`에. 경계: `.claude/harness-spec.md`는 여전히 마크다운이다 — spec은 *기록*이지 *목표*가 아니므로 모순이 아니고, "spec을 테스트로 바꾸자"로 오독하면 안 된다. |
-| **D33** | R1 개정 | **"산문은 결정을, 체크는 결과를."** 기존 R1("린트 체크가 있는 산문은 절대 자르지 않는다")을 유지하되, 옮길 수 있는 것을 명시. 정직한 한계: 린트는 생성 *후*에 돌므로 작성 시점의 결정을 대신할 수 없다. 이 구분이 무너지면 그냥 가드레일 해제다. 문안은 `01-doctrine.md` §6. |
-| **D34** | SKILL.md 분량 | **순감소 강제 — 단 조건부다.** 추가 교리 ~257단어를 포함하고도 2,411단어 이하를 목표로 한다. 압축을 가르치는 문단이 상시 로드 표면을 늘리면 자기 주장의 반례이기 때문. `SKILL.md`는 PR1에서 한 번만 손대고 PR2 목록에서 제외한다. **그러나 이 제약은 미검증이다** — 파일럿 회수율을 SKILL.md 장문단 788단어에 적용하면 ~47단어뿐이고 257에 못 미친다. PR1의 첫 단계가 실측하고, 못 지키면 **D34를 폐기하고 "< 2,700단어"로 대체한다.** 교리를 짧게 쓰려다 의미를 잃는 게 상시 로드 250단어보다 나쁘다. 분기 조건은 `01-doctrine.md` §4.1. |
+| **D33** | R1 개정 | **"산문은 결정을, 체크는 결과를."** 기존 R1("린트 체크가 있는 산문은 절대 자르지 않는다")을 유지하되, 옮길 수 있는 것을 명시. 정직한 한계: 린트는 생성 *후*에 돌므로 작성 시점의 결정을 대신할 수 없다. 이 구분이 무너지면 그냥 가드레일 해제다. 문안은 `01-doctrine.md` §6. **[C3 — 구현 세션]** R1의 실제 거처는 `research/audit-synthesis.md`가 아니라 **`docs/plan/v2/research/audit-synthesis.md`**이고, 그 문서 3–8행이 *"이 문서는 원본 그대로 보존한다 — 계획 문서가 여기서 결정을 추출했고, 인용된 라인 번호와 측정치의 출처가 여기다"*라고 명시한다. 즉 v2 문서는 인용 원장이지 살아 있는 스펙이 아니다. 그러므로 **그 파일을 고쳐 쓰지 않는다.** R1(v3)의 정본은 신규 `docs/plan/v3/04-guardrails.md`이고, v2의 R1 자리에는 개정 포인터 한 줄만 남긴다. |
+| **D34** | SKILL.md 분량 | **순감소 강제 — 단 조건부다.** 추가 교리 ~257단어를 포함하고도 2,411단어 이하를 목표로 한다. 압축을 가르치는 문단이 상시 로드 표면을 늘리면 자기 주장의 반례이기 때문. `SKILL.md`는 PR1에서 한 번만 손대고 PR2 목록에서 제외한다. **그러나 이 제약은 미검증이다** — 파일럿 회수율을 SKILL.md 장문단 788단어에 적용하면 ~47단어뿐이고 257에 못 미친다. PR1의 첫 단계가 실측하고, 못 지키면 **D34를 폐기하고 대체 게이트로 넘어간다.** 교리를 짧게 쓰려다 의미를 잃는 게 상시 로드 250단어보다 나쁘다. 분기 조건은 `01-doctrine.md` §4.1. **[C1/C2 — 구현 세션 2026-08-04]** 손으로 짠 T1b/T2 초안 실측 결과 회수량은 **~80단어**로 `<150` 분기에 해당한다. 그리고 대체 게이트 "< 2,700단어"는 **이 repo 자신의 제약과 충돌한다** — `.claude/harness-spec.md:14`가 "always-loaded surface를 2,500단어 미만으로"를 목표로 걸고 `:43`이 `SKILL.md`를 바로 그 surface로 지목한다. 계획이 못 본 사실이다. 따라서 PR1 1단계는 실물 측정 후 **2,500을 기준으로** 판단하고, 넘으면 사용자에게 재질문한다(문안을 조일지 / spec 목표를 올릴지). 기계적 상한인 D18/D21의 5,000토큰(≈3,700단어)에는 어느 쪽이든 여유가 크다. |
 | **D35** | 생성물 쪽 교리 | **심지 않는다.** 교리를 고치면 생성물은 자동으로 압축적이 된다. 생성된 CLAUDE.md에 "압축적으로 쓰세요" 같은 줄을 넣는 건 정확히 이 스킬이 금지하는 "모델이 이미 아는 것 쓰기"다. 대신 `harness-spec.md`의 Design rationale에 왜 이 모양인지를 남긴다. |
 | **D36** | 압축 대상 범위 | **10개 파일 전수.** 단 `hooks-events.md`(장문단 0, 사실상 100% 인터페이스)와 `re-entry.md`(802단어)는 **확인 후 무변경**으로 끝나며, 그 사실을 커밋에 남긴다. |
 | **D37** | 압축 기법 | **T1 표 변환 적극.** "N개 선택지 각각에 언제/왜/비용이 붙는" 모든 문단이 표 후보. 구조상 주장 소실이 불가능하므로 수익 최고·위험 최저. **패러프레이즈-축약은 금지** — 희석이 전부 거기서 난다. 상세는 `02-compression.md` §2. |
@@ -97,7 +97,7 @@ v2 계획 §4는 "증가분은 전부 조건부 로드되는 reference에 들어
 | D20 예제 판별식 | **유지, 확장** | 판별식 4문항은 그대로. v3는 그 판별식을 **예제가 아니라 산문에** 적용한다 — v2의 WS6가 코드 예제만 훑었다. |
 | D21 SKILL.md 상한 | **강화** | 5,000토큰 상한 → **순감소 강제**(D34). |
 | D26 분량 게이트 | **유지** | always-loaded만 hard gate. D39가 이를 claim 손실 기준으로 보강. |
-| R1 (audit-synthesis §4) | **개정** | D33. |
+| R1 (`v2/research/audit-synthesis.md` §4) | **개정** | D33. 개정본은 `v3/04-guardrails.md`에 쓰고 v2 원본은 동결한다 — C3. |
 | R2, R3 | **유지** | `once: true` 3중 기술과 `hooks.md`의 30행 라우터는 그대로. |
 
 ## 4. 문서 지도
@@ -109,6 +109,7 @@ v2 계획 §4는 "증가분은 전부 조건부 로드되는 reference에 들어
 | [`01-doctrine.md`](01-doctrine.md) | **PR1 명세** — 교리 4건의 문안, 체크 메시지 강화 목록, R1 개정 문안 |
 | [`02-compression.md`](02-compression.md) | **PR2 명세** — 판별식(T1/T1b/T2/T3, 금지 기법, do-not-cut N1–N6), 측정 정정, 파일별 문단 목록 |
 | [`03-verification.md`](03-verification.md) | claim A/B 프로토콜, 파일럿 실측 결과, L5 시나리오 |
+| [`04-guardrails.md`](04-guardrails.md) | **R1(v3) 정본** — 개정 문안, 10쌍의 "결정/결과" 분해, 무변경 처리한 쌍 (C3) |
 | [`claim-ab-workflow.js`](claim-ab-workflow.js) | 파일럿이 실제로 돌린 워크플로우 스크립트. 파일별로 재사용 |
 | [`example-agents-compressed.md`](example-agents-compressed.md) | 파일럿 산출물. 판별식의 참조 구현 — 머지 대상 아님 |
 
@@ -119,7 +120,7 @@ v2 계획 §4는 "증가분은 전부 조건부 로드되는 reference에 들어
 1. `SKILL.md`에 교리 4건 삽입 (`01-doctrine.md` §3)
 2. 같은 커밋 범위 안에서 `SKILL.md` 압축 — D34의 순감소를 만족시킨다
 3. `validate_harness.py` 체크 메시지 강화 + `tests/test_validate_harness.py` 앵커 assertion
-4. `research/audit-synthesis.md` §4의 R1 개정, 10쌍의 "결정/결과" 분해 기록
+4. R1 개정 — 신규 `docs/plan/v3/04-guardrails.md`에 R1(v3) 문안과 10쌍의 "결정/결과" 분해를 기록하고, `docs/plan/v2/research/audit-synthesis.md`의 R1 자리에는 포인터 한 줄만 (C3)
 5. 테스트 전부 통과 → PR → 머지
 
 **PR2 — 압축** (`v3-compression` 브랜치, PR1 머지 후 분기)
@@ -133,11 +134,14 @@ v2 계획 §4는 "증가분은 전부 조건부 로드되는 reference에 들어
 
 **릴리즈**
 
-12. README staleness 수정, CHANGELOG, v0.3.0 태그
+12. **위생 커밋** — `README.md:139`의 "78 stdlib unittest cases" → 실제 수치, `CLAUDE.md:8`의 끊어진 포인터 한 줄 (§5b). 스킬 표면을 건드리지 않으므로 PR1·PR2 diff와 섞지 않는다
+13. CHANGELOG `[Unreleased]` → `[0.3.0]`, `plugin.json` 버전, v0.3.0 태그
 
 > **`v3-baseline` 태그는 이미 찍혀 있다** (계획 병합 시점, `797c98a`). 계획 문서는 스킬 표면을 건드리지 않으므로 이 태그의 수치는 v0.2.0의 수치와 같다. **v0.2.0이 아니라 이 태그와 비교할 것** — 그래야 diff에 v3가 한 일만 남는다.
 
-## 5b. 계획 문서 위생 (PR1에 포함)
+## 5b. 계획 문서 위생 (~~PR1에 포함~~ → **릴리즈 위생 커밋으로 이동**)
+
+> **[범위 정정 — 사용자 확인, 2026-08-04]** 배포되는 것은 `.claude/skills/harness-creator/` 안의 `SKILL.md`·`references/`·`scripts/` 뿐이다(`.claude-plugin/plugin.json`의 `"skills"` 필드). **루트 `CLAUDE.md`는 이 스킬의 구성 요소가 아니라 스킬을 만드는 데 쓰는 레포 비계다.** 아래 지적은 유효하지만 v3의 제품 diff에 섞지 않는다 — PR1·PR2의 diff에는 스킬 표면만 남기고, 이 수정은 `README.md`의 "78 stdlib unittest cases"(실제 149) 정정과 함께 **v0.3.0 직전 릴리즈 위생 커밋**에서 처리한다.
 
 **이 repo의 `CLAUDE.md`가 낡았다.** 현재 이렇게 쓴다:
 
@@ -153,6 +157,12 @@ PR1에서 세대 구조를 가리키도록 고친다. 컴포넌트를 열거하�
 
 `workflows.md`에 "워크플로우 에이전트는 `acceptEdits` 모드로 돌고 세션 allowlist를 상속한다"는 산문이 있으나, **생성된 하네스가 이를 반영하지 못한다.** L4 검증에서 확인된 기존 미달이며 회귀가 아니다. `workflows.md`를 어차피 열므로 같이 닫는다. `GuardrailTests`의 `workflows.md` 앵커에 `acceptEdits`가 이미 있으므로 삭제는 막혀 있다 — 문제는 *도달*이다.
 
+**[C12 — 구현 세션이 갭의 정확한 모양을 특정했다.]** `workflows.md:36`은 메커니즘 산문과 *"필요한 `permissions.allow` 항목을 같은 패스, 같은 커밋에 생성하라 — 후속 작업이 아니라 하나의 산출물로 취급하라"*는 지시를 **이미 갖고 있다.** 없는 것은 딱 한 절, **"그 사실을 spec의 Design rationale에 기록하라"**다. 같은 스킬의 구조적으로 동일한 gotcha 두 곳이 이 절을 갖고 있다 — `agents.md:43`("record the trust dependency in the spec's Design rationale")과 `hooks.md:146`("Route that request to the user's own settings and say so in the spec's Design rationale"). `workflows.md`에만 대응 문장이 없다.
+
+그래서 생성된 하네스는 `permissions.allow` 항목은 (생성기가 기억했다면) 갖지만 **그 항목이 왜 존재하는지 — 워크플로우 에이전트가 호출 세션의 권한 모드와 무관하게 무조건 auto-approve로 돌고 allowlist를 그대로 상속하므로 실행 전에 이미 거기 있어야 한다는 것 — 는 어디에도 남지 않는다.** v2의 A4 도그푸딩이 `✗`를 낸 지점이 정확히 여기다. 수정은 기존 패턴의 복제 한 절이고 새 발명이 아니다.
+
+`validate_harness.py`의 `check_workflows`는 워크플로우 내용과 `permissions.allow`를 대조하지 않으므로 이 gotcha에는 R1식 린트 짝이 없다. 즉 산문이 유일한 전달 경로다.
+
 ## 7. 수용 기준
 
 1. **PR1**: `01-doctrine.md` §7의 7개 항목 전부.
@@ -160,7 +170,7 @@ PR1에서 세대 구조를 가리키도록 고친다. 컴포넌트를 열거하�
 3. `SKILL.md` ≤ 2,411단어 (D34) **또는** D34가 `01-doctrine.md` §4.1의 분기에 따라 폐기되고 사유가 기록됐다.
 4. 전 대상 파일이 claim A/B에서 **critical 손실 0** (D38/D39).
 5. `GuardrailTests` 전부 통과 — 앵커 삭제 0.
-6. `python3 tests/*.py` 전부 통과, `validate_harness.py --path . --strict` exit 0.
+6. `for f in tests/test_*.py; do python3 "$f"; done` 전부 통과, `validate_harness.py --path . --strict` exit 0. **[C9]** 이전 문안의 `python3 tests/*.py`는 동작하지 않는다 — `python3`는 첫 인자만 스크립트로 실행하고 나머지는 `sys.argv`로 넘긴다. 정본 루프는 `CONTRIBUTING.md`에 있다.
 7. `grep -rniE "doctor|checkup"` 이 스킬 표면에서 0건 (D14 유지).
 8. rich references가 `SKILL.md`에 도달했다 (D32).
 9. A4 갭이 닫혔다 — 생성물이 워크플로우 에이전트의 권한 모드를 반영한다 (§6).

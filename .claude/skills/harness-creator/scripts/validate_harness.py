@@ -29,6 +29,26 @@ MAX_CLAUDE_MD_LINES = 200
 MAX_SKILL_BODY_LINES = 500
 MAX_DESCRIPTION_CHARS = 1536
 
+# Documented aliases for a subagent's `model:`, plus `inherit` (also what an
+# omitted field means).
+MODEL_ALIASES = ("inherit", "sonnet", "opus", "haiku", "fable")
+
+
+def is_plausible_model(value):
+    """An alias, or any `claude-`-prefixed id.
+
+    This used to enumerate current model ids, which false-flagged a correct
+    harness every time a model shipped -- it rejected the documented alias
+    `fable` and the id `claude-opus-5` while accepting `claude-opus-4-8`.
+    A validator that goes wrong on its own as the world moves is worse than
+    a looser one, so this checks shape instead of membership: the docs
+    describe the real rule as an alias, an id this Claude Code version
+    knows, or an id starting with `claude-`, and only the first and third
+    are knowable from outside the running client."""
+    return isinstance(value, str) and (
+        value in MODEL_ALIASES or value.startswith("claude-")
+    )
+
 # Allow patterns that auto mode drops -- generating these is dead weight,
 # not a correctness bug, so this is a warning, not an error.
 _BROAD_ALLOW_RE = re.compile(
@@ -237,7 +257,14 @@ def check_skills(root, findings):
 
         body_lines = fm.body.splitlines() if fm.ok else text.splitlines()
         if len(body_lines) > MAX_SKILL_BODY_LINES:
-            add(findings, "W", loc, f"SKILL.md body is {len(body_lines)} lines, over the {MAX_SKILL_BODY_LINES}-line guideline")
+            add(
+                findings, "W", loc,
+                f"SKILL.md body is {len(body_lines)} lines, over the "
+                f"{MAX_SKILL_BODY_LINES}-line guideline -- the body stays in "
+                "context for the rest of the session once the skill triggers, "
+                "so every line past what each run needs is a recurring cost; "
+                "move per-path material into references/",
+            )
 
         _check_dead_links(skill_dir, loc, text, findings)
 
@@ -311,10 +338,12 @@ def check_agents(root, findings):
             add(findings, "E", loc, "missing required 'description' field")
 
         model = fm.data.get("model")
-        if model and model not in ("inherit", "sonnet", "opus", "haiku",
-                                    "claude-sonnet-5", "claude-opus-4-8",
-                                    "claude-haiku-4-5-20251001", "claude-fable-5"):
-            add(findings, "W", loc, f"unrecognized 'model' value '{model}' -- verify this is a real model id/alias")
+        if model and not is_plausible_model(model):
+            add(
+                findings, "W", loc,
+                f"unrecognized 'model' value '{model}' -- not one of "
+                f"{'/'.join(MODEL_ALIASES)} and not a 'claude-' prefixed id",
+            )
 
         tools = fm.data.get("tools")
         if isinstance(tools, list):
@@ -449,6 +478,12 @@ def _check_catch_all_glob(loc, pattern, findings):
     )
 
 
+# A rule loads only when Claude reads a file its `paths:` matches, so a
+# pattern that doesn't parse costs nothing at launch and simply never fires.
+# Nothing reports that at runtime, which is why this one is worth an error.
+_GLOB_CONSEQUENCE = "a rule only loads when Claude reads a file this matches, so it will never fire"
+
+
 def _check_glob_syntax(loc, pattern, findings):
     depth = 0
     for ch in pattern:
@@ -457,10 +492,10 @@ def _check_glob_syntax(loc, pattern, findings):
         elif ch == "}":
             depth -= 1
             if depth < 0:
-                add(findings, "E", loc, f"paths glob '{pattern}' has an unmatched '}}'")
+                add(findings, "E", loc, f"paths glob '{pattern}' has an unmatched '}}' -- {_GLOB_CONSEQUENCE}")
                 return
     if depth != 0:
-        add(findings, "E", loc, f"paths glob '{pattern}' has an unmatched '{{'")
+        add(findings, "E", loc, f"paths glob '{pattern}' has an unmatched '{{' -- {_GLOB_CONSEQUENCE}")
 
 
 def check_claude_md(root, findings):
@@ -635,7 +670,12 @@ def check_harness_spec(root, findings):
     )
     if not spec.is_file():
         if has_any_component:
-            add(findings, "W", ".claude/harness-spec.md", "missing -- a generated harness should carry a spec as its source of truth")
+            add(
+                findings, "W", ".claude/harness-spec.md",
+                "missing -- a generated harness should carry a spec as its "
+                "source of truth; without one audit_harness.py has nothing to "
+                "compare against and reports no drift in either direction",
+            )
         return
 
     text = hc.read_text(spec)
