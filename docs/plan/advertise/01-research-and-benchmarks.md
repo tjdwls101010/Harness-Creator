@@ -48,7 +48,7 @@ Boris Cherny's public account of prompt reduction is treated consistently with A
 
 ## 6. Distribution mechanics
 
-[Claude plugin creation and submission guidance](https://code.claude.com/docs/en/plugins) documents local validation and the reviewed `claude-community` submission path. It also states that the official marketplace is curated separately and has no application process.
+[Claude plugin creation guidance](https://code.claude.com/docs/en/plugins) documents plugin structure and local validation. Anthropic's current [plugin submission guidance](https://claude.com/docs/plugins/submit) routes public GitHub repositories through the authenticated in-app directory form and a review process.
 
 [Claude plugin discovery guidance](https://code.claude.com/docs/en/discover-plugins) explains the two-step custom-marketplace flow: add the marketplace, then install a plugin. It also warns that plugins are trusted code and users should inspect their source.
 

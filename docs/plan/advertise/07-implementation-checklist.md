@@ -40,7 +40,7 @@
 - [x] Confirm skills.sh availability.
 - [x] Record the immediate post-merge snapshot.
 - [x] Receive user authorization to continue the remaining distribution work.
-- [ ] Submit through Anthropic's authenticated in-app plugin directory form.
-- [ ] Wait at least 72 hours after submission, then use the human-only awesome-list Issue Form.
+- [x] Submit through Anthropic's authenticated in-app plugin directory form.
+- [ ] Wait at least 72 hours after submission, then use the human-only awesome-list Issue Form (earliest: 2026-08-07 14:04 KST).
 - [ ] Wait another 72 hours, then publish the approved r/ClaudeCode Weekly Showcase comment.
 - [ ] Record day 7, day 14, and day 30 snapshots.

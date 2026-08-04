@@ -35,4 +35,6 @@ No marketplace, awesome-list, Reddit, release, tag, social preview, or website a
 
 On 2026-08-04, the approved GitHub metadata and feature settings were applied, private vulnerability reporting was enabled, an isolated skills CLI installation succeeded and was removed, and the public skills.sh page was confirmed available.
 
-The official Anthropic submission form was identified, but no authenticated browser session was available to complete the in-app submission. The marketplace submission therefore remains pending; the 72-hour gates for the awesome list and Reddit have not started.
+At 14:04 KST on 2026-08-04, Harness Creator was submitted through Anthropic's authenticated in-app plugin directory form for Claude Code with its public repository, homepage, MIT license, approved description, and three concrete use cases. The confirmation page reported that the submission was received and is awaiting review.
+
+The earliest permitted awesome-list submission time is 2026-08-07 at 14:04 KST. The Reddit gate begins only after the awesome-list Issue Form is submitted and must remain closed for another 72 hours.
