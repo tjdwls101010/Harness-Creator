@@ -153,7 +153,7 @@ Separately: a trailing `*` preceded by a space, as in `Bash(ls *)`, enforces a *
 
 ## The router: which event for which job
 
-Full schema for every event lives in `references/hooks-events.md`. This table is only for picking the right event fast — one line each, purpose-first, so you can scan for the job you're trying to do and jump straight to that event's section in hooks-events.md for the input/output details.
+Full schema for every event lives in `references/hooks-events.md` — take one event's worth with `hook_event.py --event <Event>` rather than reading all thirty. This table is only for picking the right event fast — one line each, purpose-first, so you can scan for the job you're trying to do and jump straight to that event's section in hooks-events.md for the input/output details.
 
 | Event | One-line purpose |
 |---|---|

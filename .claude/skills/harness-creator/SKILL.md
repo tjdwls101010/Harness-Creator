@@ -113,12 +113,13 @@ Two interview rules shape every stage, so they live here rather than in the file
 
 ## Scripts
 
-All four live in `scripts/` and are plain-argument Python 3.10+ CLIs (stdlib only). Always invoke them as `${CLAUDE_SKILL_DIR}/scripts/<name>.py`: the working directory is the target project, and a plugin install runs them from the plugin cache, so a relative path breaks in both cases. `${CLAUDE_SKILL_DIR}` is substituted in this skill's own markdown and in `allowed-tools` rules — **not** inside a workflow's prompt strings or a subagent's shell environment, where it expands to nothing. Resolve it to an absolute path before passing it anywhere else.
+All five live in `scripts/` and are plain-argument Python 3.10+ CLIs (stdlib only). Always invoke them as `${CLAUDE_SKILL_DIR}/scripts/<name>.py`: the working directory is the target project, and a plugin install runs them from the plugin cache, so a relative path breaks in both cases. `${CLAUDE_SKILL_DIR}` is substituted in this skill's own markdown and in `allowed-tools` rules — **not** inside a workflow's prompt strings or a subagent's shell environment, where it expands to nothing. Resolve it to an absolute path before passing it anywhere else.
 
 | Script | Run it when | Signature |
 |---|---|---|
 | `audit_harness.py` | Always, first, before any interview | `--path <target-repo> [--json]` |
 | `validate_harness.py` | Immediately after generating or editing any component | `--path <target-repo> [--json] [--strict]` |
+| `hook_event.py` | Once you know which event you're targeting, instead of reading all thirty | `--event <Event>` or `--list` |
 | `test_hook.py` | Right after generating any hook, before calling it delivered | `--settings <path> --event <Event> [--tool <Tool>] [--input-field k=v ...]` or `--command <script> --event <Event> [--input <file>]`, plus `--matrix` for match-only inspection |
 | `run_e2e.py` | Only with explicit user consent, during the validation stage | `--project <path> --prompt "..." [--model] [--timeout] [--out] [--isolate]` |
 
