@@ -104,40 +104,72 @@ SKILL.md의 장문단은 **788단어**, 4개다.
 |---|---|
 | ≥ 257단어 | D34 그대로. 계획대로 진행 |
 | 150~257단어 | §3의 문안을 **한 번** 조인다. 단 §3.1의 다섯 형태 나열과 §3.3의 마지막 운영 문장은 자르지 않는다 — 그게 각 교리를 운영 가능하게 만드는 부분이다 |
-| < 150단어 | **D34를 폐기하고 "SKILL.md < 2,700단어"로 대체한다.** 그리고 그 사유를 이 문서에 기록한다 |
+| < 150단어 | **D34를 폐기한다.** 대체 게이트는 §4.2. 사유를 기록한다 |
+
+### 4.2 실측 결과와 대체 게이트 (C1/C2 — 구현 세션 2026-08-04)
+
+**구현 세션이 착수 전에 손으로 T1b/T2 초안을 짜서 실측했다.**
+
+| 문단 | 현재 | 초안 | 회수 |
+|---|---:|---:|---:|
+| `:87` 네 질문 → 표(T1b) | 198 | 173 | **25** |
+| `:91` Authoring philosophy (T2) | 273 | 262 | 11 |
+| `:116` Hard lines (T2) | 192 | 161 | 31 |
+| `:93` 인터페이스 (T2) | 125 | ~112 | ~13 |
+| **합계** | | | **~80** |
+
+**`< 150` 분기다.** 계획 자신의 추정(~47)보다는 높지만 257에는 한참 못 미친다.
+
+**`:87`이 거의 안 줄어드는 이유가 계획이 예상하지 못한 것이고, PR2에도 영향이 있다(→ `02-compression.md` §2.1의 C13).** 마크다운 표 문법이 `wc -w`에서 단어로 세어진다 — 행마다 파이프 3개, 구분행 하나, 헤더 행 하나. 4행짜리 표에서는 이 고정 비용이 삭제되는 연결 산문만큼을 되먹는다. T1만 적용한 첫 초안은 198 → **203**으로 오히려 늘었다.
+
+**대체 게이트: `SKILL.md < 2,500단어`. "< 2,700"이 아니다.** 계획이 못 본 사실이 있다 — 이 repo 자신의 `.claude/harness-spec.md:14`가 *"Hold the always-loaded surface … under 2,500 words"*를 목표로 걸어두었고 `:43`이 *"`SKILL.md` is the sole always-loaded surface"*라고 그 surface를 명시한다. 2,700은 이 repo 자신의 spec을 조용히 깬다.
+
+**PR1 1단계의 실제 절차:** 교리 4건을 온전한 문안으로 넣고 `:87`·`:116`을 변환한 뒤 `wc -w`로 잰다(에이전트 자기 보고를 믿지 않는다 — `03-verification.md` §3.6). 2,500 미만이면 그대로 간다. 넘으면 **멈추고 사용자에게 숫자를 들고 묻는다** — §3의 문안을 조일지, `harness-spec.md`의 목표를 올리고 Design rationale에 사유를 남길지. 어느 쪽이든 기계적 상한(D18/D21의 5,000토큰 ≈ 3,700단어)에는 여유가 크므로 이건 자기 일관성 판단이지 용량 판단이 아니다.
 
 **교리를 짧게 쓰려다 의미를 잃는 것이 상시 로드 250단어보다 훨씬 나쁘다.** D34는 자기모순을 막으려는 장치이지 그 자체가 목적이 아니고, 목적을 위해 수단이 내용을 훼손하면 수단을 버린다. 이건 이 스킬이 "숫자에는 예외를 함께 준다"고 가르치는 것의 자기 적용이다.
 
 ## 5. `validate_harness.py` 체크 메시지 강화
 
-현재 findings 61개 중 대부분이 *무엇이 틀렸나*만 말한다. 예외가 하나 있고 그게 목표 형태다.
+현재 findings 대부분이 *무엇이 틀렸나*만 말한다. `add(findings, level, location, message)` (`validate_harness.py:48`)가 유일한 emit 헬퍼이고 호출 지점은 34곳이다.
+
+**모범 형태는 이미 파일 안에 둘 있다 (C7 — 계획 초안은 한 개만 알고 있었다).**
 
 ```
-좋은 형태 (:228)   "no 'description' -- this skill can never auto-trigger"
-현재 다수          "must be an object" / "does not exist" / "missing required 'name' field"
+:228        "no 'description' -- this skill can never auto-trigger"
+:218-222    "frontmatter did not parse (...) -- the skill body still loads,
+             but auto-triggering is silently dead"
+현재 다수    "must be an object" / "does not exist" / "missing required 'name' field"
 ```
 
 **규칙: 결과절을 붙일 수 있는 finding에만 붙인다.** `"top level of settings.json must be an object"`는 결과절이 없다 — 틀리면 그냥 안 된다. 반면 조용히 실패하는 것들은 전부 결과절을 가질 수 있다.
 
-우선순위 대상 (구현 세션이 전수 검토 후 확정):
+우선순위 대상:
 
 | 위치 | 현재 | 붙일 결과절의 요지 |
 |---|---|---|
-| `:240` SKILL.md 본문 길이 | "over the N-line guideline" | 왜 500행인가 — 긴 본문은 자기 핵심 지시를 묻는다 |
-| `:295` frontmatter 파싱 실패 | "frontmatter did not parse" | **본문은 계속 로드되고 auto-trigger만 조용히 죽는다** |
+| `:295` **agents** frontmatter 파싱 실패 | "frontmatter did not parse" | `:218`의 skills 판과 대칭으로. **C7:** 결과절이 없는 건 `check_agents`의 이쪽이고, `check_skills`(`:218`)에는 이미 붙어 있다 |
+| `:240` SKILL.md 본문 길이 (`MAX_SKILL_BODY_LINES=500`) | "over the N-line guideline" | 왜 500행인가 — 긴 본문은 자기 핵심 지시를 묻는다 |
 | `:317` 알 수 없는 model 값 | "verify this is a real model id/alias" | 미해결 시 무슨 일이 나는지 |
 | `:460`/`:463` paths glob 괄호 | "unmatched brace" | glob이 안 맞으면 규칙이 아예 안 걸린다 |
 | `:525` @import 대상 없음 | "import target does not exist" | launch 시점 확장이므로 세션 시작이 깨진다 |
 | `:638` spec 부재 | "should carry a spec" | drift 검사가 기준을 잃는다 |
-| rules 파일 `paths:` 부재 | (해당 체크) | **CLAUDE.md와 동일 우선순위로 상시 로드된다 — 분할이 아무것도 사지 못한다** |
+| ~~rules 파일 `paths:` 부재~~ | — | **C6 — 이미 목표 형태다.** `:416-420`이 *"no 'paths:' frontmatter -- this rule loads at launch just like CLAUDE.md, same as if it weren't split out at all"*라고 쓰고 `test_rule_without_paths_is_warning`이 이미 앵커하고 있다. 대상에서 제외 |
 
-각 메시지 강화는 `tests/test_validate_harness.py`에 대응 assertion을 갖는다. 메시지 문구를 테스트가 앵커하면 이후 희석이 회귀로 잡힌다.
+각 메시지 강화는 `tests/test_validate_harness.py`에 대응 assertion을 갖는다. **기존 idiom을 그대로 쓴다** — `BadHarnessTests`의 `_assert_warning_contains(location_substr, message_substr)` / `_assert_error_contains(...)` (`:44-58`, 부분 문자열 매칭). 메시지 문구를 테스트가 앵커하면 이후 희석이 회귀로 잡힌다.
 
 **주의:** 메시지를 늘리는 건 상시 로드 비용이 아니지만(스크립트 stdout이다) 무한정 늘릴 것도 아니다. 한 finding당 결과절 한 절.
 
 ## 6. 가드레일 R1의 정확한 개정 문안
 
-`research/audit-synthesis.md` §4의 R1은 현재 이렇게 읽힌다: **"린트 체크가 남아 있는 산문 gotcha는 절대 자르지 않는다."** 10쌍이 짝지어져 있다.
+> **[C3/C4 — 구현 세션 2026-08-04] 이 절의 지시 두 개가 틀렸다.**
+>
+> **(a) 경로.** R1은 `research/audit-synthesis.md`가 아니라 **`docs/plan/v2/research/audit-synthesis.md`**에 있다.
+>
+> **(b) 그 파일을 고쳐 쓰면 안 된다.** 문서 3–8행이 직접 이렇게 쓴다 — *"이 문서는 원본 그대로 보존한다 — 계획 문서가 여기서 결정을 추출했고, 인용된 라인 번호와 측정치의 출처가 여기다."* 인용 원장이지 살아 있는 스펙이 아니고, `00-overview.md` §0의 "v2 계획은 역사적 기록으로 온전히 남는다"와도 그래야 맞다. **개정본의 정본은 신규 `docs/plan/v3/04-guardrails.md`이고, v2의 R1 자리에는 개정 포인터 한 줄만 남긴다.**
+>
+> **(c) 10쌍의 행 번호는 전부 낡았다.** 예: `workflows.md`의 pure-literal `meta` 린트는 R1이 적은 `validate_harness.py:309-314`가 아니라 현재 **`:336-337`**, `Date.now()` 금지는 `:316-326`이 아니라 **`:344-346`**이다. 산문 쪽 인용도 어긋난다 — R1의 `hooks.md:70`(unanchored matcher)은 현재 `:72`다. v2 문서가 동결됐으므로 당연한 표류다. **10쌍 각각을 현재 파일에서 다시 찾아 분해한다.** 짝을 못 찾는 쌍은 "쌍이 소멸함"으로 기록한다.
+
+`docs/plan/v2/research/audit-synthesis.md` §4의 R1은 현재 이렇게 읽힌다: **"린트 체크가 남아 있는 산문 gotcha는 절대 자르지 않는다."** 10쌍이 짝지어져 있다.
 
 개정:
 
@@ -145,14 +177,16 @@ SKILL.md의 장문단은 **788단어**, 4개다.
 > 근거: 린트는 생성 후에 돌므로 작성 시점의 결정을 대신할 수 없다. 옮길 수 있는 건 "틀리면 무슨 일이 나는가"이고, 남겨야 하는 건 "그래서 무엇을 고르는가"다.
 > 단방향 예외는 유지: `workflows.md:33`의 pure-literal `meta` 요구는 린트가 `meta`의 *존재*만 확인하고 *순수성*은 확인하지 않으므로, 산문이 전부 남는다.
 
-10쌍 각각에 대해 구현 세션이 "결정 / 결과" 분해를 기록한다. 분해가 안 되는 쌍(결과가 곧 결정인 경우)은 손대지 않는다.
+10쌍 각각에 대해 구현 세션이 "결정 / 결과" 분해를 `04-guardrails.md` §2에 기록한다. 분해가 안 되는 쌍(결과가 곧 결정인 경우)은 손대지 않는다.
 
 ## 7. PR1 수용 기준
 
-1. `SKILL.md` 단어 수가 2,411 이하다.
+1. `SKILL.md` 단어 수가 **2,500 미만**이다 (§4.2 — D34의 2,411 순감소는 실측으로 폐기됐고, 대체 게이트는 이 repo 자신의 `harness-spec.md:14`가 이미 걸어둔 숫자다). 넘었다면 사용자와 합의한 조치와 사유가 기록됐다.
 2. 추가된 교리 4건이 전부 `SKILL.md`에 있고, `skills.md` §Conviction·§Don't write는 삭제되지 않았다.
-3. `grep -c "rubric\|failing test\|schema" SKILL.md` ≥ 1 — rich references가 실제로 도달한다.
+3. `grep -cE "rubric|failing test|schema" SKILL.md` ≥ 1 — rich references가 실제로 도달한다.
 4. 강화된 체크 메시지마다 `tests/test_validate_harness.py`에 문구를 앵커하는 assertion이 있다.
-5. `python3 tests/*.py` 전부 통과, `validate_harness.py --path . --strict` exit 0.
-6. `research/audit-synthesis.md` §4의 R1이 개정 문안으로 갱신됐고, 10쌍의 "결정/결과" 분해가 기록됐다.
+5. `for f in tests/test_*.py; do python3 "$f"; done` 전부 통과, `validate_harness.py --path . --strict` exit 0. (C9 — `python3 tests/*.py`는 동작하지 않는다.)
+6. `docs/plan/v3/04-guardrails.md`에 R1(v3) 문안과 10쌍의 "결정/결과" 분해가 있고, v2 원본에는 포인터 한 줄만 추가됐다 (C3).
 7. **§3.1 문단이 자기 예시다** — 다섯 가지 형태에 설명이 붙지 않았다. 이건 리뷰어가 눈으로 확인한다.
+
+> **범위 (사용자 확인, 2026-08-04):** 배포되는 것은 `.claude/skills/harness-creator/` 안의 `SKILL.md`·`references/`·`scripts/` 뿐이다. 루트 `CLAUDE.md`는 스킬의 구성 요소가 아니라 이 레포를 만들 때 쓰는 비계이므로 **PR1에서 손대지 않는다.** `00-overview.md` §5b가 지적한 끊어진 포인터는 릴리즈 위생 커밋으로 옮긴다.
