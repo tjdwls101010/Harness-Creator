@@ -142,7 +142,7 @@ A harness can use any subset of seven layers:
 
 A small project may need only `CLAUDE.md`, a skill, and a spec. A hard security boundary may justify a hook or permission rule. A workflow or subagent is generated only when the interview identifies a case that benefits from it.
 
-See [Generated components](docs/wiki/reference/generated-components.md) for the exact responsibilities and tradeoffs of each layer.
+See the [Harness reference](docs/wiki/reference/harness.md) for the exact responsibilities, spec contract, and tradeoffs of each layer.
 
 ## 5. How it works
 
@@ -193,7 +193,7 @@ The tool reproduces matcher evaluation, runs the selected hook with realistic in
 
 With your consent, `run_e2e.py` can launch a real headless Claude Code session against an isolated project copy and record a transcript for grading against the approved spec.
 
-This path can consume model tokens and may execute generated behavior, so it is separate from the default structural gate. See [Run E2E validation](docs/wiki/how-to/run-e2e-validation.md) before using it.
+This path can consume model tokens and may execute generated behavior, so it is separate from the default structural gate. See [Behavioral E2E validation](docs/wiki/how-to/validate-a-harness.md#4-behavioral-e2e-validation) before using it.
 
 ## 7. Philosophy
 
@@ -217,7 +217,7 @@ This preserves room for case-specific judgment without confusing advisory prose 
   <sub><a href="https://www.youtube.com/watch?v=qyPCVqFUyDo&amp;t=740s">Watch Boris Cherny discuss the empirical removal of redundant prompt constraints (starts at 12:20).</a></sub>
 </p>
 
-Read [Principles and verified boundaries](docs/wiki/explanation/principles-and-verified-boundaries.md) for the full argument and annotated primary sources.
+Read [Design principles](docs/wiki/explanation/design-principles.md) for the full argument and annotated primary sources.
 
 ## 8. Documentation
 
@@ -234,12 +234,14 @@ The canonical documentation lives in [`docs/wiki/`](docs/wiki/README.md) and is 
 High-use pages:
 
 - [Install and update](docs/wiki/how-to/install-and-update.md)
+- [Maintain an existing harness](docs/wiki/how-to/maintain-a-harness.md)
 - [Validate a harness](docs/wiki/how-to/validate-a-harness.md)
 - [Troubleshooting](docs/wiki/how-to/troubleshooting.md)
 - [CLI reference](docs/wiki/reference/cli.md)
-- [Support, compatibility, and limitations](docs/wiki/reference/support-compatibility-and-limitations.md)
+- [Harness reference](docs/wiki/reference/harness.md)
+- [Support, compatibility, and FAQ](docs/wiki/reference/support-and-faq.md)
 - [Architecture](docs/wiki/explanation/architecture.md)
-- [FAQ](docs/wiki/reference/faq.md)
+- [Design principles](docs/wiki/explanation/design-principles.md)
 
 ## 9. Contributing and support
 

@@ -4,13 +4,13 @@ Harness Creator support is best effort. There is no response or resolution SLA.
 
 ## Before opening an issue
 
-Check the [FAQ](docs/wiki/reference/faq.md), [troubleshooting guide](docs/wiki/how-to/troubleshooting.md), and [support and compatibility reference](docs/wiki/reference/support-compatibility-and-limitations.md). Search existing issues for the same symptom.
+Check [Support, compatibility, and FAQ](docs/wiki/reference/support-and-faq.md) and the [troubleshooting guide](docs/wiki/how-to/troubleshooting.md). Search existing issues for the same symptom.
 
 ## Choose a route
 
 | Need | Route |
 |---|---|
-| Installation or usage question | Start with the [FAQ](docs/wiki/reference/faq.md) and [troubleshooting](docs/wiki/how-to/troubleshooting.md); open a documentation issue if the answer should be added |
+| Installation or usage question | Start with [Support, compatibility, and FAQ](docs/wiki/reference/support-and-faq.md) and [troubleshooting](docs/wiki/how-to/troubleshooting.md); open a documentation issue if the answer should be added |
 | Reproducible defect | Open a [bug report](https://github.com/tjdwls101010/Harness-Creator/issues/new?template=bug.yml) |
 | New capability or changed behavior | Open a [feature request](https://github.com/tjdwls101010/Harness-Creator/issues/new?template=feature.yml) |
 | Missing, unclear, or incorrect documentation | Open a [documentation issue](https://github.com/tjdwls101010/Harness-Creator/issues/new?template=documentation.yml) |

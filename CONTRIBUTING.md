@@ -85,7 +85,7 @@ Canonical user documentation lives in `docs/wiki/` and follows the [Diátaxis](h
 - Do not copy local research transcripts or `.tmp/` material into tracked files.
 - Avoid hard line wraps inside paragraphs; let Markdown renderers wrap prose.
 
-The flat wiki compatibility files remain pointers through v1.0. Update their canonical target when moving a page, but do not create a second source of truth in them.
+Keep the page set proportional to the project. Consolidate related tasks before adding another page, and do not create flat compatibility pointers or a second source of truth.
 
 ## Code and content style
 

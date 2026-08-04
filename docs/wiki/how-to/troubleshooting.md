@@ -46,7 +46,7 @@ Run the audit for the full list:
 python3 /path/to/Harness-Creator/.claude/skills/harness-creator/scripts/audit_harness.py --path .
 ```
 
-Do not delete unexpected files automatically. Follow [Synchronize drift](sync-drift.md) and decide whether the spec or disk is authoritative for each item.
+Do not delete unexpected files automatically. Follow [Maintain an existing harness](maintain-a-harness.md#3-reconcile-spec-and-disk-drift) and decide whether the spec or disk is authoritative for each item.
 
 ## 6. A hook test does not block
 
@@ -60,7 +60,7 @@ Point the skill to the manifest, configuration, or command that already answers 
 
 ## 8. The E2E run is inconclusive
 
-Do not convert runner uncertainty into a product claim. Save the transcript, note the permission mode and Claude Code version, and reduce the next scenario to a read-only observation. See [Run E2E validation](run-e2e-validation.md) for the runner boundary.
+Do not convert runner uncertainty into a product claim. Save the transcript, note the permission mode and Claude Code version, and reduce the next scenario to a read-only observation. See [Behavioral E2E validation](validate-a-harness.md#4-behavioral-e2e-validation) for the runner boundary.
 
 ## 9. Get help
 
@@ -68,4 +68,4 @@ Use [SUPPORT.md](../../../SUPPORT.md) to choose between FAQ, a bug report, a fea
 
 ## 10. Next
 
-Read the [FAQ](../reference/faq.md) for conceptual questions or the [CLI reference](../reference/cli.md) for exact options. Return to the [documentation index](../README.md).
+Read [Support, compatibility, and FAQ](../reference/support-and-faq.md) for conceptual questions or the [CLI reference](../reference/cli.md) for exact options. Return to the [documentation index](../README.md).

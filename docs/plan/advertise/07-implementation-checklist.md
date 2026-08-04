@@ -8,7 +8,7 @@
 - [x] Generate and inspect both 3:2 graphical abstracts.
 - [x] Rewrite the root README.
 - [x] Build the canonical Diátaxis documentation set.
-- [x] Convert legacy flat wiki pages to compatibility pointers.
+- [x] Consolidate the legacy flat wiki pages into the canonical documentation set.
 - [x] Add community health files and Issue Forms.
 - [x] Align plugin and marketplace metadata at version 0.3.0.
 - [x] Add pinned Python and link-validation workflows.
@@ -25,7 +25,7 @@
 - [x] Internal links and image references pass.
 - [x] External-link workflow completes once before merge.
 - [x] Every canonical page is indexed.
-- [x] Every legacy page points to a valid replacement.
+- [x] Every removed legacy topic has a valid indexed replacement.
 - [x] Poster dimensions and SHA-256 match.
 - [x] Image labels and arrows are exact and readable.
 - [x] Mermaid source is valid and renders through Mermaid CLI.

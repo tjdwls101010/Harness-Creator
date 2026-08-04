@@ -63,4 +63,4 @@ Harness Creator does not:
 
 ## 7. Next
 
-Continue with [Create your first harness](tutorials/first-harness.md), or read [Why harnesses](explanation/why-harnesses.md) for the underlying mental model. Return to the [documentation index](README.md).
+Continue with [Create your first harness](tutorials/first-harness.md), or read [Design principles](explanation/design-principles.md) for the underlying mental model. Return to the [documentation index](README.md).

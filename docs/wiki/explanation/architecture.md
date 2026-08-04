@@ -77,4 +77,4 @@ The personal marketplace points to the repository root. Claude Code copies plugi
 
 ## 8. Next
 
-Read [Progressive disclosure](progressive-disclosure.md) for the context design or [CLI reference](../reference/cli.md) for the executable surface. Return to the [documentation index](../README.md).
+Read [Design principles](design-principles.md#4-progressive-disclosure) for the context design or [CLI reference](../reference/cli.md) for the executable surface. Return to the [documentation index](../README.md).

@@ -13,13 +13,11 @@ Canonical documentation remains tracked in `docs/wiki/` and follows Diátaxis:
 - Reference describes commands, files, states, compatibility, and limitations.
 - Explanation develops the mental model and design rationale.
 
-`docs/wiki/README.md` indexes every canonical page. `Overview.md` introduces the set. `_Sidebar.md` provides compact local navigation.
+`docs/wiki/README.md` indexes every canonical page. `Overview.md` introduces the set. `_Sidebar.md` provides compact local navigation. Related procedures and references are consolidated so the canonical set remains at 16 files rather than mirroring every product concept with a separate page.
 
 ## 3. Compatibility policy
 
-The pre-overhaul flat wiki filenames remain as short redirect-style compatibility pages through v1.0. Each names one canonical replacement and contains no competing source of truth.
-
-The GitHub Wiki feature should be disabled after merge so the tracked repository documentation is the only maintained wiki surface.
+The pre-overhaul flat compatibility pages were removed before v1.0 to keep the tracked documentation navigable. The GitHub Wiki feature is disabled, and `docs/wiki/` is the only maintained wiki surface. Future moves update repository links directly instead of adding redirect-style Markdown files.
 
 ## 4. Content ownership
 

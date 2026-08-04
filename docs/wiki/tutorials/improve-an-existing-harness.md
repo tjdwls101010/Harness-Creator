@@ -67,4 +67,4 @@ The improvement is successful when the original failure no longer occurs and exi
 
 ## 8. Next
 
-Use [Extend a harness](../how-to/extend-a-harness.md) when the next change is a new need, or [Synchronize drift](../how-to/sync-drift.md) when the audit reports file/spec disagreement. Return to the [documentation index](../README.md).
+Use [Maintain an existing harness](../how-to/maintain-a-harness.md) when the next change is a new need or the audit reports file/spec disagreement. Return to the [documentation index](../README.md).
