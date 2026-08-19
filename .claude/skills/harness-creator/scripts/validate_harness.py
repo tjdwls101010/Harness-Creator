@@ -16,6 +16,7 @@ Exit codes: 0 = no errors (warnings still possible unless --strict),
 """
 
 import argparse
+import ast
 import json
 import re
 import stat
@@ -310,6 +311,113 @@ def _check_dead_links(skill_dir, loc, text, findings):
             continue
         if not (skill_dir / subdir / name).exists():
             add(findings, "E", loc, f"references a {subdir} file that does not exist: {subdir}/{name}")
+
+
+def check_skill_scripts(root, findings):
+    """A bundled script's CLI is an interface only if it describes itself.
+
+    argparse hands every script a --help for free; what it cannot supply is
+    what each argument means. That gap is invisible from the outside -- the
+    script runs, the flag works, and only a model trying to call it pays the
+    cost (see references/skills.md)."""
+    for skill_dir in hc.iter_skill_dirs(root):
+        for path in sorted(skill_dir.glob("scripts/**/*.py")):
+            _check_cli_self_description(path, str(path.relative_to(root)), findings)
+
+
+def _arg_label(node):
+    """The flag or positional name an add_argument call declares."""
+    for arg in node.args:
+        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+            return repr(arg.value)
+    return "an argument"
+
+
+def _is_parser_construction(node):
+    """`argparse.ArgumentParser(...)` in either import style."""
+    func = node.func
+    if isinstance(func, ast.Attribute):
+        return func.attr == "ArgumentParser"
+    return isinstance(func, ast.Name) and func.id == "ArgumentParser"
+
+
+def _keyword(node, name):
+    """The `name=` argument of a call, as an AST node, or None if absent."""
+    for kw in node.keywords:
+        if kw.arg == name:
+            return kw.value
+    return None
+
+
+def _action_value(node):
+    """The literal `action=` of an add_argument call, if it is a plain string."""
+    action = _keyword(node, "action")
+    return action.value if isinstance(action, ast.Constant) else None
+
+
+def _is_module_doc(value):
+    return isinstance(value, ast.Name) and value.id == "__doc__"
+
+
+def _check_cli_self_description(path, loc, findings):
+    try:
+        tree = ast.parse(hc.read_text(path))
+    except SyntaxError as exc:
+        # Swallowing this would let a script that cannot run at all pass as a
+        # working interface, and one bad file would otherwise abort the lint
+        # and hide every other finding.
+        add(
+            findings, "E", loc,
+            f"Python syntax error on line {exc.lineno} -- the script cannot run, "
+            "so neither its --help nor the command it backs will work",
+        )
+        return
+    has_docstring = ast.get_docstring(tree) is not None
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if _is_parser_construction(node):
+            description = _keyword(node, "description")
+            if description is None:
+                add(
+                    findings, "W", loc,
+                    "the parser has no description= -- --help opens with the usage "
+                    "line alone, so what the script is for isn't knowable without "
+                    "reading it",
+                )
+            elif _is_module_doc(description) and not has_docstring:
+                add(
+                    findings, "W", loc,
+                    "the parser passes description=__doc__ but this module has no "
+                    "docstring, so the description resolves to None and --help reads "
+                    "exactly as if it had been left out",
+                )
+            continue
+        if not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr == "add_parser":
+            if not any(kw.arg == "help" for kw in node.keywords):
+                add(
+                    findings, "E", loc,
+                    f"subcommand {_arg_label(node)} has no help= -- it still appears "
+                    "in the parent's {choices} list, but with no line explaining what "
+                    "it does, so choosing between subcommands means reading the source",
+                )
+            continue
+        if node.func.attr != "add_argument":
+            continue
+        if any(kw.arg == "help" for kw in node.keywords):
+            continue
+        # argparse's own _VersionAction/_HelpAction ship a default help string,
+        # so these two read correctly in --help with no help= of their own.
+        if _action_value(node) in ("version", "help"):
+            continue
+        add(
+            findings, "E", loc,
+            f"{_arg_label(node)} has no help= -- --help prints the flag name and "
+            "nothing else, so the model has to open this script's source to learn "
+            "what the argument takes",
+        )
 
 
 def check_agents(root, findings):
@@ -800,6 +908,7 @@ def run(root, strict):
     findings = []
     check_settings(root, findings)
     check_skills(root, findings)
+    check_skill_scripts(root, findings)
     check_agents(root, findings)
     check_workflows(root, findings)
     check_rules(root, findings)

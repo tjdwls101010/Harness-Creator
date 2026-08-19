@@ -33,6 +33,21 @@ class GoodHarnessTests(unittest.TestCase):
         self.assertEqual(exit_code, vh.hc.EXIT_OK)
 
 
+class CliEdgeCaseTests(unittest.TestCase):
+    """argparse shapes that are correct but look like omissions.
+
+    Kept out of good-harness deliberately: that fixture is the canonical
+    example a generated harness gets modelled on, and padding it with
+    torture cases blunts what it teaches."""
+
+    def setUp(self):
+        self.root = REPO_ROOT / "tests" / "fixtures" / "cli-edge-cases"
+        self.findings, _ = vh.run(self.root, strict=False)
+
+    def test_no_findings(self):
+        self.assertEqual(self.findings, [])
+
+
 class BadHarnessTests(unittest.TestCase):
     def setUp(self):
         self.root = REPO_ROOT / "tests" / "fixtures" / "bad-harness"
@@ -83,6 +98,21 @@ class BadHarnessTests(unittest.TestCase):
 
     def test_dead_script_link_is_error(self):
         self._assert_error_contains("dead-link-skill", "scripts/nonexistent.py")
+
+    def test_argument_without_help_is_error(self):
+        self._assert_error_contains("bad_cli.py", "help=")
+
+    def test_unparseable_script_is_error(self):
+        self._assert_error_contains("broken_cli.py", "syntax error")
+
+    def test_parser_without_description_is_warning(self):
+        self._assert_warning_contains("bad_cli.py", "description=")
+
+    def test_subparser_without_help_is_error(self):
+        self._assert_error_contains("subcommand_cli.py", "subcommand 'run'")
+
+    def test_doc_description_without_docstring_is_warning(self):
+        self._assert_warning_contains("docless_cli.py", "resolves to None")
 
     def test_missing_skill_md_is_error(self):
         self._assert_error_contains("empty-skill-dir", "no SKILL.md")
@@ -196,6 +226,14 @@ class ConsequenceClauseTests(unittest.TestCase):
         self.assertIn("stays in context", m)
         self.assertIn("recurring cost", m)
         self.assertIn("references/", m)
+
+    def test_missing_arg_help_says_the_model_reads_the_source(self):
+        """Sourced in references/skills.md: an argument without `help=` prints
+        as a bare flag name, so the model opens the source to learn what it
+        takes and the interface reverts to the document it replaced. The
+        consequence is the whole reason this is an E and not a style nit."""
+        m = self._message_containing("has no help=")
+        self.assertIn("open this script's source", m)
 
     def test_findings_without_a_sourced_consequence_stay_bare(self):
         """The three the v3 plan wanted to annotate and the docs would not
