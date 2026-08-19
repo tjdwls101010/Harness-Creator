@@ -341,19 +341,18 @@ def _is_parser_construction(node):
     return isinstance(func, ast.Name) and func.id == "ArgumentParser"
 
 
-def _action_value(node):
-    """The literal `action=` of an add_argument call, if it is a plain string."""
-    for kw in node.keywords:
-        if kw.arg == "action" and isinstance(kw.value, ast.Constant):
-            return kw.value.value
-    return None
-
-
 def _keyword(node, name):
+    """The `name=` argument of a call, as an AST node, or None if absent."""
     for kw in node.keywords:
         if kw.arg == name:
             return kw.value
     return None
+
+
+def _action_value(node):
+    """The literal `action=` of an add_argument call, if it is a plain string."""
+    action = _keyword(node, "action")
+    return action.value if isinstance(action, ast.Constant) else None
 
 
 def _is_module_doc(value):

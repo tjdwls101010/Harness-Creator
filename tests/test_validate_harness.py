@@ -227,6 +227,14 @@ class ConsequenceClauseTests(unittest.TestCase):
         self.assertIn("recurring cost", m)
         self.assertIn("references/", m)
 
+    def test_missing_arg_help_says_the_model_reads_the_source(self):
+        """Sourced in references/skills.md: an argument without `help=` prints
+        as a bare flag name, so the model opens the source to learn what it
+        takes and the interface reverts to the document it replaced. The
+        consequence is the whole reason this is an E and not a style nit."""
+        m = self._message_containing("has no help=")
+        self.assertIn("open this script's source", m)
+
     def test_findings_without_a_sourced_consequence_stay_bare(self):
         """The three the v3 plan wanted to annotate and the docs would not
         support. Leaving them bare is the finding, not an omission.
