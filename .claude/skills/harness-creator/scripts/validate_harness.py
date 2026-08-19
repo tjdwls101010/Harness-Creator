@@ -333,14 +333,56 @@ def _arg_label(node):
     return "an argument"
 
 
+def _is_parser_construction(node):
+    """`argparse.ArgumentParser(...)` in either import style."""
+    func = node.func
+    if isinstance(func, ast.Attribute):
+        return func.attr == "ArgumentParser"
+    return isinstance(func, ast.Name) and func.id == "ArgumentParser"
+
+
+def _action_value(node):
+    """The literal `action=` of an add_argument call, if it is a plain string."""
+    for kw in node.keywords:
+        if kw.arg == "action" and isinstance(kw.value, ast.Constant):
+            return kw.value.value
+    return None
+
+
 def _check_cli_self_description(path, loc, findings):
-    tree = ast.parse(hc.read_text(path))
+    try:
+        tree = ast.parse(hc.read_text(path))
+    except SyntaxError as exc:
+        # Swallowing this would let a script that cannot run at all pass as a
+        # working interface, and one bad file would otherwise abort the lint
+        # and hide every other finding.
+        add(
+            findings, "E", loc,
+            f"Python syntax error on line {exc.lineno} -- the script cannot run, "
+            "so neither its --help nor the command it backs will work",
+        )
+        return
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+        if not isinstance(node, ast.Call):
+            continue
+        if _is_parser_construction(node):
+            if not any(kw.arg == "description" for kw in node.keywords):
+                add(
+                    findings, "W", loc,
+                    "the parser has no description= -- --help opens with the usage "
+                    "line alone, so what the script is for isn't knowable without "
+                    "reading it",
+                )
+            continue
+        if not isinstance(node.func, ast.Attribute):
             continue
         if node.func.attr != "add_argument":
             continue
         if any(kw.arg == "help" for kw in node.keywords):
+            continue
+        # argparse's own _VersionAction/_HelpAction ship a default help string,
+        # so these two read correctly in --help with no help= of their own.
+        if _action_value(node) in ("version", "help"):
             continue
         add(
             findings, "E", loc,

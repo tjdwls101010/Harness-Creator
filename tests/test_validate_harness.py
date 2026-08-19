@@ -33,6 +33,21 @@ class GoodHarnessTests(unittest.TestCase):
         self.assertEqual(exit_code, vh.hc.EXIT_OK)
 
 
+class CliEdgeCaseTests(unittest.TestCase):
+    """argparse shapes that are correct but look like omissions.
+
+    Kept out of good-harness deliberately: that fixture is the canonical
+    example a generated harness gets modelled on, and padding it with
+    torture cases blunts what it teaches."""
+
+    def setUp(self):
+        self.root = REPO_ROOT / "tests" / "fixtures" / "cli-edge-cases"
+        self.findings, _ = vh.run(self.root, strict=False)
+
+    def test_no_findings(self):
+        self.assertEqual(self.findings, [])
+
+
 class BadHarnessTests(unittest.TestCase):
     def setUp(self):
         self.root = REPO_ROOT / "tests" / "fixtures" / "bad-harness"
@@ -86,6 +101,12 @@ class BadHarnessTests(unittest.TestCase):
 
     def test_argument_without_help_is_error(self):
         self._assert_error_contains("bad_cli.py", "help=")
+
+    def test_unparseable_script_is_error(self):
+        self._assert_error_contains("broken_cli.py", "syntax error")
+
+    def test_parser_without_description_is_warning(self):
+        self._assert_warning_contains("bad_cli.py", "description=")
 
     def test_missing_skill_md_is_error(self):
         self._assert_error_contains("empty-skill-dir", "no SKILL.md")
