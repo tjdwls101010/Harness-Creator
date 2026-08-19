@@ -84,6 +84,9 @@ class BadHarnessTests(unittest.TestCase):
     def test_dead_script_link_is_error(self):
         self._assert_error_contains("dead-link-skill", "scripts/nonexistent.py")
 
+    def test_argument_without_help_is_error(self):
+        self._assert_error_contains("bad_cli.py", "help=")
+
     def test_missing_skill_md_is_error(self):
         self._assert_error_contains("empty-skill-dir", "no SKILL.md")
 

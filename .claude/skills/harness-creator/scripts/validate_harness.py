@@ -16,6 +16,7 @@ Exit codes: 0 = no errors (warnings still possible unless --strict),
 """
 
 import argparse
+import ast
 import json
 import re
 import stat
@@ -310,6 +311,43 @@ def _check_dead_links(skill_dir, loc, text, findings):
             continue
         if not (skill_dir / subdir / name).exists():
             add(findings, "E", loc, f"references a {subdir} file that does not exist: {subdir}/{name}")
+
+
+def check_skill_scripts(root, findings):
+    """A bundled script's CLI is an interface only if it describes itself.
+
+    argparse hands every script a --help for free; what it cannot supply is
+    what each argument means. That gap is invisible from the outside -- the
+    script runs, the flag works, and only a model trying to call it pays the
+    cost (see references/skills.md)."""
+    for skill_dir in hc.iter_skill_dirs(root):
+        for path in sorted(skill_dir.glob("scripts/**/*.py")):
+            _check_cli_self_description(path, str(path.relative_to(root)), findings)
+
+
+def _arg_label(node):
+    """The flag or positional name an add_argument call declares."""
+    for arg in node.args:
+        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+            return repr(arg.value)
+    return "an argument"
+
+
+def _check_cli_self_description(path, loc, findings):
+    tree = ast.parse(hc.read_text(path))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr != "add_argument":
+            continue
+        if any(kw.arg == "help" for kw in node.keywords):
+            continue
+        add(
+            findings, "E", loc,
+            f"{_arg_label(node)} has no help= -- --help prints the flag name and "
+            "nothing else, so the model has to open this script's source to learn "
+            "what the argument takes",
+        )
 
 
 def check_agents(root, findings):
@@ -800,6 +838,7 @@ def run(root, strict):
     findings = []
     check_settings(root, findings)
     check_skills(root, findings)
+    check_skill_scripts(root, findings)
     check_agents(root, findings)
     check_workflows(root, findings)
     check_rules(root, findings)
