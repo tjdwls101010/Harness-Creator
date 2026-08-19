@@ -108,6 +108,12 @@ class BadHarnessTests(unittest.TestCase):
     def test_parser_without_description_is_warning(self):
         self._assert_warning_contains("bad_cli.py", "description=")
 
+    def test_subparser_without_help_is_error(self):
+        self._assert_error_contains("subcommand_cli.py", "subcommand 'run'")
+
+    def test_doc_description_without_docstring_is_warning(self):
+        self._assert_warning_contains("docless_cli.py", "resolves to None")
+
     def test_missing_skill_md_is_error(self):
         self._assert_error_contains("empty-skill-dir", "no SKILL.md")
 

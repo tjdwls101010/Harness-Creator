@@ -349,6 +349,17 @@ def _action_value(node):
     return None
 
 
+def _keyword(node, name):
+    for kw in node.keywords:
+        if kw.arg == name:
+            return kw.value
+    return None
+
+
+def _is_module_doc(value):
+    return isinstance(value, ast.Name) and value.id == "__doc__"
+
+
 def _check_cli_self_description(path, loc, findings):
     try:
         tree = ast.parse(hc.read_text(path))
@@ -362,19 +373,37 @@ def _check_cli_self_description(path, loc, findings):
             "so neither its --help nor the command it backs will work",
         )
         return
+    has_docstring = ast.get_docstring(tree) is not None
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
         if _is_parser_construction(node):
-            if not any(kw.arg == "description" for kw in node.keywords):
+            description = _keyword(node, "description")
+            if description is None:
                 add(
                     findings, "W", loc,
                     "the parser has no description= -- --help opens with the usage "
                     "line alone, so what the script is for isn't knowable without "
                     "reading it",
                 )
+            elif _is_module_doc(description) and not has_docstring:
+                add(
+                    findings, "W", loc,
+                    "the parser passes description=__doc__ but this module has no "
+                    "docstring, so the description resolves to None and --help reads "
+                    "exactly as if it had been left out",
+                )
             continue
         if not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr == "add_parser":
+            if not any(kw.arg == "help" for kw in node.keywords):
+                add(
+                    findings, "E", loc,
+                    f"subcommand {_arg_label(node)} has no help= -- it still appears "
+                    "in the parent's {choices} list, but with no line explaining what "
+                    "it does, so choosing between subcommands means reading the source",
+                )
             continue
         if node.func.attr != "add_argument":
             continue
