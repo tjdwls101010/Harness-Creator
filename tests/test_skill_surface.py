@@ -300,9 +300,20 @@ class GuardrailTests(unittest.TestCase):
         self.assertIn("hooks-events.md", text)
 
     def test_run_e2e_honesty_survives(self):
-        """Deleting the stated limitation turns an honest best guess into an
-        implied guarantee."""
-        self.assertIn("best guess", read(SKILL_MD) + read(SKILL_DIR / "references" / "e2e-testing.md"))
+        """This anchor was retired deliberately, which is the review signal
+        the class docstring asks for. It held the phrase "best guess" from
+        v1 through v4, because run_e2e.py's headless permission handling had
+        never been watched to succeed and deleting the caveat would have
+        turned an honest guess into an implied guarantee.
+
+        Three runs on 2026-08-22 settled it. What survives is the half that
+        is still true: auth is per-machine, so a confirmed run here says
+        nothing about the next environment. If that clause ever goes, the
+        script reads as unconditionally proven, which it is not."""
+        text = read(SKILL_MD) + read(SKILL_DIR / "references" / "e2e-testing.md")
+        self.assertIn("auth is per-machine", text)
+        self.assertNotIn("best guess", read(SKILL_MD),
+                         "the caveat was retired; do not reintroduce it as prose")
 
 
 class InterfaceDoctrineTests(unittest.TestCase):

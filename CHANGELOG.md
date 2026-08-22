@@ -2,24 +2,61 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.0] — 2026-08-22
+
+Interface. The last release made the skill's own `--help` output trustworthy; this one stops its prose from copying that output back out, and finds what the missing half had already broken. The doctrine ran in one direction — it constrained what may go *into* a signature and said nothing about prose restating one — so writing both broke no rule, and the skill was doing it. Two rows of its own script table were already wrong, one named a flag belonging to a different CLI, and four sentences elsewhere asserted behaviour the code contradicted. One of those four was a safety bug.
 
 ### Added
 
-- A research-backed discoverability dossier covering positioning, documentation architecture, visual direction, community distribution, launch sequencing, and directional measurement.
-- A canonical Diátaxis documentation set under `docs/wiki/`, with tutorials, how-to guides, reference, explanation, and compact navigation.
+- **The interface boundary runs both ways, split on ownership.** The tool owns what is *valid*, what it does, and what it prints; the project owns when to reach for it, what it costs, and why it was chosen. Neither side restates the other, and a falsifiability test makes it operable on cases nobody enumerated: **if editing the tool would make the sentence false, the sentence belongs in the tool.** An earlier draft forbade prose from "asserting how a tool currently behaves" and was retired after a blind test showed it left "run this only with consent, it spends real tokens" writable nowhere — the other half forbids it in `--help`.
+- **A pointer inherits its target's reader**, so it moves who pays rather than whether.
+- **The bundled-script CLI self-description check** (unreleased since 2026-08-19): `validate_harness.py` parses `.claude/skills/*/scripts/**/*.py` with `ast` and errors on an `add_argument` or `add_parser` with no `help=`. The interface doctrine promises a benefit that only exists once `--help` is complete, and nothing taught or checked that.
+- **A package-closure check for plugin-shipped skills.** A plugin installs as its own directory, so a pointer at a document elsewhere in the repo resolves for its author and nobody else. It warns rather than fails, because the same path can be a correct sentence about the *reader's* project — an adversarial pass built three correct plugins that collide, on `docs/architecture.md`, `.github/copilot-instructions.md` and `packages/web/CONTRIBUTING.md`.
+- **Ablation, and the improve question that finds candidates for it.** Every arrow in the feedback-routing table ended in a repair or a promotion, so a harness that is improved often only grows. A stale *line* has no tell — a rule written to fight a model's old default reads exactly like one still fighting the current default, and the model changes while the harness doesn't. One rule at a time, restore it if something breaks, and record that in the spec so the next pass doesn't re-run the experiment. **Never a hook or a permission rule**: those layers exist because their failure is the one you cannot afford to observe.
+- **An eviction rule for the two spec sections that grow every pass.** Change history keeps what a re-entering pass can still act on and folds the rest to a line each — except a pass that recorded someone else's edit, the only place the next pass learns this harness has other authors. Design rationale keeps decisions and rejected alternatives, drops the sentences defending them, and rewrites a superseded decision to its outcome rather than stacking the new one beneath it.
+- **`--keep-isolated` on `run_e2e.py`**, for scenarios that grade generated files rather than the transcript.
+
+### Verified
+
+- **`run_e2e.py`'s headless permission handling works.** It had never been watched to succeed end to end, across four generations, and the script said so in the `--help` it prints to users. `--isolate` plus skip-permissions completed three scenarios on the first attempt, no auth failure, no permission stall. The caveat that survives is narrower and still true: auth is per-machine, so a machine this has not run on is a fresh question.
+
+Alongside the doctrine work, the discoverability track that had been sitting unreleased:
+
+- A canonical Diátaxis documentation set under `docs/wiki/`, with tutorials, how-to guides, reference, explanation, and compact navigation, plus a research-backed discoverability dossier covering positioning, documentation architecture, visual direction, community distribution, launch sequencing, and directional measurement.
 - Repository-owned graphical abstracts, a verified archival copy of the original poster, support and security policies, Contributor Covenant 3.0, structured Issue Forms, and a pull-request template.
 - Python 3.10 and 3.14 CI, pull-request internal-link validation, non-blocking pull-request plus weekly/manual external-link validation, and weekly Dependabot updates for GitHub Actions. Every action is pinned to an immutable commit SHA.
 
 ### Changed
 
+- **`SKILL.md`'s script table lost its `Signature` column.** Judgment (`Run it when`) stays; the flags were a copy of `--help` that nothing checked, and two of five rows had gone wrong. The table now says to read `--help` on first use.
+- **CLAUDE.md no longer points at `.claude/harness-spec.md`.** The rule against enumerating components rests on hand-maintained prose lists drifting — and the spec's Behavior inventory is one, with its own drift check. The pointer moved the drift one hop and put a working session on a maintenance document. A maintainer's way in is an HTML comment, stripped before injection. Fixed in all three places that carried it, including a linter message that recommended it.
+- **805 words of reference prose removed** — table introductions, restatements of an example, a gotcha duplicating the frontmatter row three lines above it, and mechanism numbers no decision compares against. The test applied: does this change what the builder writes into a generated harness, or does during a pass?
+- The always-loaded surface is **2,642 words**, inside the existing 2,650 budget. The first draft of the new doctrine measured 2,694; auditing it against this project's own list of shapes to cut found three of them in it, including a development-history anecdote — the exact thing this release forbids shipping.
 - Rewrote the README around the discovery-to-install path, with the interview-driven positioning, recommended plugin install, secondary skills CLI install, deliberate layer comparison, validation boundaries, and canonical documentation map.
-- Aligned plugin and marketplace metadata at version 0.3.0 with repository, homepage, and MIT license fields where supported.
-- Updated contribution guidance for the current test, validation, CI, documentation, support, and security workflows.
-- Prepared the approved repository description, topics, Wiki setting, and private vulnerability reporting changes for post-merge application in the documentation overhaul.
-- Applied the approved repository metadata and security settings after merge, verified isolated skills CLI installation and skills.sh indexing, and updated the distribution plan to Anthropic's current authenticated in-app submission route.
-- Submitted Harness Creator to Anthropic's plugin directory for Claude Code and recorded the review status, channel metrics, and downstream 72-hour distribution gate.
 - Consolidated the tracked wiki from 34 files to 16, removing legacy pointer pages and grouping related maintenance, validation, reference, and design material into clearer reader paths.
+- Updated contribution guidance for the current test, validation, CI, documentation, support, and security workflows; applied the approved repository metadata and security settings; and submitted Harness Creator to Anthropic's plugin directory for Claude Code, recording the review status and the downstream distribution gate.
+
+### Fixed
+
+- **Prose called isolation `run_e2e.py`'s default when `--isolate` is opt-in.** A reader who trusted it and dropped the flag would point a headless agent session at the user's real project. The `--help` was right the whole time; only the prose was wrong.
+- **`test_hook.py` returned 0 whatever the hook did**, while `SKILL.md` used "passes `test_hook.py`" as a delivery gate. A hook exiting 1 — documented in this same package as the mistake that leaves a policy silently doing nothing — cleared it. Exit 2 is still a pass: a blocking hook exits 2 on the path it exists to block.
+- **A skill or agent built the way the guides describe could not clear the lint.** Three reference files teach a nested `hooks:` block in frontmatter; the parser gave up on the whole file when it saw one, and the validator reported the component's auto-triggering as dead.
+- **A plugin laid out the default way had every skill skipped, silently.** Discovery only knew `.claude/skills/`, while a plugin ships from `./skills` unless its manifest says otherwise — reported as a clean run.
+- **`run_e2e.py --isolate` never deleted its project copy.** The variable naming the temp parent was assigned and never used, and a comment claimed the OS collects them; 48 copies and 8.8 GB had accumulated. The test file leaked one per run of its own.
+- **Thirteen pointers led out of the shipped package** — decision-log codes nothing in the package defines, plan-document paths, and two `.tmp/` paths that are gitignored and therefore absent from every clone. One sat in a module docstring that `--help` prints to the end user.
+- **The canonical fixture described a hook that does not exist**, `agents.md` claimed `tools:` enforces read-only while its own example keeps `Bash`, and the must-never recipe demonstrated an `Edit|Write` matcher that this package's own gotcha list calls incomplete. Generated harnesses are modelled on these.
+- **Two holes in the pointer check**: a nested pointer was only verified one path segment deep, and a sentence-ending period was read as part of the filename — the second failing *correct* harnesses.
+- **`--model`'s help promised the invoking session's model.** Nothing forwards it; the spawned `claude` applies its own default. Behavioural fidelity is the entire premise of e2e.
+
+### Known limitations
+
+- **The L5 full-interview dogfooding remains unrun**, for the third release. `AskUserQuestion` does not exist in headless or subagent contexts, so no automated test can exercise the interview; the runbook and a prepared target repo ship in `docs/plan/v3/`. This release was not held for it, which is a deliberate call and not an oversight.
+- The claim that this release's doctrine reaches generated harnesses is checked by generation behaviour, not by the interview that produces it — three headless runs, all three deferring their bundled script's flag set to `--help` and none writing a signature table. What that does *not* cover is whether the interview elicits the right spec in the first place, which is the same gap as the item above.
+- Carried forward: installing the plugin from a local directory path copies gitignored files into the plugin cache (harmless; GitHub-source installs are unaffected).
+
+## [Unreleased]
+
+Nothing yet.
 
 ## [0.3.0] — 2026-08-04
 

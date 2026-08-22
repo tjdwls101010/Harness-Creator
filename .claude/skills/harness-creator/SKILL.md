@@ -126,7 +126,7 @@ Their flags are not listed here. Read a script's `--help` the first time you rea
 
 `validate_harness.py` checks structural integrity and prints the always-loaded budget, but it cannot grade a skill's `description` for trigger quality or near-miss overlap with sibling skills. Re-read every description you generate against references/skills.md before calling it done — including a lone new skill, not just a batch.
 
-`run_e2e.py`'s headless permission handling is a documented best guess, not empirically confirmed — read references/e2e-testing.md before the first real run and say so to the user.
+`run_e2e.py`'s headless permission handling is confirmed working (`--isolate` + skip-permissions, three runs, 2026-08-22), but auth is per-machine — read references/e2e-testing.md before the first run in a new environment.
 
 ## Hard lines
 

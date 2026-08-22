@@ -91,6 +91,16 @@ python3 .claude/skills/harness-creator/scripts/audit_harness.py --path .
 
 The test suite doubles as the regression record for the v2 audit's bug list: `tests/test_skill_surface.py` pins the always-loaded budget, the guardrail facts that must survive future trimming, and the prose bugs (B2/B5/B7/B8/B10 in the v2 numbering); `tests/test_validate_harness.py` and `tests/test_audit_harness.py` cover the script bugs.
 
+### Behavioural verification of the interface doctrine (2026-08-22)
+
+`validate_harness.py` cannot judge whether prose copied an interface, so v5's central claim was checked by generation behaviour instead: three headless sessions (`run_e2e.py --isolate`, `claude` 2.1.239), same prompt, against a small Node project — "build one skill for our fixed-width invoice export, with a bundled script that validates a file against it." 33/15/33 turns, $5.30 total.
+
+**PASS, 3/3.** Every run triggered the skill, produced a harness that lints 0 errors / 0 warnings, and produced a script whose `--help` carries every argument (so the D43 check holds — the interface really does hold the information). No run wrote a signature table, and every run deferred the flag set to `--help` explicitly. Run 3 stated the reason back: *"`--help` for the flags and `--print-schema` for the column-entry vocabulary; both are emitted by the script, so neither can drift from what it accepts."*
+
+What they did do, and it is the doctrine working rather than failing: each named two or three individual flags, always with a *when* attached — run 2's *"`--help` documents the rest; the flags worth knowing exist are `--columns-json` (validate against a proposed or older table) and `--line-ending` (pin LF or CRLF when the finance side requires one)"* is the ownership split applied exactly. The one wobble to watch is run 1, which restated the script's exit-code contract and one flag's output shape inline — tool-owned facts that had drifted back into prose. If that recurs, suspect the canonical example before tightening the doctrine.
+
+**This run also closes v1's risk R3.** `run_e2e.py`'s headless permission handling had never been watched to succeed end to end across four generations, and `SKILL.md` still said so. `--isolate` plus skip-permissions worked on the first attempt, three times, with no auth failure and no permission stall.
+
 Interview behavior itself cannot be validated this way — `AskUserQuestion` does not exist in headless or subagent contexts — so the interview is verified by dogfooding against a real project.
 
 ## Change history
@@ -108,4 +118,5 @@ Older passes are folded to one line each; the current generation stays in full. 
   - **Removed the CLAUDE.md → this-file pointer**, on all three surfaces that carried it, including a linter message that recommended it.
   - **Gave this file an eviction rule** for the two sections that grow every pass, and applied it: inherited Design rationale went 709 → ~465 words with no claim lost, and v2-v4 above are folded to a line each.
   - **Cut 805 words of reference prose** that described Claude Code's runtime behavior without changing what a builder writes or does.
+  - **Behavioural verification, 3/3** — the interface claim confirmed by generation rather than by lint, and the same runs closed v1's risk R3 after four generations.
   - Verified by two independent audits (`gpt-5.6-sol`, blank-slate and adversarial), which found the unsatisfiable-pair defect in the first doctrine draft and three correct plugins the closure check would have failed. Both changed the design.
