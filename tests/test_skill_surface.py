@@ -457,6 +457,40 @@ class InterfaceContradictionTests(unittest.TestCase):
                 self.assertNotIn("--dangerously-skip-permissions", m.group(0), path.name)
 
 
+class SubtractionTests(unittest.TestCase):
+    """v5. A harness only grows unless something makes it shrink, and improve
+    mode had no downward arrow: every row of the feedback-routing table ended
+    in a repair or a promotion to a stronger layer.
+
+    The retirement doctrine that did exist covered *components*, and only
+    fired once you already suspected one. A stale *line* has no such tell --
+    a rule written to fight a model's old default reads exactly like one
+    still fighting the current default."""
+
+    RE_ENTRY = SKILL_DIR / "references" / "re-entry.md"
+    E2E = SKILL_DIR / "references" / "e2e-testing.md"
+
+    def test_improve_asks_what_is_unnecessary_alongside_what_is_wanted(self):
+        text = read(self.RE_ENTRY)
+        improve = text.split("## Improve")[1].split("\n## ")[0]
+        self.assertIn("what is now unnecessary", improve)
+
+    def test_ablation_is_a_proposal_not_an_action(self):
+        self.assertIn("it is a proposal, not an action", read(self.RE_ENTRY))
+
+    def test_hooks_and_permissions_are_excluded_from_ablation(self):
+        """The guard that makes the rest safe to state. Ablating a hook means
+        observing the failure the hook exists to prevent."""
+        self.assertIn("never ablate a hook or a permission rule", read(self.RE_ENTRY).lower())
+
+    def test_the_routing_table_has_a_row_that_ends_in_removal(self):
+        rows = [l for l in read(self.E2E).splitlines() if l.startswith("| ")]
+        self.assertTrue(
+            any("Ablate" in r for r in rows),
+            "every repair target pointed at more machinery",
+        )
+
+
 class PointerReaderTests(unittest.TestCase):
     """v5 removed CLAUDE.md's pointer at `.claude/harness-spec.md`.
 
