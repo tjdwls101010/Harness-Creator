@@ -11,7 +11,9 @@ argument construction.
 """
 
 import json
+import shutil
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -111,9 +113,27 @@ class BuildCommandTests(unittest.TestCase):
 
 
 class IsolateProjectTests(unittest.TestCase):
+    def test_the_isolated_copy_is_removed_when_asked(self):
+        """--isolate leaked a full project copy per run: the variable that
+        named the temp parent was assigned and never used, so nothing ever
+        deleted it. Measured on this machine mid-release: 48 leftover copies,
+        8.8 GB, from real runs and from this very test file."""
+        src = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, src, True)
+        (src / "a.txt").write_text("x", encoding="utf-8")
+        dest = re2.isolate_project(src)
+        self.assertTrue(dest.is_dir())
+        re2.discard_isolated(dest)
+        self.assertFalse(dest.exists())
+        self.assertFalse(dest.parent.exists(), "the mkdtemp parent leaks too")
+
+    def test_keeping_the_copy_is_an_explicit_choice(self):
+        """Grading artifact correctness needs the files, so keeping is a
+        real mode -- it just cannot be the silent default."""
+        parser_src = (SCRIPTS_DIR / "run_e2e.py").read_text(encoding="utf-8")
+        self.assertIn("--keep-isolated", parser_src)
+
     def test_copies_tracked_files_and_excludes_junk(self):
-        import shutil
-        import tempfile
         src = Path(tempfile.mkdtemp())
         try:
             (src / "keep.py").write_text("print(1)")
@@ -129,6 +149,7 @@ class IsolateProjectTests(unittest.TestCase):
             self.assertNotEqual(dest, src)
         finally:
             shutil.rmtree(src, ignore_errors=True)
+            re2.discard_isolated(dest)
 
 
 class OutputWritingTests(unittest.TestCase):
