@@ -12,15 +12,15 @@ summary.json in --out, and a separate grading agent (or workflow phase)
 reads those to judge trigger/behavior/artifact correctness against the
 spec's expected scenario.
 
-IMPORTANT -- read this before trusting this script's permission handling:
-headless (`-p`) permission handling was NOT empirically verified when this
-script was built (see references/e2e-testing.md's "Headless permission
-handling" section) -- the sandbox that built it could not authenticate a
-spawned `claude` process at all. `--isolate` + `--dangerously-skip-permissions`
-is the documented best guess, not a confirmed-safe default. Treat your
-first real invocation of this script as the actual verification, and only
-ever pass `--isolate` when running anything other than a purely read-only
-prompt.
+Permission handling: `--isolate` (which implies
+`--dangerously-skip-permissions` unless `--permission-mode` is given) was
+confirmed working end to end on 2026-08-22, three runs, no auth failure and
+no permission stall. Auth is per-machine, though, so a machine this has not
+run on before is still a fresh question -- see references/e2e-testing.md.
+
+Pass `--isolate` for anything that is not a purely read-only prompt: without
+it the session runs in --project itself, and a scenario that writes writes
+there.
 """
 
 import argparse
