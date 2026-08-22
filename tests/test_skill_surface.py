@@ -457,6 +457,46 @@ class InterfaceContradictionTests(unittest.TestCase):
                 self.assertNotIn("--dangerously-skip-permissions", m.group(0), path.name)
 
 
+class PointerReaderTests(unittest.TestCase):
+    """v5 removed CLAUDE.md's pointer at `.claude/harness-spec.md`.
+
+    The policy forbidding an inventory argued that a hand-maintained prose
+    list drifts -- and then sent the reader to the spec, whose Behavior
+    inventory is a hand-maintained prose list with its own drift check. The
+    pointer did not remove the drift, it moved it one hop, and it moved a
+    working session onto a maintenance document to do it.
+
+    All three assertions live together on purpose. The pointer was written
+    into prose, into the canonical example, and into a linter message that
+    actively recommended it; fixing any one of them leaves the other two to
+    put it back."""
+
+    CMR = SKILL_DIR / "references" / "claude-md-and-rules.md"
+
+    def test_the_policy_names_the_client_as_what_already_announces_components(self):
+        text = read(self.CMR)
+        self.assertIn("the client already does", text)
+        self.assertIn("A pointer inherits its target's reader", text)
+
+    def test_the_canonical_example_has_no_live_pointer_at_the_spec(self):
+        """An HTML comment is allowed and is the point: block comments are
+        stripped before injection, so a maintainer's way in costs the
+        session nothing."""
+        block = read(self.CMR).split("```markdown")[1].split("```")[0]
+        for line in block.splitlines():
+            if "harness-spec.md" in line:
+                self.assertTrue(
+                    line.strip().startswith("<!--"),
+                    f"the example points a session at the spec: {line.strip()!r}",
+                )
+
+    def test_the_linter_no_longer_recommends_the_pointer(self):
+        findings, _ = vh.run(REPO_ROOT / "tests" / "fixtures" / "bad-harness", strict=False)
+        message = next(m for _, _, m in findings if "component inventory" in m)
+        self.assertNotIn("harness-spec.md", message)
+        self.assertIn("the client already surfaces every component", message)
+
+
 class PackageClosureRegressionTests(unittest.TestCase):
     """v5 closed thirteen pointers that led out of the shipped package.
 
