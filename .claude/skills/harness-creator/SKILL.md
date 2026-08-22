@@ -59,9 +59,8 @@ Invocation
      ├─ record what happened in the spec's Change history
      ├─ update CLAUDE.md's pointers if needed (never enumerate components — see references/claude-md-and-rules.md);
      │   if this changes what harness-spec.md should say, fold it back into the Change-history update
-     ├─ python "${CLAUDE_SKILL_DIR}/scripts/validate_harness.py" --path . → one more whole-harness pass.
-     │   The two bullets above edit the spec and CLAUDE.md, and those edits can trip the @-import
-     │   check, the 200-line warning, or the bare-name inventory warning. Fix what it finds first.
+     ├─ python "${CLAUDE_SKILL_DIR}/scripts/validate_harness.py" --path . → one more whole-harness
+     │   pass, because the two bullets above edit files this lints. Fix what it finds first.
      └─ propose a commit
 ```
 
@@ -79,7 +78,7 @@ The core judgment call the whole interview builds toward: for each thing the use
 | Something that must happen (or never happen) every time, no exceptions | hook, paired with a `permissions` rule | Advisory layers have no enforcement power — a model can and occasionally will deviate. A hook fires deterministically regardless of what the model decides; pair it with a permission rule because a hook's own `if` filter is best-effort and fails open on unparseable input (see references/hooks.md). |
 | A specific tool, command, or path that must be blocked or force-approved | `permissions.allow` / `permissions.deny` | Enforced by the client itself, independent of model behavior (see the permissions section in references/hooks.md). |
 | A context-hungry, read-heavy role where only the conclusion matters back in the main thread (research, review, QA) | `.claude/agents/*.md` | Isolates context and lets you restrict tools/system-prompt per role — but agent count is a real cost (see references/agents.md), generate only roles the interview actually demonstrated a need for. |
-| An orchestration whose *shape* is fixed and repeats — same steps, only the arguments change, meant to be a one-button `/name` | `.claude/workflows/*.js` | Determinism is the point here. Keep it thin: skeleton in the script, judgment in the agent prompts (see references/workflows.md and D12). |
+| An orchestration whose *shape* is fixed and repeats — same steps, only the arguments change, meant to be a one-button `/name` | `.claude/workflows/*.js` | Determinism is the point here. Keep it thin: skeleton in the script, judgment in the agent prompts (see references/workflows.md). |
 | Large parallel work whose shape is different every time it comes up | Natural-language guidance in CLAUDE.md/a skill ("fan this out with a workflow: find → verify → synthesize") | A fixed file for a variable-shaped task becomes a flexibility tax. On-the-fly composition, guided by a principle, beats a rigid template here. |
 
 How to apply it, in four questions:
@@ -103,9 +102,9 @@ A reference does not have to be prose. A failing test, a schema, a rubric, or a 
 
 Numbers need their justification and their exception in the same breath. Every one of these threads is covered in depth in `references/` — load the file for whatever component you're about to generate before you generate it, every time, even if you've generated that component type before in this session.
 
-**Prefer an interface over an instruction where one exists.** Some behaviors don't need to be told to Claude at all — the thing Claude operates can be shaped so the wrong move isn't available. An interface is re-read from the tool's own signature on every use: every session, after every compaction, inside every subagent, including the ones that skip CLAUDE.md entirely. The harness's own interface surfaces are a bundled script's CLI, a hook script's configuration input, a workflow's `args`, a skill's `description`, an agent's `tools:`. The design lever is the parameter space: an argument that can only take three named values teaches the three cases by existing. This is also the strongest compression available: prose moved into a signature is not shortened, it is relocated to a surface that is re-read for free. The boundary: an interface expresses what is *valid*, never when to reach for it or why this project chose it — those stay prose. This applies to what the harness contains; this skill designs harnesses, not the project's application code.
+**Prefer an interface over an instruction where one exists.** Some behaviors don't need to be told to Claude at all — the thing Claude operates can be shaped so the wrong move isn't available. An interface is re-read from the tool's own signature on every use: every session, after every compaction, inside every subagent, including the ones that skip CLAUDE.md entirely. The harness's own interface surfaces are a bundled script's CLI, a hook script's configuration input, a workflow's `args`, a skill's `description`, an agent's `tools:`. The design lever is the parameter space: an argument that can only take three named values teaches the three cases by existing. This is also the strongest compression available: prose moved into a signature is not shortened, it is relocated to a surface that is re-read for free. The boundary runs both ways: an interface expresses what is *valid*, never when to reach for it or why this project chose it — and prose, holding that other half, never restates what the tool prints or asserts how it currently behaves. **If editing the tool would make the sentence false, the sentence belongs in the tool.** `--help` cannot drift from the code that emits it; a summary of `--help` can, and is the copy nothing checks. This applies to what the harness contains; this skill designs harnesses, not the project's application code.
 
-A check's failure message is an interface too — read at exactly the moment it matters, free otherwise. Where a rule is mechanically detectable, state the decision in prose and let the check's own output carry the consequence, instead of paying for both on every load.
+A check's failure message is an interface too — read at exactly the moment it matters, free otherwise. Where a rule is mechanically detectable, state the decision in prose and let the check's own output carry the consequence, instead of paying for both on every load. A pointer inherits its target's reader, so it moves who pays rather than whether.
 
 **No mid-sentence hard-wrapping.** Line breaks in every file you write fall only at sentence, list-item, or paragraph boundaries, never in the middle of a sentence to fit a column width. Hard wraps break a future Edit tool's exact-string matching and pollute diffs; renderers soft-wrap on their own, so there's no display benefit to doing it manually.
 
@@ -115,20 +114,22 @@ Two interview rules shape every stage, so they live here rather than in the file
 
 All five live in `scripts/` and are plain-argument Python 3.10+ CLIs (stdlib only). Always invoke them as `${CLAUDE_SKILL_DIR}/scripts/<name>.py`: the working directory is the target project, and a plugin install runs them from the plugin cache, so a relative path breaks in both cases. `${CLAUDE_SKILL_DIR}` is substituted in this skill's own markdown and in `allowed-tools` rules — **not** inside a workflow's prompt strings or a subagent's shell environment, where it expands to nothing. Resolve it to an absolute path before passing it anywhere else.
 
-| Script | Run it when | Signature |
-|---|---|---|
-| `audit_harness.py` | Always, first, before any interview | `--path <target-repo> [--json]` |
-| `validate_harness.py` | Immediately after generating or editing any component | `--path <target-repo> [--json] [--strict]` |
-| `hook_event.py` | Once you know which event you're targeting, instead of reading all thirty | `--event <Event>` or `--list` |
-| `test_hook.py` | Right after generating any hook, before calling it delivered | `--settings <path> --event <Event> [--tool <Tool>] [--input-field k=v ...]` or `--command <script> --event <Event> [--input <file>]`, plus `--matrix` for match-only inspection |
-| `run_e2e.py` | Only with explicit user consent, during the validation stage | `--project <path> --prompt "..." [--model] [--timeout] [--out] [--isolate]` |
+Their flags are not listed here. Read a script's `--help` the first time you reach for it in a session — every argument carries a `help=`.
+
+| Script | Run it when |
+|---|---|
+| `audit_harness.py` | Always, first, before any interview |
+| `validate_harness.py` | Immediately after generating or editing any component |
+| `hook_event.py` | Once you know which event you're targeting, instead of reading all thirty |
+| `test_hook.py` | Right after generating any hook, before calling it delivered |
+| `run_e2e.py` | Only with explicit user consent, during the validation stage |
 
 `validate_harness.py` checks structural integrity and prints the always-loaded budget, but it cannot grade a skill's `description` for trigger quality or near-miss overlap with sibling skills. Re-read every description you generate against references/skills.md before calling it done — including a lone new skill, not just a batch.
 
-`run_e2e.py`'s headless permission handling is a documented best guess (`--isolate` + `--dangerously-skip-permissions`), not empirically confirmed — see references/e2e-testing.md before the first real run and say so to the user.
+`run_e2e.py`'s headless permission handling is a documented best guess, not empirically confirmed — read references/e2e-testing.md before the first real run and say so to the user.
 
 ## Hard lines
 
-1. **Never advertise a component you haven't actually generated.** Every pointer this skill or its output writes — a reference to a script, a skill, a file — must resolve to a real file. `validate_harness.py` mechanically checks the pointers a skill makes into its own bundled `references/` and `scripts/`, in whatever form they're written; it does not follow prose that names a component some other way, so that check existing is not a substitute for you checking it yourself before claiming a component is done.
+1. **Never advertise a component you haven't actually generated.** Every pointer this skill or its output writes — a reference to a script, a skill, a file — must resolve to a real file. `validate_harness.py` catches the ones written with a `references/` or `scripts/` prefix; a bare filename, or a name in any other shape, is invisible to it. The check is a floor, not a substitute for looking.
 2. **A generated harness is not finished until `validate_harness.py` exits 0 (errors), and a generated hook is not finished until `test_hook.py` passes against it.** A checklist that isn't mechanically enforced doesn't get enforced. Nothing can mechanically confirm you ran `test_hook.py`, so that one rests on you.
 3. **`.claude/harness-spec.md` and the actual files must never drift apart silently.** Every generation or edit updates the spec in the same pass; `audit_harness.py`'s drift check exists to catch the times this slips, not to be the only thing keeping them in sync.
