@@ -14,6 +14,16 @@ Replace I1 entirely. The question is not "what's the goal" but **"what was uncom
 
 Route each symptom through the feedback-routing table in `references/e2e-testing.md` (wrong trigger → the description; triggered but did the wrong thing → the skill body; the rule was ignored → CLAUDE.md, then escalate to a hook). That table also tells you which stage of the interview protocol to re-enter at, so you rarely need to re-run all five.
 
+**Ask the second question in the same breath: what is now unnecessary?** Every arrow in that routing table ends in a repair or a promotion, so a harness that is improved often only ever grows. Nothing on disk tells you what stopped earning its keep — there is no invocation telemetry — so if you don't ask, nobody does. Ask both, and take "nothing comes to mind" as a real answer rather than pressing for one.
+
+### Instructions go stale in a way components do not
+
+A component that stopped being used is at least visible as a file. A *line* that stopped being needed is invisible: a rule written to fight a model's old default reads exactly like one still fighting the current default, and the model changes under a harness that doesn't. That is the dead weight that accumulates fastest, because every pass adds rules and no pass re-examines the ones already there.
+
+**Ablation is how you find out, and it is a proposal, not an action.** Take one rule you suspect — start with the ones written to fight a default, since those are the ones a better model may have stopped needing — remove it, and run the work it was written for. Nothing goes wrong: it was carrying nothing. Something does: you have just re-earned it, and that belongs in the spec's Design rationale, because the next pass will suspect it again and should not have to re-run the experiment.
+
+One rule at a time. Removing several at once turns a clean result into a guess about which one mattered. And **never ablate a hook or a permission rule** — those layers exist precisely because their failure mode is the one you cannot afford to observe once.
+
 ## Sync — the spec and the disk disagree
 
 Sync has no I1-I5 traversal. Phase 0's audit already produced the drift list, in both directions:

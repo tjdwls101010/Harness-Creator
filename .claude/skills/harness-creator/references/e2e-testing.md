@@ -141,6 +141,7 @@ Every failure should resolve to one specific layer to edit — never "make it wo
 | An agent ignores a rule that CLAUDE.md clearly states | Check first whether the agent is a built-in Explore or Plan agent — both never load CLAUDE.md at all, by design, regardless of how the rule is worded. If so, the fix is a restated delegation prompt that repeats the relevant constraint directly, or a custom agent with the rule baked into its own system prompt. |
 | The session feels slow or expensive | Check hook count and their timeouts, CLAUDE.md length, and the total skill-description budget across all installed skills — any of the three can silently inflate every single turn's cost, not just the turns that use them. |
 | A component seems to earn nothing | Raise retirement as a question, never as an action — see below. |
+| Nothing failed, and the harness is larger than it was last pass | The one row here that points down, and the only one no symptom announces. Ablate: remove one suspect rule, re-run the scenario it governed, restore it only if something breaks (`references/re-entry.md`). |
 
 ### Retiring a component
 
