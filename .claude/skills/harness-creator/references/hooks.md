@@ -2,8 +2,6 @@
 
 This is the authoring guide for the enforcement layer: the only layer in a generated harness that is deterministic rather than advisory. Read this before designing any hook or permission rule, and re-check the generated `settings.json` against the gotcha list here before declaring the component done. Full per-event schemas (input fields, decision channels, JSON examples) live in `references/hooks-events.md` — load that file once you know which event you're targeting. This file is the one you load first, on every hook-design task, because the principles and gotchas here apply regardless of which event you end up choosing.
 
-Permissions are folded into this same file rather than split out on their own. A hook's guarantees and a permission rule's guarantees are two halves of one mechanism — a hook without a matching permission rule is often not actually enforcing anything — and both are decided and loaded at the same point in the generation flow, so there is no benefit to separating them the way hooks.md and hooks-events.md are separated by load timing.
-
 ## The hook eligibility test
 
 Before writing a hook, ask: **must this never be violated?** If the answer is "it's fine if Claude usually gets it right," the item belongs in CLAUDE.md, a rule file, or a skill — not a hook. Route it back through the layer-routing framework in SKILL.md instead of reaching for a hook by default.

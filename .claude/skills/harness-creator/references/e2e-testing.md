@@ -121,7 +121,7 @@ If you widen the grader's schema to return per-dimension scores rather than one 
 
 ## Grading doctrine: evidence-citation required, surface compliance is a FAIL
 
-This is the single most important grading habit, because it's the difference between an e2e tier that catches real problems and one that produces reassuring-looking JSON that means nothing.
+
 
 The rule: every verdict a grading agent produces must name the specific transcript line, tool_use event, or file content it's based on. "The skill triggered correctly" is not a verdict; "the transcript's third tool_use event calls `Skill` with `skill: 'api-route-conventions'`" is a verdict. If a grading agent can't point at something concrete, the honest verdict is FAIL — the burden of proof to pass sits on the assertion, not on the transcript to disprove it.
 
