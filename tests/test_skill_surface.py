@@ -299,6 +299,78 @@ class GuardrailTests(unittest.TestCase):
         self.assertIn("best guess", read(SKILL_MD) + read(SKILL_DIR / "references" / "e2e-testing.md"))
 
 
+class InterfaceDoctrineTests(unittest.TestCase):
+    """v5 gave the interface boundary its second direction, and retired the
+    `Signature` column that the missing direction had permitted.
+
+    The one-way version constrained only the interface author -- "don't put
+    when/why in a signature" -- so writing both a signature and a prose copy
+    of it broke no rule, and this skill did exactly that until two rows of
+    the copy went wrong. Anchored here for the same reason as
+    ConsequenceClauseTests in test_validate_harness.py: without an assertion
+    the clause is prose like any other and erodes on the next pass."""
+
+    def _scripts_section(self):
+        return read(SKILL_MD).split("## Scripts")[1].split("\n## ")[0]
+
+    def _table_rows(self):
+        return [l for l in self._scripts_section().splitlines() if l.startswith("|")]
+
+    def _argparse_clis(self):
+        """Which bundled scripts are CLIs, read from the source rather than
+        listed here -- adding one without a 'Run it when' row should fail."""
+        names = []
+        for path in sorted(SCRIPTS_DIR.glob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            if any(isinstance(n, ast.Attribute) and n.attr == "ArgumentParser"
+                   for n in ast.walk(tree)):
+                names.append(path.name)
+        return names
+
+    def test_boundary_names_both_owners(self):
+        """Both halves, because naming only the tool's half is what let the
+        prose copy exist. An adversarial read of an earlier draft that
+        forbade prose from "asserting how the tool currently behaves" also
+        forbade "run this only with consent, it spends real tokens" -- while
+        a --help string saying the same thing was forbidden by the other
+        half. Splitting on ownership instead leaves nowhere unreachable."""
+        text = read(SKILL_MD)
+        self.assertIn("the tool owns what is *valid*, what it does, and what it prints", text)
+        self.assertIn("the project owns when to reach for it, what it costs, and why it was chosen", text)
+        self.assertIn("Neither side restates the other.", text)
+
+    def test_the_falsifiability_test_is_stated(self):
+        """The clause that makes the rule operable on a case nobody listed."""
+        self.assertIn(
+            "If editing the tool would make the sentence false, the sentence belongs in the tool.",
+            read(SKILL_MD),
+        )
+
+    def test_a_pointer_inherits_its_targets_reader(self):
+        self.assertIn("A pointer inherits its target's reader", read(SKILL_MD))
+
+    def test_the_script_table_has_no_signature_column(self):
+        header = self._table_rows()[0]
+        self.assertNotIn("Signature", header)
+        self.assertEqual(header.count("|"), 3, header)
+
+    def test_the_script_table_carries_no_flags(self):
+        """The specific regression. A flag in this table is a copy of
+        `--help`, and the copy is the half nothing checks."""
+        for row in self._table_rows():
+            self.assertNotRegex(row, r"--[a-z]", row)
+
+    def test_every_bundled_cli_still_says_when_to_run_it(self):
+        """Judgment is the half that stays. Dropping the column must not
+        drop the row."""
+        rows = "\n".join(self._table_rows())
+        for name in self._argparse_clis():
+            self.assertIn(name, rows, name)
+
+    def test_the_canonical_skill_example_points_instead_of_restating(self):
+        self.assertNotIn("script's signature", read(SKILL_DIR / "references" / "skills.md"))
+
+
 class InterfaceContradictionTests(unittest.TestCase):
     """v5. Prose that asserts how a bundled script *currently behaves* is a
     claim about code, and nothing contrasted it against the code -- so it
