@@ -7,13 +7,16 @@ description: >
 
 # Packaged
 
-Legitimate outside paths — these name files in the *target* project, which is
-what this skill exists to build, so none of them are pointers into its own
+Target-project paths — these name files in the repo this skill is *run against*,
+which is what it exists to build, so none of them are pointers into its own
 package: `.claude/settings.json`, `.claude/rules/*.md`, `CLAUDE.md`, a monorepo's
-`packages/api/CLAUDE.md`, and another tool's `.github/copilot-instructions.md`.
+`packages/api/CLAUDE.md`, another tool's `.github/copilot-instructions.md`, a
+vendored `node_modules/some-pkg/README.md`, generated output in `dist/index.md`,
+and wherever the reader keeps `docs/notes.md`. None of those resolve here, which
+is exactly why they are talking about somewhere else.
 
 Real pointers, which resolve inside the package: references/real.md and
 scripts/tool.py.
 
-Leaks — both resolve on the author's machine and nowhere else: the rationale is
-in docs/design/notes.md and the source snapshot is under .tmp/snapshot/api.md.
+Leaks — both resolve in this repo and travel nowhere: the rationale is in
+docs/design/notes.md and the decision log is in notes/internal-decisions.md.

@@ -77,10 +77,8 @@ class PackageClosureTests(unittest.TestCase):
     def test_a_path_that_resolves_in_the_repo_but_not_the_package_is_an_error(self):
         self.assertIn("docs/design/notes.md", self._leaked_paths())
 
-    def test_a_gitignored_path_is_an_error_even_where_it_does_not_exist(self):
-        """`.tmp/` is gitignored, so it is absent from every fresh clone --
-        including CI, where an existence test would silently pass."""
-        self.assertIn(".tmp/snapshot/api.md", self._leaked_paths())
+    def test_a_second_leak_in_a_different_tree_is_caught(self):
+        self.assertIn("notes/internal-decisions.md", self._leaked_paths())
 
     def test_a_leak_inside_a_bundled_script_is_caught(self):
         """This one reaches the end user: a module docstring is what
@@ -91,9 +89,20 @@ class PackageClosureTests(unittest.TestCase):
         )
 
     def test_target_project_paths_are_not_leaks(self):
+        """The paths a harness-building skill names constantly. Each one
+        describes a file in the repo the skill is *run against*, and the
+        signal that says so is that none of them resolve here.
+
+        An earlier draft keyed the second half of this on .gitignore --
+        a gitignored path cannot ship, so it looked like a strict
+        improvement. It flagged all three of `node_modules/...`,
+        `dist/index.md` and `docs/notes.md`, because a plugin repo's
+        .gitignore describes *its* build products and the sentences
+        describe the reader's."""
         for legit in (
             ".claude/settings.json", ".claude/rules/*.md", "CLAUDE.md",
             "packages/api/CLAUDE.md", ".github/copilot-instructions.md",
+            "node_modules/some-pkg/README.md", "dist/index.md", "docs/notes.md",
             "references/real.md", "scripts/tool.py",
         ):
             self.assertNotIn(legit, self._leaked_paths(), legit)

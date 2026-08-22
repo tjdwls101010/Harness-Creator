@@ -238,7 +238,6 @@ def _check_permissions_block(rel, permissions, findings):
 def check_skills(root, findings):
     total_description_chars = 0
     packaged = packaged_skill_dirs(root)
-    non_shipping = _non_shipping_prefixes(root)
     for skill_dir in hc.iter_skill_dirs(root):
         rel = skill_dir.relative_to(root)
         skill_md = skill_dir / "SKILL.md"
@@ -283,7 +282,7 @@ def check_skills(root, findings):
 
         _check_dead_links(skill_dir, loc, text, findings)
         if skill_dir in packaged:
-            _check_package_closure(root, skill_dir, loc, text, findings, non_shipping)
+            _check_package_closure(root, skill_dir, loc, text, findings)
 
         # Reference-to-reference pointers are as load-bearing as the ones in
         # SKILL.md and were previously never scanned at all. There are only a
@@ -295,7 +294,7 @@ def check_skills(root, findings):
                 ref_loc = str(ref.relative_to(root))
                 _check_dead_links(skill_dir, ref_loc, ref_text, findings)
                 if skill_dir in packaged:
-                    _check_package_closure(root, skill_dir, ref_loc, ref_text, findings, non_shipping)
+                    _check_package_closure(root, skill_dir, ref_loc, ref_text, findings)
 
     if total_description_chars > 0:
         # ~1% of a 200k-token window in characters, as a rough budget signal
@@ -341,38 +340,20 @@ def packaged_skill_dirs(root):
     return packaged
 
 
-def _non_shipping_prefixes(root):
-    """Top-level names .gitignore excludes.
+def _check_package_closure(root, skill_dir, loc, text, findings):
+    """Every document a packaged skill sends its reader to must ship with it.
 
-    Existence alone would not catch these: a gitignored directory is present
-    on the author's machine and absent from every clone, so a pointer into
-    one passes CI and fails for every user."""
-    gitignore = root / ".gitignore"
-    if not gitignore.is_file():
-        return frozenset()
-    names = set()
-    for line in hc.read_text(gitignore).splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or line.startswith("!"):
-            continue
-        head = line.lstrip("/").split("/")[0]
-        if head and "*" not in head:
-            names.add(head)
-    return frozenset(names)
-
-
-def _check_package_closure(root, skill_dir, loc, text, findings, non_shipping):
-    """Every document a packaged skill sends its reader to must ship with it."""
+    The test is resolution, not shape: the path has to resolve *here* and
+    not inside the package. That is what separates a broken pointer from
+    the target-project paths a harness-building skill names constantly --
+    `dist/index.md` or `docs/notes.md` in a sentence about the reader's own
+    repo describes a file that was never supposed to be in this one."""
     for m in _DOC_PATH_RE.finditer(text):
         path = m.group(1)
         parts = path.split("/")
         if "*" in path or parts[-1] in _HARNESS_NAMESPACE or parts[0] == ".claude":
             continue
-        if (skill_dir / path).exists():
-            continue
-        # Resolves from the repo root, or names a directory git never
-        # commits -- either way it is here and not in the installed package.
-        if not ((root / path).exists() or parts[0] in non_shipping):
+        if (skill_dir / path).exists() or not (root / path).exists():
             continue
         add(
             findings, "E", loc,
@@ -420,13 +401,12 @@ def check_skill_scripts(root, findings):
     script runs, the flag works, and only a model trying to call it pays the
     cost (see references/skills.md)."""
     packaged = packaged_skill_dirs(root)
-    non_shipping = _non_shipping_prefixes(root)
     for skill_dir in hc.iter_skill_dirs(root):
         for path in sorted(skill_dir.glob("scripts/**/*.py")):
             loc = str(path.relative_to(root))
             _check_cli_self_description(path, loc, findings)
             if skill_dir in packaged:
-                _check_package_closure(root, skill_dir, loc, hc.read_text(path), findings, non_shipping)
+                _check_package_closure(root, skill_dir, loc, hc.read_text(path), findings)
 
 
 def _arg_label(node):

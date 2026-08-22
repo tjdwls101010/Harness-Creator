@@ -483,6 +483,29 @@ class PackageClosureRegressionTests(unittest.TestCase):
             hits = re.findall(r"\bD[0-9]{1,2}\b", read(path))
             self.assertEqual(hits, [], f"{path.name} cites {hits}")
 
+    def test_no_gitignored_path_is_cited(self):
+        """The one case the shipped check structurally cannot see.
+
+        Package closure asks whether a path resolves here and not in the
+        package -- and `.tmp/` resolves nowhere on a fresh clone, so on CI
+        that check goes quiet on exactly the worst leak: gitignored, absent
+        for every user, and in this repo it sat in a module docstring that
+        `--help` prints. Keying the check on .gitignore instead was tried
+        and reverted; it flagged `dist/index.md` and `node_modules/.../README.md`
+        in correct harnesses, because a plugin repo's .gitignore describes
+        its own build products while those sentences describe the reader's.
+        So the general rule stays general and this repo's own names are
+        pinned here."""
+        ignored = [
+            line.strip().lstrip("/").rstrip("/")
+            for line in read(REPO_ROOT / ".gitignore").splitlines()
+            if line.strip() and not line.startswith(("#", "!", "*"))
+        ]
+        self.assertIn(".tmp", ignored, "this pin assumes .gitignore still lists .tmp")
+        for path in self._shipped_files():
+            for name in ignored:
+                self.assertNotIn(f"{name}/", read(path), f"{path.name} cites {name}/")
+
     def test_no_plan_document_is_named(self):
         """Derived from the plan tree rather than hardcoded, so a pointer at
         any generation's plan file fails, not just the one v5 removed."""
