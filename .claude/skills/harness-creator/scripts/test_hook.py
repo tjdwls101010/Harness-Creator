@@ -229,6 +229,37 @@ def cmd_matrix(settings, tools=None):
     return rows
 
 
+def verdict(results, quiet=False):
+    """What "passes" means for SKILL.md's Hard line 2.
+
+    Not "the hook exited 0": a blocking hook exits 2 on the path it exists
+    to block, and that is the hook working. What fails is a hook that could
+    not be exercised, or one whose exit code makes it a no-op --
+    references/hooks.md documents exit 1 as the mistake that leaves a policy
+    silently doing nothing, and a gate that passes it is not a gate."""
+    failures = []
+    for r in results:
+        if "error" in r:
+            failures.append(r["error"])
+        elif r["exit_code"] not in (0, 2):
+            failures.append(
+                f"exit {r['exit_code']}: a nonzero code other than 2 is a "
+                "NON-BLOCKING error -- the action proceeds and the notice is "
+                "easy to miss. Exit 2 to block, 0 to allow."
+            )
+    if not results:
+        failures.append("no hook was executed, so nothing was verified")
+    if failures:
+        if not quiet:
+            print("\nFAIL")
+            for f in failures:
+                print(f"  - {f}")
+        return hc.EXIT_LINT_FAILED
+    if not quiet:
+        print("\nPASS")
+    return hc.EXIT_OK
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--settings", help="path to settings.json to look up hooks in")
@@ -292,7 +323,7 @@ def main():
         exit_code, stdout, stderr, err = run_hook_command(hook_entry, input_data, settings_dir)
         if err:
             print(f"error: {err}", file=sys.stderr)
-            return hc.EXIT_USAGE_ERROR
+            return hc.EXIT_LINT_FAILED
         interpretation = interpret(args.event, exit_code, stdout, stderr)
         results.append({
             "command": args.command, "exit_code": exit_code,
@@ -307,8 +338,13 @@ def main():
             return hc.EXIT_USAGE_ERROR
         matched = find_matching_groups(data, args.event, args.tool or "Bash")
         if not matched:
-            print(f"No hook groups in '{args.event}' match tool '{args.tool or 'Bash'}'.")
-            return hc.EXIT_OK
+            print(
+                f"No hook groups in '{args.event}' match tool "
+                f"'{args.tool or 'Bash'}' -- nothing ran, so nothing was verified. "
+                "A matcher that matches no tool is a silent zero-match, not a "
+                "clean result; check it with --matrix."
+            )
+            return hc.EXIT_LINT_FAILED
         for gi, group in matched:
             for hi, hook_entry in enumerate(group.get("hooks", [])):
                 exit_code, stdout, stderr, err = run_hook_command(hook_entry, input_data, Path(args.settings).resolve().parent.parent)
@@ -344,7 +380,7 @@ def main():
             for line in r["interpretation"]:
                 print(f"  => {line}")
 
-    return hc.EXIT_OK
+    return verdict(results, quiet=args.json)
 
 
 if __name__ == "__main__":

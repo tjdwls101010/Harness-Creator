@@ -163,7 +163,7 @@ def main():
     parser.add_argument("--project", required=True, help="path to the target project")
     parser.add_argument("--prompt", help="the prompt to send")
     parser.add_argument("--prompt-file", help="path to a file containing the prompt")
-    parser.add_argument("--model", help="model id/alias to use (default: whatever the invoking session uses)")
+    parser.add_argument("--model", help="model id/alias to use; omitted, the spawned `claude` picks its own default, which need not match this session's model")
     parser.add_argument("--timeout", type=int, default=300, help="seconds before giving up (default 300)")
     parser.add_argument("--out", default=None, help="directory to write transcript.jsonl and summary.json (default: a temp dir, path printed)")
     parser.add_argument("--json", action="store_true", help="print the summary as JSON to stdout too")

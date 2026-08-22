@@ -10,6 +10,7 @@ utils.py that disagreed with a real-YAML expectation in validate.py).
 """
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -113,6 +114,20 @@ _KEY_VALUE = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$")
 _LIST_ITEM = re.compile(r"^-\s+(.*)$")
 
 
+class _UnparsedBlock:
+    """A frontmatter key whose value this parser deliberately did not read.
+
+    Distinct from None (the key was present and empty) and from a guess.
+    A caller can tell that the field exists without being told anything
+    false about what is in it."""
+
+    def __repr__(self):
+        return "<unparsed block>"
+
+
+UNPARSED_BLOCK = _UnparsedBlock()
+
+
 def parse_frontmatter(text):
     """Conservative frontmatter parser: stdlib has no real YAML parser, and
     a mis-parse that silently produces wrong data is worse than admitting
@@ -200,13 +215,30 @@ def parse_frontmatter(text):
                     list_items.append(_unquote(lm.group(1)))
                     i += 1
                     continue
-                # Indented but not a list item -> a nested map. Out of scope.
+                # Indented but not a list item -> a nested map. This parser
+                # will not guess its shape, but discarding the whole file
+                # over it is worse: `hooks:` in a skill's or agent's own
+                # frontmatter is a documented, generated shape, and giving
+                # up here reported a correct component's auto-triggering as
+                # dead. Consume the block, mark the key unparsed, keep the
+                # fields around it.
+                if saw_list:
+                    warnings.append(
+                        f"line {i + 2}: '{key}:' mixes list items and a nested "
+                        "mapping; the conservative parser cannot read it"
+                    )
+                    return Frontmatter(None, body, warnings)
+                while i < n and (fm_lines[i].strip() == "" or fm_lines[i].startswith((" ", "\t"))):
+                    i += 1
                 warnings.append(
-                    f"line {i + 2}: nested mapping under '{key}:' is not "
-                    "supported by the conservative parser"
+                    f"nested mapping under '{key}:' was not read -- its shape is "
+                    "outside this parser, so its contents are neither validated "
+                    "nor reported as absent"
                 )
-                return Frontmatter(None, body, warnings)
-            data[key] = list_items if saw_list else None
+                data[key] = UNPARSED_BLOCK
+                break
+            else:
+                data[key] = list_items if saw_list else None
             continue
 
         if rest.startswith("[") or rest.startswith("{"):
@@ -317,14 +349,51 @@ def resolve_import(target, containing_file):
     return (containing_dir / p), False
 
 
+def plugin_skills_roots(root):
+    """Skills roots a plugin manifest declares, or its default.
+
+    A plugin ships its skills from `./skills` unless plugin.json's `skills`
+    field says otherwise. Discovery that only knew `.claude/skills/` skipped
+    every skill in a plugin laid out the default way and reported a clean
+    run -- so this is gated on the manifest existing, because `skills/` is
+    an ordinary directory name in a repo that is not a plugin."""
+    manifest = Path(root) / ".claude-plugin" / "plugin.json"
+    if not manifest.is_file():
+        return []
+    data, err = load_json_lenient(manifest)
+    if err or not isinstance(data, dict):
+        return []
+    field = data.get("skills")
+    entries = [field] if isinstance(field, str) else field if isinstance(field, list) else ["./skills"]
+    roots = []
+    for entry in entries:
+        if isinstance(entry, str) and not Path(entry).is_absolute():
+            # normpath, not resolve: callers take relative_to(root), and on
+            # macOS resolve() rewrites /var to /private/var and breaks it.
+            candidate = Path(os.path.normpath(Path(root) / entry))
+            if candidate.is_dir():
+                roots.append(candidate)
+    return roots
+
+
 def iter_skill_dirs(root):
-    """Yield each `.claude/skills/<name>/` directory that exists under root."""
-    skills_root = Path(root) / ".claude" / "skills"
-    if not skills_root.is_dir():
-        return
-    for child in sorted(skills_root.iterdir()):
-        if child.is_dir():
-            yield child
+    """Yield each skill directory under root.
+
+    `.claude/skills/` always, plus whatever roots a plugin manifest ships
+    from -- deduplicated, since a plugin may point its `skills` field back
+    at `.claude/skills`."""
+    roots = [Path(root) / ".claude" / "skills"] + plugin_skills_roots(root)
+    seen = set()
+    for skills_root in roots:
+        if not skills_root.is_dir():
+            continue
+        for child in sorted(skills_root.iterdir()):
+            if not child.is_dir():
+                continue
+            resolved = child.resolve()
+            if resolved not in seen:
+                seen.add(resolved)
+                yield child
 
 
 def claude_md_paths(root):
