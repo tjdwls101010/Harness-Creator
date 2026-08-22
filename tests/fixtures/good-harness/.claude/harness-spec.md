@@ -13,7 +13,7 @@ Protect the database migration path and speed up routine review.
 | B2 | Security review on request | agent | `.claude/agents/security-reviewer.md` | generated |
 
 ## Component specs
-- `.claude/skills/example-skill/` — example domain skill, triggers on "example task".
+- `.claude/skills/example-skill/` — on demand rather than in CLAUDE.md: the procedure is long and only two sessions a month need it.
 - `.claude/agents/security-reviewer.md` — read-only diff reviewer.
 - `.claude/rules/db-migrations.md` — path-scoped migration rule.
 - `.claude/workflows/example-workflow.js` — thin fan-out/verify example.
