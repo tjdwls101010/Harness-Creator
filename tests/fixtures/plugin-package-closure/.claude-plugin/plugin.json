@@ -1,0 +1,6 @@
+{
+  "name": "packaged",
+  "version": "0.1.0",
+  "description": "Fixture plugin whose skill points outside its own directory.",
+  "skills": "./.claude/skills"
+}

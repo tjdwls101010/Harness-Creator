@@ -6,8 +6,7 @@ fact table (tool names, hook events, matcher support) live here so every
 script agrees on what's valid, instead of each one re-implementing (and
 silently disagreeing with) the same parsing and the same fact list. That
 divergence is exactly the mistake skill-creator made (a hand-rolled parser in
-utils.py that disagreed with a real-YAML expectation in validate.py) -- see
-docs/plan/04-scripts-and-validation.md's common conventions.
+utils.py that disagreed with a real-YAML expectation in validate.py).
 """
 
 import json
@@ -18,8 +17,8 @@ EXIT_OK = 0
 EXIT_LINT_FAILED = 1
 EXIT_USAGE_ERROR = 2
 
-# Verified against .tmp/docs_claude/05-reference/04-tools-reference.md via
-# docs/plan/research/research-gap-report.md §2.
+# Verified against the Claude Code tools reference:
+# https://code.claude.com/docs/en/tools-reference
 CANONICAL_TOOLS = frozenset({
     "Agent", "Artifact", "AskUserQuestion", "Bash", "CronCreate", "CronDelete",
     "CronList", "Edit", "EnterPlanMode", "EnterWorktree", "ExitPlanMode",
@@ -37,7 +36,7 @@ CANONICAL_TOOLS = frozenset({
 _MCP_TOOL_PREFIX = "mcp__"
 
 # All 30 hook events, verified against references/hooks-events.md (itself
-# verified against .tmp/docs_claude/05-reference/07-hooks-reference.md).
+# verified against https://code.claude.com/docs/en/hooks).
 HOOK_EVENTS = frozenset({
     "SessionStart", "Setup", "InstructionsLoaded", "UserPromptSubmit",
     "UserPromptExpansion", "MessageDisplay", "PreToolUse", "PermissionRequest",
@@ -415,8 +414,8 @@ def settings_paths(root):
 
 def print_findings_text(findings, title):
     """findings: list of (level, location, message) where level is 'E' or
-    'W'. Human-readable text output -- the default, per D9's convention that
-    text is the default and --json is the machine-readable opt-in."""
+    'W'. Human-readable text output -- the default across every script here,
+    with --json as the machine-readable opt-in."""
     print(f"== {title} ==")
     if not findings:
         print("  (no findings)")

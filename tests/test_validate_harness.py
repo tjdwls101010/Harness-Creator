@@ -6,6 +6,7 @@
 stdlib unittest only, no pytest (per docs/plan/04-scripts-and-validation.md).
 """
 
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -46,6 +47,93 @@ class CliEdgeCaseTests(unittest.TestCase):
 
     def test_no_findings(self):
         self.assertEqual(self.findings, [])
+
+
+class PackageClosureTests(unittest.TestCase):
+    """A plugin-packaged skill travels as one directory. A pointer out of it
+    resolves on the author's machine and nowhere else -- which is why this
+    fires only when a plugin manifest actually ships the skill: a plain
+    project skill sits inside the repo it points into, and `docs/design/notes.md`
+    there is a working pointer, not a leak.
+
+    The fixture deliberately mixes both kinds, because the risk this check
+    carries is not missing a leak, it is firing on the target-project paths
+    the skill legitimately names (WS2-6: a check that fires on a correct
+    harness is worse than no check)."""
+
+    def setUp(self):
+        self.root = REPO_ROOT / "tests" / "fixtures" / "plugin-package-closure"
+        self.findings, self.exit_code = vh.run(self.root, strict=False)
+        self.reported = [(loc, msg) for _, loc, msg in self.findings]
+
+    def _leaked_paths(self):
+        found = set()
+        for _, msg in self.reported:
+            m = re.search(r"names (\S+), which resolves in this repo", msg)
+            if m:
+                found.add(m.group(1))
+        return found
+
+    def test_a_path_that_resolves_in_the_repo_but_not_the_package_is_reported(self):
+        self.assertIn("docs/design/notes.md", self._leaked_paths())
+
+    def test_a_second_leak_in_a_different_tree_is_caught(self):
+        self.assertIn("notes/internal-decisions.md", self._leaked_paths())
+
+    def test_it_warns_rather_than_fails(self):
+        """An adversarial pass built three correct plugins this flags: a
+        skill telling the reader to check their own `docs/architecture.md`,
+        their `.github/copilot-instructions.md`, their monorepo's
+        `packages/web/CONTRIBUTING.md` -- each one correct, each one
+        colliding with a path that also exists in the plugin's own repo.
+        Nothing distinguishes those from a leak, and a check that fails a
+        correct harness gets ignored and then catches nothing. So it warns,
+        and a package that wants closure enforced runs --strict, which is
+        what this repo does."""
+        levels = {level for level, _, msg in self.findings if "which resolves in this repo" in msg}
+        self.assertEqual(levels, {"W"})
+        self.assertEqual(self.exit_code, vh.hc.EXIT_OK)
+        self.assertEqual(vh.run(self.root, strict=True)[1], vh.hc.EXIT_LINT_FAILED)
+
+    def test_a_leak_inside_a_bundled_script_is_caught(self):
+        """This one reaches the end user: a module docstring is what
+        `--help` prints."""
+        self.assertTrue(
+            any("tool.py" in loc for loc, _ in self.reported),
+            f"expected a finding in scripts/tool.py, got {self.reported}",
+        )
+
+    def test_target_project_paths_are_not_leaks(self):
+        """The paths a harness-building skill names constantly. Each one
+        describes a file in the repo the skill is *run against*, and the
+        signal that says so is that none of them resolve here.
+
+        An earlier draft keyed the second half of this on .gitignore --
+        a gitignored path cannot ship, so it looked like a strict
+        improvement. It flagged all three of `node_modules/...`,
+        `dist/index.md` and `docs/notes.md`, because a plugin repo's
+        .gitignore describes *its* build products and the sentences
+        describe the reader's."""
+        for legit in (
+            ".claude/settings.json", ".claude/rules/*.md", "CLAUDE.md",
+            "packages/api/CLAUDE.md", ".github/copilot-instructions.md",
+            "node_modules/some-pkg/README.md", "dist/index.md", "docs/notes.md",
+            "references/real.md", "scripts/tool.py",
+        ):
+            self.assertNotIn(legit, self._leaked_paths(), legit)
+
+    def test_a_project_skill_outside_a_plugin_is_not_checked(self):
+        """good-harness has no plugin manifest, so the same shape of
+        pointer there is a working pointer."""
+        findings, _ = vh.run(REPO_ROOT / "tests" / "fixtures" / "good-harness", strict=False)
+        self.assertEqual([f for f in findings if "which resolves in this repo" in f[2]], [])
+
+    def test_a_url_query_value_is_not_a_pointer(self):
+        """`https://docs.python.org/3/?source=references/install.md` names a
+        query parameter, not a bundled file."""
+        self.assertEqual(
+            list(vh.iter_skill_pointers("https://x.dev/3/?source=references/install.md")), []
+        )
 
 
 class BadHarnessTests(unittest.TestCase):

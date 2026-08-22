@@ -220,6 +220,20 @@ v2가 D16(인터페이스 교리)을 세우면서 그와 모순되는 v1 결정�
 3. 검사 B가 `interview.md:64` 형태를 잡는다 — 그 줄을 되돌리면 red가 되는 회귀 핀이 있다.
 4. `validate_harness.py --path . --strict` exit 0.
 
+> **구현 시 개정 (2026-08-22).** 위 문안은 검사 A를 `\bD[0-9]{1,2}\b` · `docs/plan/` · `\.tmp/` 패턴 셋으로, 검사 B를 "맨 파일명까지 확장"으로 적었다. **둘 다 그대로는 정상 하네스에서 울린다** — 이 문서가 §범위 밖에서 인용한 WS2-6 원칙("정상 하네스에서 울리는 체크는 없느니만 못하다")과 정면으로 충돌한다. `docs/plan/`은 이 레포의 경로일 뿐이고 사용자 스킬이 자기 레포의 `docs/plan/`을 가리키는 것은 정상이며, 맨 파일명은 현행 코퍼스에만 `run.py`·`template-crash.md`·`guard.sh` 등 **가상 하네스의 예시 파일명이 수십 개** 있어 전부 오탐이 된다. 목표(패키지 밖 포인터를 기계적으로 막는다)는 유지하고 수단을 바꿨다.
+>
+> - **검사 A → 플러그인 패키지 폐쇄.** `.claude-plugin/plugin.json`이 실제로 그 스킬을 배포할 때에만 발동하고, 스킬 디렉터리 밖의 문서 경로가 **이 레포에서 resolve되면** E — 여기서 풀리고 설치본에서 안 풀린다는 것이 곧 결함의 정의다. 프로젝트 스킬은 자기가 가리키는 레포 안에 살므로 침묵한다. **하드코딩된 패턴 없이 6건을 전부 잡고 오탐 0.**
+>
+>   `.gitignore`된 최상위 이름을 두 번째 조건으로 넣는 안을 만들었다가 **적대 검증에서 되돌렸다.** gitignore된 경로는 출하될 수 없으니 엄격한 개선처럼 보였는데, 실제로는 정상 하네스 셋을 잡았다 — `node_modules/some-pkg/README.md`, `dist/index.md`, `docs/notes.md`. 플러그인 레포의 `.gitignore`는 *자기* 빌드 산출물을 적고 스킬의 문장은 *독자의* 레포를 가리키기 때문이다. 대신 `.tmp/` 계열은 `tests/test_skill_surface.py`의 레포 전용 핀이 CI에서 잡는다.
+> - **검사 B → 중첩 경로 + 문장 끝 마침표.** codex 적대 감사가 `_SKILL_POINTER_RE`의 실제 구멍 둘을 확인했다: `references/platform/missing.md`가 첫 세그먼트만 검사돼 통과하고, 문장 끝의 `scripts/tool.py.`가 존재하지 않는 파일로 신고된다(정상 하네스 오탐). 둘 다 일반적이고 오탐이 없다.
+> - **남은 7건(D-ID 5, 맨 파일명 1, 없는 절 제목 1)은 `tests/test_skill_surface.py`의 회귀 핀으로 간다.** 이 파일이 이미 그 용도다 — `NoExternalToolNamesTests`가 `doctor|checkup` 리터럴을, `DanglingPointerTests`가 `see Hard lines` 리터럴을 막는다. 이 패키지에 대한 사실이지 사용자에게 출하할 규칙이 아니다. 계획이 검사 B의 수용 기준을 이미 "회귀 핀"이라고 적은 것과 일치한다.
+>
+> **적대 검증이 심각도를 낮췄다 (codex, gpt-5.6-sol xhigh).** 오탐 유도를 시켰더니 **정상 플러그인 셋**을 재현했다 — 스킬이 독자에게 *독자의* `docs/architecture.md`·`.github/copilot-instructions.md`·`packages/web/CONTRIBUTING.md`를 보라고 하는데 플러그인 레포에 우연히 같은 경로가 있는 경우다. 셋 다 올바른 하네스이고, **어휘 신호로 누수와 구별할 방법이 없다.** v4가 D43의 심각도를 가른 기준(정당한 이유가 없으면 E, 방어 가능하면 W)을 그대로 적용해 **E → W로 내렸고**, 메시지가 두 해석을 다 적고 무엇으로 가리는지 말한다. 패키지 폐쇄를 강제하려는 레포는 `--strict`를 쓴다 — 이 레포가 그렇게 한다. 같은 감사가 URL query 값(`...?source=references/install.md`)을 번들 포인터로 읽던 오탐도 찾아 함께 고쳤다.
+>
+> 남은 오탐 둘은 기존 동작이고 의미 판단이 필요해 두지 않았다: 코드 펜스 안의 `scripts/x.py`가 대상 프로젝트 명령일 때(관례상 `./` 접두사로 구별한다), 그리고 파일명을 *금지하려고* 언급할 때.
+>
+> **추가로 닫은 2건** (codex 자기적용 감사, 같은 PR): `workflows.md:21`이 존재하지 않는 `/deep-research` 워크플로를 *"the bundled"*라고 광고했다(**Hard line 1 위반**). `hooks-events.md:3`이 *"Load this file"*이라고 자기 지시하는데 `hooks.md:156`의 라우터는 `hook_event.py --event`로 보낸다 — 그 지시를 따르면 이벤트 하나를 묻는 데 3,800단어를 낸다.
+
 ### PR4 — 포인터 독자 교정
 
 | 변경 | 파일 |

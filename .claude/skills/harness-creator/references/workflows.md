@@ -18,7 +18,7 @@ A thick workflow (if/else chains encoding decision logic, hardcoded severity thr
 
 ## The default composable pattern: fan-out → verify → synthesize
 
-When a workflow is warranted, start from this shape and adapt it rather than reinventing structure each time — it's the same pattern the bundled `/deep-research` workflow uses, and it's the pattern the docs recommend precisely because a single pass of independent findings is less trustworthy than findings that survived a second, adversarial look:
+When a workflow is warranted, start from this shape and adapt it rather than reinventing structure each time — it's the pattern the docs recommend precisely because a single pass of independent findings is less trustworthy than findings that survived a second, adversarial look:
 
 1. **Fan-out** — one agent per independent unit of work (one file, one route, one source), each asked to find or produce something, ideally returning a structured result (`schema` option) rather than free text so the next stage can consume it programmatically.
 2. **Verify** — a second wave of agents, each given one finding from stage 1 (not the whole batch) and asked to adversarially check it: is this actually true, does the evidence support the claim, would a skeptical reviewer accept it? This is the stage that catches a fan-out agent's overclaim or hallucinated finding before it reaches the user.
