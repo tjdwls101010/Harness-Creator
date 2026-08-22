@@ -75,7 +75,7 @@ Only `name` and `description` are required. The rest is the full schema; this ta
 
 ## A well-scoped example
 
-This role passes the eligibility test cleanly: its job is entirely read-heavy (scanning a diff and the surrounding code for security issues), the main conversation has no use for the search trail that produces a finding, only the finding itself, and the tool restriction (no `Edit`, no `Write`) is itself part of the point — a reviewer that can quietly patch the very code it's supposed to be critiquing is a reviewer you can no longer trust.
+This role passes the eligibility test cleanly: its job is entirely read-heavy (scanning a diff and the surrounding code for security issues), the main conversation has no use for the search trail that produces a finding, only the finding itself, and the tool restriction (no `Edit`, no `Write`) is itself part of the point — a reviewer that can quietly patch the very code it's supposed to be critiquing is a reviewer you can no longer trust. Read what the restriction actually buys, though, before you sell it as read-only: this role keeps `Bash` because it needs `git diff`, and `Bash` writes files (`sed -i`, `echo >> file`). Withholding `Edit` and `Write` narrows the write path; it does not close it.
 
 ```markdown
 ---
@@ -96,7 +96,7 @@ Keep the final report short — it exists to hand a verdict back to a conversati
 
 Three things in that body are the transferable part, and none of them are about security:
 
-- It opens by **restating the read-only boundary in prose** even though `tools:` already enforces it, because the body replaces the system prompt entirely and an agent that doesn't know why it lacks `Edit` will waste a turn trying.
+- It opens by **restating the read-only boundary in prose**, which is doing real work and not ceremony: `tools:` withholds the tools named for writing, and the prose is what closes the `Bash` path this role has to keep. It also tells an agent that doesn't know why it lacks `Edit` not to waste a turn trying — the body replaces the system prompt entirely, so nothing else will.
 - It names **what this project has actually been burned by** rather than a generic checklist, which is the same gotcha-over-general-competence test every other layer gets.
 - It ends by **constraining the output**, because the entire reason to spend an agent here is that the main thread wants the verdict and not the search trail.
 

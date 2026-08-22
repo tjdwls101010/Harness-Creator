@@ -9,6 +9,7 @@ grep that must stay at zero -- and a check that runs on every commit is worth
 more than a review note that runs once. stdlib unittest only, no pytest.
 """
 
+import ast
 import re
 import sys
 import unittest
@@ -296,6 +297,86 @@ class GuardrailTests(unittest.TestCase):
         """Deleting the stated limitation turns an honest best guess into an
         implied guarantee."""
         self.assertIn("best guess", read(SKILL_MD) + read(SKILL_DIR / "references" / "e2e-testing.md"))
+
+
+class InterfaceContradictionTests(unittest.TestCase):
+    """v5. Prose that asserts how a bundled script *currently behaves* is a
+    claim about code, and nothing contrasted it against the code -- so it
+    went false silently while the `--help` beside it stayed right.
+
+    This one was a safety bug, not a tidiness one. e2e-testing.md called an
+    isolated project copy "the one `run_e2e.py` implements as its default";
+    `--isolate` is `store_true`, so the actual default is the user's real
+    project. A reader who trusted the prose and dropped the flag would point
+    a headless agent session at it.
+
+    The interface half of each pair below is read out of the source rather
+    than restated here, so editing the flag is what breaks the test."""
+
+    E2E = SKILL_DIR / "references" / "e2e-testing.md"
+
+    def _run_e2e_argument(self, flag):
+        tree = ast.parse((SCRIPTS_DIR / "run_e2e.py").read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call) and getattr(node.func, "attr", "") == "add_argument"):
+                continue
+            if node.args and getattr(node.args[0], "value", None) == flag:
+                return {kw.arg: getattr(kw.value, "value", None) for kw in node.keywords}
+        self.fail(f"run_e2e.py declares no {flag} argument")
+
+    def test_isolation_is_opt_in_in_the_interface(self):
+        """The fact the prose has to agree with. If this ever flips to
+        opt-out, the prose assertions below are the ones to revisit."""
+        self.assertEqual(self._run_e2e_argument("--isolate").get("action"), "store_true")
+
+    def test_prose_does_not_claim_the_script_isolates_by_default(self):
+        text = read(self.E2E) + read(SKILL_MD)
+        for claim in ("implements as its default", "isolates by default", "isolated by default"):
+            self.assertNotIn(claim, text, claim)
+
+    def test_prose_states_that_passing_the_flag_is_the_decision(self):
+        self.assertIn("`--isolate` is opt-in", read(self.E2E))
+
+    def test_permission_mode_flag_is_not_hidden_from_the_reader(self):
+        """`--permission-mode` exists and is the direct answer to the
+        headless-permissions caveat printed right beside it. Prose that
+        apologises for a guess while the flag that settles it goes unnamed
+        is worse than prose that names neither."""
+        self.assertIsNotNone(self._run_e2e_argument("--permission-mode"))
+        self.assertIn("--permission-mode", read(self.E2E))
+
+    def test_tools_frontmatter_is_not_sold_as_a_write_sandbox(self):
+        """The same shape one file over. agents.md said `tools:` "already
+        enforces" read-only while its own example keeps `Bash` (it needs
+        `git diff`) -- and hooks.md, in this package, documents `sed -i` and
+        `echo >> file` as the way a Bash-driven edit skips Edit|Write. The
+        skill contradicted itself, and the losing side was the one a
+        generated agent inherits."""
+        text = read(SKILL_DIR / "references" / "agents.md")
+        self.assertNotIn("already enforces it", text)
+        examples_with_bash = [
+            block for block in re.findall(r"```markdown\n(.*?)```", text, re.S)
+            if re.search(r"^tools:.*\bBash\b", block, re.M)
+        ]
+        if examples_with_bash:
+            self.assertIn("`Bash` writes files", text)
+
+    def test_flags_are_not_attributed_to_the_wrong_cli(self):
+        """`--dangerously-skip-permissions` belongs to the `claude` CLI that
+        run_e2e.py spawns, not to run_e2e.py."""
+        declared = ast.parse((SCRIPTS_DIR / "run_e2e.py").read_text(encoding="utf-8"))
+        flags = {
+            node.args[0].value
+            for node in ast.walk(declared)
+            if isinstance(node, ast.Call)
+            and getattr(node.func, "attr", "") == "add_argument"
+            and node.args
+            and isinstance(getattr(node.args[0], "value", None), str)
+        }
+        self.assertNotIn("--dangerously-skip-permissions", flags)
+        for path in [SKILL_MD] + REFERENCES:
+            for m in re.finditer(r"`run_e2e\.py[^`]*`", read(path)):
+                self.assertNotIn("--dangerously-skip-permissions", m.group(0), path.name)
 
 
 class NoExternalToolNamesTests(unittest.TestCase):

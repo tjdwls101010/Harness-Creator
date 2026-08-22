@@ -1,7 +1,6 @@
 # Example project
 
-Node/TypeScript API. See `.claude/harness-spec.md` for the full harness inventory.
-See @README.md for the public overview.
+Node/TypeScript API. See @README.md for the public overview.
 
 Maintainer: ops@acme.com — ping before changing the migration policy.
 
@@ -12,7 +11,8 @@ Maintainer: ops@acme.com — ping before changing the migration policy.
 
 ## IMPORTANT
 Never write raw SQL in route handlers — use the query builder in `src/db/`.
-A PreToolUse hook blocks commits containing raw SQL strings.
+`.claude/hooks/protect-files.sh` blocks writes to `.env` and `package-lock.json`, including writes made through `Bash`.
+`.claude/hooks/check-tests.sh` holds the turn open until `npm test` passes.
 
 Writing `@README.md` in backticks keeps it literal, and the fenced block below
 is likewise not parsed as an import:

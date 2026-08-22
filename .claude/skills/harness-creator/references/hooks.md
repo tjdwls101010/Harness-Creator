@@ -199,7 +199,7 @@ Each recipe below is deliberately dense: the `settings.json` entry plus a one-li
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Edit|Write",
+        "matcher": "Edit|Write|Bash",
         "hooks": [
           {
             "type": "command",
@@ -216,7 +216,9 @@ Each recipe below is deliberately dense: the `settings.json` entry plus a one-li
 }
 ```
 
-`protect-files.sh` reads `tool_input.file_path` from stdin, checks it against a protected-pattern list, and `exit 2` with a stderr reason on a match, `exit 0` otherwise. Generate both, per the hard-guarantee principle above. Note the matcher covers `Edit|Write` but not `Bash` — if the interview flagged that Claude sometimes edits files via shell redirection in this project, add `Bash` to the matcher and inspect the command in the script, or add a `Stop`-time `git status --porcelain` scan as a backstop.
+`protect-files.sh` branches on `tool_name`: for `Bash` it scans `tool_input.command`, for everything else it matches `tool_input.file_path` against a protected-pattern list, and either way `exit 2` with a stderr reason on a match, `exit 0` otherwise. Generate both the hook and the deny rules, per the hard-guarantee principle above.
+
+`Bash` is in the matcher rather than left to the interview, because a matcher that omits it doesn't weaken the guarantee — it relocates it, silently, to whichever path the model happens to pick. The alternative compensation from the gotcha above, a `Stop`-time `git status --porcelain` scan, is the wrong shape for a *must-never*: it notices after the write landed, and it bills every turn. What command-scanning costs instead is precision — it is a substring scan over shell text, not a shell parser, so it over-blocks a command that merely mentions a protected name. That is the direction to err in, and it is also why the deny rules stay: they are the layer that doesn't depend on a script guessing right.
 
 ### Recipe 2 — post-edit auto-formatter
 
