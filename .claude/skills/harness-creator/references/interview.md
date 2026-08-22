@@ -119,7 +119,7 @@ This is the exact section skeleton to generate and keep updated across every sta
 ## Behavior inventory
 | id | behavior/knowledge/constraint | layer | component | status |
 |----|-------------------------------|-------|-----------|--------|
-| B1 | Must pass tests before commit | hook  | pre-commit-test | generated |
+| B1 | Must pass tests before commit | hook  | `.claude/hooks/pre-commit-test.sh` | generated |
 
 ## Component specs
 <!-- Per-component detail: hooks need event/matcher/action/failure-policy, skills need trigger description/body contents/bundled scripts, etc. -->
@@ -137,3 +137,13 @@ This is the exact section skeleton to generate and keep updated across every sta
 The `status` column progresses in order: `proposed` (surfaced during I2, not yet approved) → `approved` (survived its stage gate, locked as intent) → `generated` (a file now exists on disk) → `validated` (it passed lint and, if run, e2e). Two more are terminal rather than sequential: `declined` for something deliberately not built, and `retired` for something deliberately removed. Keep both rows — a spec that only records what was built loses the record of what was decided against, and the next pass re-proposes it.
 
 Keep a row's status current in the same pass that changes its reality. Only `generated` and `validated` assert that a file exists, and that distinction is what the re-entry drift check reads; `references/re-entry.md` covers how each value is interpreted when the spec and the disk disagree.
+
+### Two sections grow every pass, so give them an eviction rule now
+
+This is the one file this skill writes on every pass, and the only one nothing else prunes. A spec that has recorded six passes in full is a spec the seventh pass reads past.
+
+**Change history** keeps in full what a re-entering pass can still act on — the current generation of work, and any pass that recorded someone *else's* edit, because that is the only place the next pass learns this harness has more than one author. Everything older folds to one line: date, mode, and what changed in a clause. Whoever needs the detail is reconstructing a decision and has git for it; the spec's reader wants the shape the harness is in now.
+
+**Design rationale** holds the decision and the alternatives that were rejected, and stops there. A rejected alternative is the expensive thing to lose — it is what stops the next pass re-proposing it — so it survives compression while the sentences defending the choice do not. When a later pass supersedes a decision, rewrite the entry to its outcome instead of stacking the new one beneath the old; two live answers to one question is worse than either.
+
+**Don't copy a skill's `description` into Component specs.** It is already in the frontmatter, which is where it gets read from, so the copy is the half that drifts — and this file's own fixture drifted exactly that way. Record what the spec uniquely knows: why this behavior went to a skill rather than a rule or a hook.
