@@ -292,7 +292,7 @@ def check_skills(root, findings):
         # handful of files, so this is cheap.
         refs_dir = skill_dir / "references"
         if refs_dir.is_dir():
-            for ref in sorted(refs_dir.rglob("*.md")):
+            for ref in sorted(p for p in refs_dir.rglob("*") if p.suffix in (".md", ".txt", ".rst")):
                 ref_text = hc.read_text(ref)
                 ref_loc = str(ref.relative_to(root))
                 _check_dead_links(skill_dir, ref_loc, ref_text, findings)
