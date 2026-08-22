@@ -57,11 +57,11 @@ Before routing anything to a hook, probe for an **interface** that would make th
 
 - **Hooks:** does a failure block the action or just warn? What's the matcher (which tools/paths trigger it)? What should the message to the user or to Claude look like on failure?
 - **Skills:** where does its reference material live or come from (existing docs to point at, or knowledge you need to author fresh)? Does it need bundled scripts?
-- **Workflows:** is this orchestration shape fixed and reusable enough to pre-define as a `.claude/workflows/*.js` file, or does it vary too much run to run to be worth pre-defining (D12 — see `workflows.md`)?
-- **Cross-cutting:** what language should the generated harness's own documentation be written in? (This is independent of the interview conversation's language — D7: the interview happens in the user's language, but the *generated* CLAUDE.md/skills' language is itself an I4 answer you need to collect, not an assumption.)
+- **Workflows:** is this orchestration shape fixed and reusable enough to pre-define as a `.claude/workflows/*.js` file, or does it vary too much run to run to be worth pre-defining (see references/workflows.md)?
+- **Cross-cutting:** what language should the generated harness's own documentation be written in? (This is independent of the interview conversation's language — the interview happens in the user's language, but the *generated* CLAUDE.md/skills' language is itself an I4 answer you need to collect, not an assumption.)
 - **Deployment:** does any of this need to work in more than this one repo? Ask once, because the answer changes what a component may be. Skills, agents, hooks, and workflows can be packaged and distributed; **CLAUDE.md, rules, and permissions cannot** — those are per-project files with no shareable form, so "make our whole team's setup portable" has to be answered as "the skill and the hook travel; the CLAUDE.md gets copied or re-derived per repo." If the answer is yes, name the path in the spec so the next pass knows the target shape; producing the packaging itself is out of scope here.
 
-**Gate:** approve the component specs section. This is where "hook blocks vs warns" and similar binary calls get locked in — don't leave them implicit, because `03-component-generators.md`'s generation step will need a concrete answer, not a vibe.
+**Gate:** approve the component specs section. This is where "hook blocks vs warns" and similar binary calls get locked in — don't leave them implicit, because generation needs a concrete answer, not a vibe.
 
 ### I5 — Validation plan
 

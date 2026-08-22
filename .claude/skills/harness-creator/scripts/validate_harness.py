@@ -8,7 +8,7 @@ references/e2e-testing.md for the second, paid tier). harness-creator runs
 this immediately after generating or editing any component and does not
 declare the work done until it exits 0 -- a checklist that isn't
 mechanically enforced is exactly the failure mode this script exists to
-close (see docs/plan/00-overview.md's revfactory postmortem).
+close.
 
 Exit codes: 0 = no errors (warnings still possible unless --strict),
 1 = at least one error (or, under --strict, at least one warning),
@@ -62,7 +62,19 @@ _TRIGGER_PHRASE_RE = re.compile(
 _BULLET_NAME_RE = re.compile(r"^\s*[-*]\s+`?([A-Za-z0-9_\-]+)`?\s*$")
 _SKILL_POINTER_RE = re.compile(
     r"(?P<prefix>\$\{CLAUDE_SKILL_DIR\}/|\./|/)?"
-    r"(?P<subdir>references|scripts)/(?P<name>[A-Za-z0-9_.*\-]+)"
+    r"(?P<subdir>references|scripts)/"
+    r"(?P<name>[A-Za-z0-9_.*\-]+(?:/[A-Za-z0-9_.*\-]+)*)"
+)
+
+
+# A slash-bearing path naming a document. Package closure only cares about
+# things a reader is sent to read, so binaries, config, and source are out.
+_DOC_PATH_RE = re.compile(r"(?<![\w./\-])([\w.\-]+(?:/[\w.*\-]+)+\.(?:md|txt|rst))")
+
+# Files the target project owns. A skill that builds harnesses names these
+# constantly and is not pointing into its own package when it does.
+_HARNESS_NAMESPACE = frozenset(
+    {"CLAUDE.md", "CLAUDE.local.md", "AGENTS.md", "MEMORY.md", "SKILL.md", "harness-spec.md"}
 )
 
 
@@ -225,6 +237,8 @@ def _check_permissions_block(rel, permissions, findings):
 
 def check_skills(root, findings):
     total_description_chars = 0
+    packaged = packaged_skill_dirs(root)
+    non_shipping = _non_shipping_prefixes(root)
     for skill_dir in hc.iter_skill_dirs(root):
         rel = skill_dir.relative_to(root)
         skill_md = skill_dir / "SKILL.md"
@@ -268,6 +282,8 @@ def check_skills(root, findings):
             )
 
         _check_dead_links(skill_dir, loc, text, findings)
+        if skill_dir in packaged:
+            _check_package_closure(root, skill_dir, loc, text, findings, non_shipping)
 
         # Reference-to-reference pointers are as load-bearing as the ones in
         # SKILL.md and were previously never scanned at all. There are only a
@@ -275,9 +291,11 @@ def check_skills(root, findings):
         refs_dir = skill_dir / "references"
         if refs_dir.is_dir():
             for ref in sorted(refs_dir.rglob("*.md")):
-                _check_dead_links(
-                    skill_dir, str(ref.relative_to(root)), hc.read_text(ref), findings
-                )
+                ref_text = hc.read_text(ref)
+                ref_loc = str(ref.relative_to(root))
+                _check_dead_links(skill_dir, ref_loc, ref_text, findings)
+                if skill_dir in packaged:
+                    _check_package_closure(root, skill_dir, ref_loc, ref_text, findings, non_shipping)
 
     if total_description_chars > 0:
         # ~1% of a 200k-token window in characters, as a rough budget signal
@@ -292,8 +310,81 @@ def check_skills(root, findings):
             )
 
 
-def _check_dead_links(skill_dir, loc, text, findings):
-    """Every pointer to a bundled reference or script must resolve.
+def packaged_skill_dirs(root):
+    """Skill directories a plugin manifest ships as part of its package.
+
+    Only these are held to package closure. A plain project skill lives in
+    the repository it points into, so `docs/design/notes.md` there resolves
+    for everyone who has the repo; the same line inside a plugin resolves
+    only for whoever wrote it."""
+    manifest = root / ".claude-plugin" / "plugin.json"
+    if not manifest.is_file():
+        return set()
+    data, err = hc.load_json_lenient(manifest)
+    if err or not isinstance(data, dict):
+        return set()
+    field = data.get("skills")
+    entries = [field] if isinstance(field, str) else field if isinstance(field, list) else []
+
+    roots = []
+    for entry in entries:
+        if isinstance(entry, str) and not Path(entry).is_absolute():
+            roots.append((root / entry).resolve())
+
+    packaged = set()
+    for skill_dir in hc.iter_skill_dirs(root):
+        resolved = skill_dir.resolve()
+        for base in roots:
+            if resolved == base or base in resolved.parents:
+                packaged.add(skill_dir)
+                break
+    return packaged
+
+
+def _non_shipping_prefixes(root):
+    """Top-level names .gitignore excludes.
+
+    Existence alone would not catch these: a gitignored directory is present
+    on the author's machine and absent from every clone, so a pointer into
+    one passes CI and fails for every user."""
+    gitignore = root / ".gitignore"
+    if not gitignore.is_file():
+        return frozenset()
+    names = set()
+    for line in hc.read_text(gitignore).splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or line.startswith("!"):
+            continue
+        head = line.lstrip("/").split("/")[0]
+        if head and "*" not in head:
+            names.add(head)
+    return frozenset(names)
+
+
+def _check_package_closure(root, skill_dir, loc, text, findings, non_shipping):
+    """Every document a packaged skill sends its reader to must ship with it."""
+    for m in _DOC_PATH_RE.finditer(text):
+        path = m.group(1)
+        parts = path.split("/")
+        if "*" in path or parts[-1] in _HARNESS_NAMESPACE or parts[0] == ".claude":
+            continue
+        if (skill_dir / path).exists():
+            continue
+        # Resolves from the repo root, or names a directory git never
+        # commits -- either way it is here and not in the installed package.
+        if not ((root / path).exists() or parts[0] in non_shipping):
+            continue
+        add(
+            findings, "E", loc,
+            f"points at a document outside the skill package: {path} -- a plugin "
+            "installs as its own directory, so this resolves in this repo and "
+            "nowhere the skill actually runs. Move what the reader needs into "
+            "references/, or cite the public source instead of a local path",
+        )
+
+
+def iter_skill_pointers(text):
+    """Every pointer into a skill's own bundled references/ or scripts/.
 
     Deliberately wrapper-agnostic: a pointer is just as dead when it is
     written as bare prose ("see references/hooks.md"), as a markdown link,
@@ -301,16 +392,24 @@ def _check_dead_links(skill_dir, loc, text, findings):
     Only matching the backticked form would leave most of a skill's own
     pointers unchecked while Hard line 1 claims otherwise."""
     for m in re.finditer(_SKILL_POINTER_RE, text):
-        subdir, name = m.group("subdir"), m.group("name")
         # A `./`- or `/`-anchored path belongs to the target project, not to
         # this skill -- hook commands in the examples are exactly that shape.
         if m.group("prefix") in ("./", "/"):
             continue
+        # Prose ends in a period and filenames contain them, so the two run
+        # together: `scripts/tool.py.` is one pointer and one full stop.
+        name = m.group("name").rstrip(".")
         # A glob is a pattern, not a pointer; `...` is an ellipsis, not a file.
-        if "*" in name or not name.strip("."):
+        if "*" in name or not name:
             continue
-        if not (skill_dir / subdir / name).exists():
-            add(findings, "E", loc, f"references a {subdir} file that does not exist: {subdir}/{name}")
+        yield f"{m.group('subdir')}/{name}"
+
+
+def _check_dead_links(skill_dir, loc, text, findings):
+    """Every pointer to a bundled reference or script must resolve."""
+    for pointer in iter_skill_pointers(text):
+        if not (skill_dir / pointer).exists():
+            add(findings, "E", loc, f"references a file that does not exist: {pointer}")
 
 
 def check_skill_scripts(root, findings):
@@ -320,9 +419,14 @@ def check_skill_scripts(root, findings):
     what each argument means. That gap is invisible from the outside -- the
     script runs, the flag works, and only a model trying to call it pays the
     cost (see references/skills.md)."""
+    packaged = packaged_skill_dirs(root)
+    non_shipping = _non_shipping_prefixes(root)
     for skill_dir in hc.iter_skill_dirs(root):
         for path in sorted(skill_dir.glob("scripts/**/*.py")):
-            _check_cli_self_description(path, str(path.relative_to(root)), findings)
+            loc = str(path.relative_to(root))
+            _check_cli_self_description(path, loc, findings)
+            if skill_dir in packaged:
+                _check_package_closure(root, skill_dir, loc, hc.read_text(path), findings, non_shipping)
 
 
 def _arg_label(node):
@@ -525,7 +629,7 @@ def _check_workflow_syntax(loc, wf_file, findings):
     import subprocess
     # Plain `node --check` false-fails on ESM `export` syntax when the
     # target project's package.json declares "type": "commonjs" -- force
-    # ESM parsing explicitly instead (docs/plan/06-milestones.md fix).
+    # ESM parsing explicitly instead.
     try:
         result = subprocess.run(
             ["node", "--input-type=module", "--check"],

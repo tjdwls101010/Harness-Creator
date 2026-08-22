@@ -12,7 +12,7 @@ This costs real tokens and wall-clock time — a handful of full agentic session
 
 ## Shape: a workflow composed on the spot, not a file you ship
 
-There is no `e2e-runner.js` sitting in this skill's workflows directory, and you should not create one. The scenarios that need checking are different for every project — a fixed workflow file would either be too narrow for the next project or so generic it checks nothing real. This is the same D12 principle that governs every other variable-shaped task in this skill: pre-defined structure is for orchestrations whose *shape* stays fixed between runs, and e2e's shape — the scenario list — is different every time. Compose the workflow at the moment you need it, from the spec's Validation section, and throw the composition away afterward; only the results get recorded, in the spec.
+There is no `e2e-runner.js` sitting in this skill's workflows directory, and you should not create one. The scenarios that need checking are different for every project — a fixed workflow file would either be too narrow for the next project or so generic it checks nothing real. This is the same principle that governs every other variable-shaped task in this skill: pre-defined structure is for orchestrations whose *shape* stays fixed between runs, and e2e's shape — the scenario list — is different every time. Compose the workflow at the moment you need it, from the spec's Validation section, and throw the composition away afterward; only the results get recorded, in the spec.
 
 The shape to compose, every time, is three phases:
 

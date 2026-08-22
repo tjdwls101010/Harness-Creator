@@ -220,6 +220,14 @@ v2가 D16(인터페이스 교리)을 세우면서 그와 모순되는 v1 결정�
 3. 검사 B가 `interview.md:64` 형태를 잡는다 — 그 줄을 되돌리면 red가 되는 회귀 핀이 있다.
 4. `validate_harness.py --path . --strict` exit 0.
 
+> **구현 시 개정 (2026-08-22).** 위 문안은 검사 A를 `\bD[0-9]{1,2}\b` · `docs/plan/` · `\.tmp/` 패턴 셋으로, 검사 B를 "맨 파일명까지 확장"으로 적었다. **둘 다 그대로는 정상 하네스에서 울린다** — 이 문서가 §범위 밖에서 인용한 WS2-6 원칙("정상 하네스에서 울리는 체크는 없느니만 못하다")과 정면으로 충돌한다. `docs/plan/`은 이 레포의 경로일 뿐이고 사용자 스킬이 자기 레포의 `docs/plan/`을 가리키는 것은 정상이며, 맨 파일명은 현행 코퍼스에만 `run.py`·`template-crash.md`·`guard.sh` 등 **가상 하네스의 예시 파일명이 수십 개** 있어 전부 오탐이 된다. 목표(패키지 밖 포인터를 기계적으로 막는다)는 유지하고 수단을 바꿨다.
+>
+> - **검사 A → 플러그인 패키지 폐쇄.** `.claude-plugin/plugin.json`이 실제로 그 스킬을 배포할 때에만 발동하고, 스킬 디렉터리 밖의 문서 경로가 (a) 이 레포에서 resolve되거나 (b) `.gitignore`된 최상위 이름 아래면 E. 프로젝트 스킬은 자기가 가리키는 레포 안에 살므로 침묵한다. **하드코딩된 패턴 없이 6건을 전부 잡고 오탐 0.** `.gitignore` 분기가 있어야 `.tmp/` 계열이 fresh clone·CI에서도 잡힌다.
+> - **검사 B → 중첩 경로 + 문장 끝 마침표.** codex 적대 감사가 `_SKILL_POINTER_RE`의 실제 구멍 둘을 확인했다: `references/platform/missing.md`가 첫 세그먼트만 검사돼 통과하고, 문장 끝의 `scripts/tool.py.`가 존재하지 않는 파일로 신고된다(정상 하네스 오탐). 둘 다 일반적이고 오탐이 없다.
+> - **남은 7건(D-ID 5, 맨 파일명 1, 없는 절 제목 1)은 `tests/test_skill_surface.py`의 회귀 핀으로 간다.** 이 파일이 이미 그 용도다 — `NoExternalToolNamesTests`가 `doctor|checkup` 리터럴을, `DanglingPointerTests`가 `see Hard lines` 리터럴을 막는다. 이 패키지에 대한 사실이지 사용자에게 출하할 규칙이 아니다. 계획이 검사 B의 수용 기준을 이미 "회귀 핀"이라고 적은 것과 일치한다.
+>
+> **추가로 닫은 2건** (codex 자기적용 감사, 같은 PR): `workflows.md:21`이 존재하지 않는 `/deep-research` 워크플로를 *"the bundled"*라고 광고했다(**Hard line 1 위반**). `hooks-events.md:3`이 *"Load this file"*이라고 자기 지시하는데 `hooks.md:156`의 라우터는 `hook_event.py --event`로 보낸다 — 그 지시를 따르면 이벤트 하나를 묻는 데 3,800단어를 낸다.
+
 ### PR4 — 포인터 독자 교정
 
 | 변경 | 파일 |

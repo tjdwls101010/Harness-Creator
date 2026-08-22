@@ -6,6 +6,7 @@
 stdlib unittest only, no pytest (per docs/plan/04-scripts-and-validation.md).
 """
 
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -46,6 +47,62 @@ class CliEdgeCaseTests(unittest.TestCase):
 
     def test_no_findings(self):
         self.assertEqual(self.findings, [])
+
+
+class PackageClosureTests(unittest.TestCase):
+    """A plugin-packaged skill travels as one directory. A pointer out of it
+    resolves on the author's machine and nowhere else -- which is why this
+    fires only when a plugin manifest actually ships the skill: a plain
+    project skill sits inside the repo it points into, and `docs/design/notes.md`
+    there is a working pointer, not a leak.
+
+    The fixture deliberately mixes both kinds, because the risk this check
+    carries is not missing a leak, it is firing on the target-project paths
+    the skill legitimately names (WS2-6: a check that fires on a correct
+    harness is worse than no check)."""
+
+    def setUp(self):
+        self.root = REPO_ROOT / "tests" / "fixtures" / "plugin-package-closure"
+        self.findings, self.exit_code = vh.run(self.root, strict=False)
+        self.errors = [(loc, msg) for level, loc, msg in self.findings if level == "E"]
+
+    def _leaked_paths(self):
+        found = set()
+        for _, msg in self.errors:
+            m = re.search(r"outside the skill package: (\S+)", msg)
+            if m:
+                found.add(m.group(1))
+        return found
+
+    def test_a_path_that_resolves_in_the_repo_but_not_the_package_is_an_error(self):
+        self.assertIn("docs/design/notes.md", self._leaked_paths())
+
+    def test_a_gitignored_path_is_an_error_even_where_it_does_not_exist(self):
+        """`.tmp/` is gitignored, so it is absent from every fresh clone --
+        including CI, where an existence test would silently pass."""
+        self.assertIn(".tmp/snapshot/api.md", self._leaked_paths())
+
+    def test_a_leak_inside_a_bundled_script_is_caught(self):
+        """This one reaches the end user: a module docstring is what
+        `--help` prints."""
+        self.assertTrue(
+            any("tool.py" in loc for loc, _ in self.errors),
+            f"expected a finding in scripts/tool.py, got {self.errors}",
+        )
+
+    def test_target_project_paths_are_not_leaks(self):
+        for legit in (
+            ".claude/settings.json", ".claude/rules/*.md", "CLAUDE.md",
+            "packages/api/CLAUDE.md", ".github/copilot-instructions.md",
+            "references/real.md", "scripts/tool.py",
+        ):
+            self.assertNotIn(legit, self._leaked_paths(), legit)
+
+    def test_a_project_skill_outside_a_plugin_is_not_checked(self):
+        """good-harness has no plugin manifest, so the same shape of
+        pointer there is a working pointer."""
+        findings, _ = vh.run(REPO_ROOT / "tests" / "fixtures" / "good-harness", strict=False)
+        self.assertEqual([f for f in findings if "outside the skill package" in f[2]], [])
 
 
 class BadHarnessTests(unittest.TestCase):

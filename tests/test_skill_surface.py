@@ -121,15 +121,7 @@ class DeadLinkCoverageTests(unittest.TestCase):
     only against SKILL.md -- one pointer out of dozens."""
 
     def _scan(self, text):
-        found = []
-        for m in vh._SKILL_POINTER_RE.finditer(text):
-            if m.group("prefix") in ("./", "/"):
-                continue
-            name = m.group("name")
-            if "*" in name or not name.strip("."):
-                continue
-            found.append(f"{m.group('subdir')}/{name}")
-        return found
+        return list(vh.iter_skill_pointers(text))
 
     def test_pointers_in_both_skill_md_and_references_are_scanned(self):
         self.assertGreater(len(self._scan(read(SKILL_MD))), 10)
@@ -152,6 +144,20 @@ class DeadLinkCoverageTests(unittest.TestCase):
             "use `${CLAUDE_SKILL_DIR}/scripts/...` never a bare path",
         ):
             self.assertEqual(self._scan(form), [], form)
+
+    def test_a_nested_pointer_is_checked_whole(self):
+        """v5. The pattern captured one path segment, so a pointer into a
+        subdirectory was only ever checked as far as the directory --
+        `references/platform/missing.md` passed as long as `references/platform`
+        existed, which is precisely when a nested pointer goes wrong."""
+        self.assertEqual(self._scan("see references/platform/missing.md"),
+                         ["references/platform/missing.md"])
+
+    def test_a_sentence_ending_period_is_not_part_of_the_filename(self):
+        """The mirror-image failure, and the worse one: a check that fires
+        on a correct harness. A pointer at the end of a sentence was read as
+        a file named `tool.py.` and reported missing."""
+        self.assertEqual(self._scan("the CLI is scripts/tool.py."), ["scripts/tool.py"])
 
     def test_every_pointer_in_the_shipped_skill_resolves(self):
         findings = []
@@ -449,6 +455,57 @@ class InterfaceContradictionTests(unittest.TestCase):
         for path in [SKILL_MD] + REFERENCES:
             for m in re.finditer(r"`run_e2e\.py[^`]*`", read(path)):
                 self.assertNotIn("--dangerously-skip-permissions", m.group(0), path.name)
+
+
+class PackageClosureRegressionTests(unittest.TestCase):
+    """v5 closed thirteen pointers that led out of the shipped package.
+
+    Six were paths, and validate_harness.py now catches those for any
+    plugin-packaged skill. The rest are shapes no general check can see
+    without firing on correct harnesses -- a bare decision-log code, a bare
+    filename, a quoted section title -- so they are pinned here instead, the
+    way NoExternalToolNamesTests pins a word list. These are facts about
+    this package, not a rule worth shipping to users.
+
+    The `.tmp/` two were the worst of the set: gitignored, so absent from
+    every clone, and one of them sat in a module docstring that `--help`
+    prints to the end user."""
+
+    def _shipped_files(self):
+        return [SKILL_MD] + REFERENCES + sorted(SCRIPTS_DIR.glob("*.py"))
+
+    def test_no_unresolvable_decision_log_codes(self):
+        """`D12` is not bad because it is short. It is bad because nothing in
+        the installed package defines it, so the reader cannot expand it.
+        The package's own codes (I1-I5, V1-V4, B1) are all defined inside it
+        and are deliberately not matched here."""
+        for path in self._shipped_files():
+            hits = re.findall(r"\bD[0-9]{1,2}\b", read(path))
+            self.assertEqual(hits, [], f"{path.name} cites {hits}")
+
+    def test_no_plan_document_is_named(self):
+        """Derived from the plan tree rather than hardcoded, so a pointer at
+        any generation's plan file fails, not just the one v5 removed."""
+        plan_docs = {
+            p.name for p in (REPO_ROOT / "docs" / "plan").rglob("[0-9][0-9]-*.md")
+        }
+        self.assertTrue(plan_docs, "the plan tree should not be empty")
+        for path in self._shipped_files():
+            text = read(path)
+            for name in sorted(plan_docs):
+                self.assertNotIn(name, text, f"{path.name} names the plan document {name}")
+
+    def test_quoted_section_titles_resolve(self):
+        """skills.md sent the reader to hooks.md's "Hooks in skills and
+        agents", which is not a heading in hooks.md or anywhere else. A
+        pointer at a section is as dead as a pointer at a file, and the
+        dead-link check cannot see it -- the file it names does exist."""
+        for path in [SKILL_MD] + REFERENCES:
+            for m in re.finditer(r"([a-z][\w-]*\.md)'s \"([^\"]+)\"", read(path)):
+                target = SKILL_DIR / "references" / m.group(1)
+                self.assertTrue(target.is_file(), f"{path.name} -> {m.group(1)}")
+                headings = re.findall(r"^#+\s+(.*)$", read(target), re.MULTILINE)
+                self.assertIn(m.group(2), headings, f"{path.name} quotes a missing heading")
 
 
 class NoExternalToolNamesTests(unittest.TestCase):
