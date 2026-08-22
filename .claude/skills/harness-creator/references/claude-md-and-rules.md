@@ -18,7 +18,9 @@ Apply this same eligibility test line by line while drafting: "would removing th
 
 Do not list the project's skills, agents, or hooks by name inside CLAUDE.md. The filesystem is the single source of truth for what components exist; a hand-maintained inventory in CLAUDE.md immediately starts drifting the moment someone adds, renames, or removes a component, and nobody remembers to update the prose list. This exact pattern — full registries of every skill and agent spelled out in CLAUDE.md — goes stale within a few iterations, actively misleading the model about what's available.
 
-Instead, CLAUDE.md should hold three kinds of content: trigger rules (when to reach for a capability, stated as a condition, not a name-dump), core facts (build commands, architecture, environment gotchas), and a single pointer to `.claude/harness-spec.md` for anyone who wants the full picture of what the harness contains and why. If a future reader needs to know exactly which skills exist, they list the `.claude/skills/` directory — that is always correct, unlike prose.
+Instead, CLAUDE.md holds two kinds of content: trigger rules (when to reach for a capability, stated as a condition, not a name-dump) and core facts (build commands, architecture, environment gotchas). Nothing in it announces what exists, because the client already does — a skill reaches the listing through its own `description`, agents arrive as a list, a hook speaks when it fires, a rule loads when its path matches. A reader who needs the exact set lists `.claude/skills/` — always correct, unlike prose.
+
+Don't redirect that job to `.claude/harness-spec.md` either. A pointer inherits its target's reader, and the spec's reader is a maintainer: it carries design rationale and an inventory hand-maintained enough to need its own drift check. A working session sent there pays for all of that to answer a question it never had. A maintainer who wants the way in gets it from an HTML comment, which costs nothing (see the loading semantics below).
 
 ## Content eligibility test
 
@@ -90,8 +92,7 @@ What's left when you remove them points at the filesystem instead of listing it,
 ```markdown
 # Project
 
-See `.claude/harness-spec.md` for the full harness inventory and design
-rationale.
+<!-- Harness inventory and design rationale: .claude/harness-spec.md -->
 
 ## Build & test
 - `npm run dev` starts both API (port 3001) and frontend (port 5173).
@@ -108,8 +109,9 @@ rationale.
 
 ## IMPORTANT
 Never write raw SQL in route handlers — use the Knex query builder in
-`src/db/`. A PreToolUse hook blocks commits containing raw SQL strings;
-this line exists so you know why that hook fires before you hit it.
+`src/db/`. `.claude/hooks/no-raw-sql.sh` blocks an edit that would add one,
+through `Bash` as well as `Edit`; this line exists so you know why before
+you hit it.
 ```
 
 Notice the last block: the hook does the actual enforcement, and the CLAUDE.md line exists only to explain *why*, so the model isn't confused when the hook blocks it. That's the correct division of labor between this layer and the enforcement layer.

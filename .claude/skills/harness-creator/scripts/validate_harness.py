@@ -853,9 +853,11 @@ def _check_inventory_listing(loc, lines, known_names, findings):
                 add(
                     findings, "W", loc,
                     f"bullet list of bare component names ({', '.join(run)}) looks like "
-                    "a component inventory -- the filesystem is the source of truth for "
-                    "what exists; point to harness-spec.md instead of enumerating "
-                    "(lines with trigger phrasing like '... use X when Y' are exempt)",
+                    "a component inventory -- the client already surfaces every component "
+                    "to the session, so this list adds nothing on the day it is written "
+                    "and misleads on the day someone renames one. Say when to reach for "
+                    "a capability instead of naming what exists (lines with trigger "
+                    "phrasing like '... use X when Y' are exempt)",
                 )
             run = []
 
