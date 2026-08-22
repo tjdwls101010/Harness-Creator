@@ -327,10 +327,17 @@ class InterfaceDoctrineTests(unittest.TestCase):
                 names.append(path.name)
         return names
 
-    def test_boundary_runs_both_ways(self):
+    def test_boundary_names_both_owners(self):
+        """Both halves, because naming only the tool's half is what let the
+        prose copy exist. An adversarial read of an earlier draft that
+        forbade prose from "asserting how the tool currently behaves" also
+        forbade "run this only with consent, it spends real tokens" -- while
+        a --help string saying the same thing was forbidden by the other
+        half. Splitting on ownership instead leaves nowhere unreachable."""
         text = read(SKILL_MD)
-        self.assertIn("never restates what the tool prints", text)
-        self.assertIn("asserts how it currently behaves", text)
+        self.assertIn("the tool owns what is *valid*, what it does, and what it prints", text)
+        self.assertIn("the project owns when to reach for it, what it costs, and why it was chosen", text)
+        self.assertIn("Neither side restates the other.", text)
 
     def test_the_falsifiability_test_is_stated(self):
         """The clause that makes the rule operable on a case nobody listed."""
