@@ -61,6 +61,9 @@ _TRIGGER_PHRASE_RE = re.compile(
 )
 _BULLET_NAME_RE = re.compile(r"^\s*[-*]\s+`?([A-Za-z0-9_\-]+)`?\s*$")
 _SKILL_POINTER_RE = re.compile(
+    # Not after `=`, `?` or `&`: `...?source=references/install.md` is a URL
+    # query value, not a pointer into this skill.
+    r"(?<![=?&])"
     r"(?P<prefix>\$\{CLAUDE_SKILL_DIR\}/|\./|/)?"
     r"(?P<subdir>references|scripts)/"
     r"(?P<name>[A-Za-z0-9_.*\-]+(?:/[A-Za-z0-9_.*\-]+)*)"
@@ -356,11 +359,15 @@ def _check_package_closure(root, skill_dir, loc, text, findings):
         if (skill_dir / path).exists() or not (root / path).exists():
             continue
         add(
-            findings, "E", loc,
-            f"points at a document outside the skill package: {path} -- a plugin "
-            "installs as its own directory, so this resolves in this repo and "
-            "nowhere the skill actually runs. Move what the reader needs into "
-            "references/, or cite the public source instead of a local path",
+            findings, "W", loc,
+            f"names {path}, which resolves in this repo but is not in the skill "
+            "package -- a plugin installs as its own directory, so if this is a "
+            "pointer the reader is meant to follow, it is already broken for "
+            "everyone who installs it. Move what they need into references/, or "
+            "cite a public source. If instead it describes a file in the project "
+            "the skill is *run against*, it is correct and this repo just happens "
+            "to have the same path; nothing here can tell those apart, which is "
+            "why this warns rather than fails",
         )
 
 

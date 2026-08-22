@@ -64,28 +64,43 @@ class PackageClosureTests(unittest.TestCase):
     def setUp(self):
         self.root = REPO_ROOT / "tests" / "fixtures" / "plugin-package-closure"
         self.findings, self.exit_code = vh.run(self.root, strict=False)
-        self.errors = [(loc, msg) for level, loc, msg in self.findings if level == "E"]
+        self.reported = [(loc, msg) for _, loc, msg in self.findings]
 
     def _leaked_paths(self):
         found = set()
-        for _, msg in self.errors:
-            m = re.search(r"outside the skill package: (\S+)", msg)
+        for _, msg in self.reported:
+            m = re.search(r"names (\S+), which resolves in this repo", msg)
             if m:
                 found.add(m.group(1))
         return found
 
-    def test_a_path_that_resolves_in_the_repo_but_not_the_package_is_an_error(self):
+    def test_a_path_that_resolves_in_the_repo_but_not_the_package_is_reported(self):
         self.assertIn("docs/design/notes.md", self._leaked_paths())
 
     def test_a_second_leak_in_a_different_tree_is_caught(self):
         self.assertIn("notes/internal-decisions.md", self._leaked_paths())
 
+    def test_it_warns_rather_than_fails(self):
+        """An adversarial pass built three correct plugins this flags: a
+        skill telling the reader to check their own `docs/architecture.md`,
+        their `.github/copilot-instructions.md`, their monorepo's
+        `packages/web/CONTRIBUTING.md` -- each one correct, each one
+        colliding with a path that also exists in the plugin's own repo.
+        Nothing distinguishes those from a leak, and a check that fails a
+        correct harness gets ignored and then catches nothing. So it warns,
+        and a package that wants closure enforced runs --strict, which is
+        what this repo does."""
+        levels = {level for level, _, msg in self.findings if "which resolves in this repo" in msg}
+        self.assertEqual(levels, {"W"})
+        self.assertEqual(self.exit_code, vh.hc.EXIT_OK)
+        self.assertEqual(vh.run(self.root, strict=True)[1], vh.hc.EXIT_LINT_FAILED)
+
     def test_a_leak_inside_a_bundled_script_is_caught(self):
         """This one reaches the end user: a module docstring is what
         `--help` prints."""
         self.assertTrue(
-            any("tool.py" in loc for loc, _ in self.errors),
-            f"expected a finding in scripts/tool.py, got {self.errors}",
+            any("tool.py" in loc for loc, _ in self.reported),
+            f"expected a finding in scripts/tool.py, got {self.reported}",
         )
 
     def test_target_project_paths_are_not_leaks(self):
@@ -111,7 +126,14 @@ class PackageClosureTests(unittest.TestCase):
         """good-harness has no plugin manifest, so the same shape of
         pointer there is a working pointer."""
         findings, _ = vh.run(REPO_ROOT / "tests" / "fixtures" / "good-harness", strict=False)
-        self.assertEqual([f for f in findings if "outside the skill package" in f[2]], [])
+        self.assertEqual([f for f in findings if "which resolves in this repo" in f[2]], [])
+
+    def test_a_url_query_value_is_not_a_pointer(self):
+        """`https://docs.python.org/3/?source=references/install.md` names a
+        query parameter, not a bundled file."""
+        self.assertEqual(
+            list(vh.iter_skill_pointers("https://x.dev/3/?source=references/install.md")), []
+        )
 
 
 class BadHarnessTests(unittest.TestCase):
