@@ -48,6 +48,16 @@ def isolate_project(project_root):
     return dest
 
 
+def discard_isolated(dest):
+    """Remove an isolated copy, including the mkdtemp parent that holds it.
+
+    A copy of the whole project per run adds up fast and nothing else ever
+    collects it -- there is no session end, no process exit hook, and the
+    path is a random temp name the caller never sees unless they read
+    summary.json."""
+    shutil.rmtree(dest.parent, ignore_errors=True)
+
+
 def build_command(prompt, model, permission_mode, skip_permissions):
     cmd = [
         "claude", "-p", prompt,
@@ -169,6 +179,7 @@ def main():
     parser.add_argument("--json", action="store_true", help="print the summary as JSON to stdout too")
     parser.add_argument("--permission-mode", help="passed through to `claude -p --permission-mode`")
     parser.add_argument("--isolate", action="store_true", help="copy --project to a temp dir first and run there, so writes don't touch the original; implies --dangerously-skip-permissions unless --permission-mode is also given")
+    parser.add_argument("--keep-isolated", action="store_true", help="with --isolate, leave the temp copy on disk and record its path in summary.json; pass this when a scenario grades generated FILES, since the copy is where they are. Without it the copy is deleted -- a project copy per run is not collected by anything else")
     args = parser.parse_args()
 
     if not args.prompt and not args.prompt_file:
@@ -182,10 +193,8 @@ def main():
         return hc.EXIT_USAGE_ERROR
 
     run_dir = project_root
-    isolated_tmp_parent = None
     if args.isolate:
         run_dir = isolate_project(project_root)
-        isolated_tmp_parent = run_dir.parent
 
     skip_permissions = args.isolate and not args.permission_mode
 
@@ -194,12 +203,13 @@ def main():
             run_dir, prompt, args.model, args.permission_mode, skip_permissions, args.timeout,
         )
     finally:
-        pass  # isolated copy is left on disk deliberately for post-hoc inspection; caller/OS temp cleanup handles it
+        if args.isolate and not args.keep_isolated:
+            discard_isolated(run_dir)
 
     summary = parse_stream(lines)
     summary["error"] = err
     summary["project"] = str(project_root)
-    summary["isolated_copy"] = str(run_dir) if args.isolate else None
+    summary["isolated_copy"] = str(run_dir) if (args.isolate and args.keep_isolated) else None
     summary["prompt"] = prompt
 
     out_dir = Path(args.out) if args.out else Path(tempfile.mkdtemp(prefix="harness-e2e-out-"))
