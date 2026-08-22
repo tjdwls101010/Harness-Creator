@@ -491,6 +491,23 @@ class SubtractionTests(unittest.TestCase):
         )
 
 
+class GotchaCountTests(unittest.TestCase):
+    """A count in a heading is a number that goes stale the moment someone
+    adds or removes an item, and this skill's own doctrine calls a number
+    without a live justification a rail wearing a digit. v5 merged one of
+    six gotchas into the frontmatter row it duplicated; the heading is now
+    checked against the section instead of trusted."""
+
+    WORDS = {4: "Four", 5: "Five", 6: "Six", 7: "Seven", 8: "Eight"}
+
+    def test_the_heading_count_matches_the_section(self):
+        text = read(SKILL_DIR / "references" / "skills.md")
+        heading = next(l for l in text.splitlines() if "gotchas you cannot derive" in l)
+        section = text.split(heading)[1].split("\n## ")[0]
+        actual = len([l for l in section.splitlines() if l.startswith("**")])
+        self.assertIn(self.WORDS[actual], heading, f"heading says otherwise; section has {actual}")
+
+
 class PointerReaderTests(unittest.TestCase):
     """v5 removed CLAUDE.md's pointer at `.claude/harness-spec.md`.
 

@@ -85,9 +85,7 @@ These behaviors are not what most people expect from "a config file Claude reads
 
 ## A good CLAUDE.md, concretely
 
-The two failure modes worth naming are the two `validate_harness.py` now warns on: a bulleted inventory of skills and agents, which drifts the first time someone adds one, and generic advice ("write clean, maintainable code," "follow best practices") that no one can check against actual behavior. Both are cheap to write and cost tokens every request forever.
-
-What's left when you remove them points at the filesystem instead of listing it, and states only what the code can't tell you:
+What survives the rules above states only what the code can't tell you:
 
 ```markdown
 # Project
@@ -114,6 +112,4 @@ through `Bash` as well as `Edit`; this line exists so you know why before
 you hit it.
 ```
 
-Notice the last block: the hook does the actual enforcement, and the CLAUDE.md line exists only to explain *why*, so the model isn't confused when the hook blocks it. That's the correct division of labor between this layer and the enforcement layer.
-
-Notice two things this file does **not** say, both of which a first draft usually contains. It never summarizes the stack — `package.json` already answers "what is this project," and a line restating it is pure cost. And it doesn't restate the formatting rules the linter enforces; it points at the linter instead, because a rule with a mechanical enforcer already has a better home than prose. Everything that survived is something the repo genuinely cannot tell you: which port, how long the suite takes, where auth actually lives, and why a hook is about to block you.
+Everything that survived is something the repo cannot tell you itself: which port, how long the suite takes, where auth actually lives, and why a hook is about to block you.
