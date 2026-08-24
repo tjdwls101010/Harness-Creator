@@ -218,6 +218,4 @@ PR6이 해소하는 것 — `.claude/harness-spec.md` B9 행과 `:44`의 게이�
 계획이 지시한 것과 구현이 달라진 지점만 적는다. 계획을 조용히 벗어나는 것이 이 세대가 잡으려는 드리프트와 같은 종류이므로, 어긋난 곳은 어긋난 채로 기록한다.
 
 - **PR1 ②의 판정 원문은 실행 불가능했다.** `grep "could the model.*re-derive"`가 `SKILL.md` 1건을 히트한다고 썼지만 `SKILL.md:95`의 실제 문구는 *"would let the model re-derive"*라 그 grep은 0건이다. 판정의 의도(litmus 문장이 한 곳에만 산다)는 그대로 두고 grep만 고쳤다.
-- **PR4가 `harness-spec.md`를 두 줄 건드린다 — PR6 단독 소유가 아니었다.** `re-entry.md`를 지우는 순간 `audit_harness.py`의 드리프트 검사가 B9 행(`validated`, 그 경로)을 잡아 `test_this_repo_reports_no_drift`가 red가 된다. 즉 이 한 줄은 삭제와 같은 커밋에 있어야 하고, 그것이 Hard line 3이 실제로 요구하는 바다. `:44`의 게이팅 설명도 삭제 직후 거짓이 되므로 함께 고쳤다. PR6은 서술 작업(B8 확장, Design rationale, Change history, 위키)을 맡는다. Gate A #1이 이 긴장을 지적했고 당시 "전부 PR6"으로 해소했는데, 기계 검사 쪽이 더 강했다.
-- **PR4 ②의 grep 범위를 `re-entry.md`(파일명)로 좁혔다.** 원문은 `grep -rn "re-entry"` 0건이었지만 "re-entry"는 개념어로도 쓰인다 — `audit_harness.py:334`가 *"references/interview.md's re-entry variants"*라고 정확히 가리키는 것까지 금지하게 된다. Hard line 1이 요구하는 것은 존재하지 않는 파일을 가리키는 포인터가 없는 것이므로 판정을 그 형태로 바꿨다. 스킬 디렉터리 내 `re-entry.md` 히트는 0건이다.
 - **PR1 ②의 "500이 대신 존재"를 채택하지 않았다.** `skills.md:26`에서 숫자를 다시 쓰는 대신 검사 위임으로 갔다 — `validate_harness.py:276-280`의 메시지가 `MAX_SKILL_BODY_LINES`를 그대로 출력하므로, 숫자를 산문에 다시 적으면 *"편집하면 문장이 거짓이 되는"* 사본을 하나 더 만드는 셈이다. 결함 3이 지적한 것이 정확히 그 사본이므로, 같은 결함을 고치면서 같은 모양을 재생산하지 않는다.

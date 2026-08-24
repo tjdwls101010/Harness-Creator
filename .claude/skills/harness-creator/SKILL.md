@@ -30,9 +30,12 @@ Invocation
      │   Claude has repeatedly needed here, so it's interview material, not a component to track
      └─ branch on mode. audit_harness.py's "suggested mode" is a hint, not a verdict: it can tell
         new from not-new, but extend and improve look identical on disk, so ask the user directly.
-        The mode picks the opening question, not a different file.
- └─ Phase 1-N. Interview (load references/interview.md, which covers all four modes; sync alone
-   │  runs no stages, only the drift list the audit above produced)
+        ├─ new → load references/interview.md, run the five stages
+        ├─ extend / improve → load references/re-entry.md; it says which stages to re-enter and
+        │   sends you to references/interview.md for them
+        └─ sync → load references/re-entry.md only. There is no interview in sync mode, so
+            interview.md stays unread.
+ └─ Phase 1-N. Interview (whichever of the two the branch above selected)
      ├─ each stage ends by updating the spec, then a user approval gate
      └─ behavior inventory specifically: skill count is a real cost (see the layer-routing table below) —
         weigh consolidation into the inventory decision itself, not as an afterthought once Generate starts
@@ -123,7 +126,7 @@ Their flags are not listed here. Read a script's `--help` the first time you rea
 
 `validate_harness.py` checks structural integrity and prints the always-loaded budget, but it cannot grade a skill's `description` for trigger quality or near-miss overlap with sibling skills. Re-read every description you generate against references/skills.md before calling it done — including a lone new skill, not just a batch.
 
-`run_e2e.py`'s docstring records when its headless permission handling was last confirmed and on what; auth is per-machine, so read references/e2e-testing.md before the first run in a new environment.
+`run_e2e.py`'s headless permission handling is confirmed working (`--isolate` + skip-permissions, three runs, 2026-08-22), but auth is per-machine — read references/e2e-testing.md before the first run in a new environment.
 
 ## Hard lines
 
