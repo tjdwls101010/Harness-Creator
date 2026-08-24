@@ -208,17 +208,23 @@ class AlwaysLoadedBudgetTests(unittest.TestCase):
         ):
             self.assertNotIn(phrase, text, phrase)
 
-    def test_sync_path_does_not_require_interview_md(self):
-        """WS8 step 1. The sync procedure has to live somewhere reachable
-        without loading interview.md, or gating the load strands sync mode."""
-        re_entry = SKILL_DIR / "references" / "re-entry.md"
-        self.assertTrue(re_entry.is_file(), "references/re-entry.md must exist")
-        text = read(re_entry)
+    def test_the_sync_procedure_is_reachable(self):
+        """Replaces WS8's test_sync_path_does_not_require_interview_md, which
+        asserted the sync procedure lived in re-entry.md specifically. v6
+        merged that file into interview.md, so the old test would have passed
+        by having its path swapped -- and it verified the opposite property of
+        the one v6 wants. The property worth keeping is the one underneath:
+        sync has to find its procedure somewhere, and now that somewhere is
+        the merged file."""
+        text = read(SKILL_DIR / "references" / "interview.md")
         for concept in ("sync", "status", "generated", "validated", "Change history"):
             self.assertIn(concept, text, concept)
 
-    def test_skill_md_routes_to_re_entry(self):
-        self.assertIn("re-entry.md", read(SKILL_MD))
+    def test_the_merged_file_is_the_only_interview_surface(self):
+        """Hard line 1: nothing may point at a file that isn't there."""
+        self.assertFalse((SKILL_DIR / "references" / "re-entry.md").exists())
+        for path in [SKILL_MD] + REFERENCES:
+            self.assertNotIn("re-entry.md", read(path), path.name)
 
 
 class GuardrailTests(unittest.TestCase):
@@ -478,21 +484,24 @@ class SubtractionTests(unittest.TestCase):
     a rule written to fight a model's old default reads exactly like one
     still fighting the current default."""
 
-    RE_ENTRY = SKILL_DIR / "references" / "re-entry.md"
+    INTERVIEW = SKILL_DIR / "references" / "interview.md"
     E2E = SKILL_DIR / "references" / "e2e-testing.md"
 
     def test_improve_asks_what_is_unnecessary_alongside_what_is_wanted(self):
-        text = read(self.RE_ENTRY)
-        improve = text.split("## Improve")[1].split("\n## ")[0]
+        """The slice runs from the improve opening to the next top-level
+        heading, so it covers the ablation subsection under it -- which is
+        where the downward arrow is actually spelled out."""
+        text = read(self.INTERVIEW)
+        improve = text.split("### Improve")[1].split("\n## ")[0]
         self.assertIn("what is now unnecessary", improve)
 
     def test_ablation_is_a_proposal_not_an_action(self):
-        self.assertIn("it is a proposal, not an action", read(self.RE_ENTRY))
+        self.assertIn("it is a proposal, not an action", read(self.INTERVIEW))
 
     def test_hooks_and_permissions_are_excluded_from_ablation(self):
         """The guard that makes the rest safe to state. Ablating a hook means
         observing the failure the hook exists to prevent."""
-        self.assertIn("never ablate a hook or a permission rule", read(self.RE_ENTRY).lower())
+        self.assertIn("never ablate a hook or a permission rule", read(self.INTERVIEW).lower())
 
     def test_the_routing_table_has_a_row_that_ends_in_removal(self):
         rows = [l for l in read(self.E2E).splitlines() if l.startswith("| ")]

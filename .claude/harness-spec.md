@@ -27,7 +27,7 @@ The binding design record is `docs/plan/` (v1, D1-D12) as revised by `docs/plan/
 | B6 | Author subagents: tools, memory, what skips CLAUDE.md | skill | `.claude/skills/harness-creator/references/agents.md` | validated |
 | B7 | Author dynamic workflows, thin-script doctrine | skill | `.claude/skills/harness-creator/references/workflows.md` | validated |
 | B8 | Run the interview: five stages, gates, spec template | skill | `.claude/skills/harness-creator/references/interview.md` | validated |
-| B9 | Re-entry: extend, improve, and the full sync procedure | skill | `.claude/skills/harness-creator/references/re-entry.md` | validated |
+| B9 | Re-entry: extend, improve, and the full sync procedure | skill | — | retired |
 | B10 | Second-tier e2e validation and feedback routing | skill | `.claude/skills/harness-creator/references/e2e-testing.md` | validated |
 | B11 | Inventory an existing harness and detect spec-vs-disk drift | skill | `.claude/skills/harness-creator/scripts/audit_harness.py` | validated |
 | B12 | Deterministic lint + always-loaded budget report | skill | `.claude/skills/harness-creator/scripts/validate_harness.py` | validated |
@@ -41,7 +41,7 @@ The binding design record is `docs/plan/` (v1, D1-D12) as revised by `docs/plan/
 
 ## Component specs
 
-Each reference file is loaded only when the matching component type is being generated; `SKILL.md` is the sole always-loaded surface, and `interview.md` and `re-entry.md` are gated behind the Phase 0 mode branch. That gating is what keeps the always-loaded surface at one file; the numbers behind it are in Change history.
+Each reference file is loaded only when the matching component type is being generated; `SKILL.md` is the sole always-loaded surface, and `interview.md` loads at Phase 1 rather than during Phase 0's audit. That gating is what keeps the always-loaded surface at one file; the numbers behind it are in Change history.
 
 The five CLIs are plain-argument, stdlib-only, and invoked as `${CLAUDE_SKILL_DIR}/scripts/<name>.py` so they work from a plugin cache as well as a checkout.
 
