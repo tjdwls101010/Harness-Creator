@@ -49,7 +49,7 @@ Progressive disclosure keeps a discoverable route present while loading detail o
 | Surface | Load point |
 |---|---|
 | `SKILL.md` | Every Harness Creator invocation |
-| Interview or re-entry reference | After Phase 0 chooses a mode |
+| Interview reference | Phase 1, after Phase 0 chooses a mode |
 | Component reference | When routing reaches that component |
 | Hook event row | When an event is selected |
 | Python implementation | Executed as a subprocess, not loaded as prose |

@@ -51,7 +51,7 @@ There is no duplicate root-level `skills/` copy. This avoids source drift and le
 
 ## 4. Progressive loading
 
-`SKILL.md` contains the operating loop and decisions needed on every invocation. Phase 0 then loads either interview or re-entry guidance according to mode. Component references load only when generation reaches that layer. Python scripts execute as processes and do not need to enter model context.
+`SKILL.md` contains the operating loop and decisions needed on every invocation. Phase 0 chooses the mode; the interview reference loads at Phase 1, covering all four modes in one file. Component references load only when generation reaches that layer. Python scripts execute as processes and do not need to enter model context.
 
 The split follows execution branches rather than file size.
 
