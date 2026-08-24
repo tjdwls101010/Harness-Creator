@@ -27,6 +27,7 @@ Everything under `.claude/skills/harness-creator/` is frozen for this overhaul. 
 - [Community and distribution](05-community-and-distribution.md)
 - [Launch and measurement](06-launch-and-measurement.md)
 - [Implementation checklist](07-implementation-checklist.md)
+- [Reddit project-showcase copy and submission outcome](08-reddit-post-draft.md)
 - [Metrics log](metrics-log.md)
 
 ## Decision status
