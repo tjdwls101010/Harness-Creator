@@ -1,6 +1,39 @@
-# Agents
+# Agents and the other three ways to run work in parallel
 
-This is the authoring guide for `.claude/agents/*.md` — custom subagents. Read this before proposing any agent role during the interview, and re-check every generated agent definition against it before declaring the component done.
+This is the authoring guide for `.claude/agents/*.md` — custom subagents. Read this before proposing any agent role during the interview, and re-check every generated agent definition against it before declaring the component done. It opens one level up, on the choice between four surfaces, because three of the four produce no agent file at all and an interview answer rarely names which one it means.
+
+## Four surfaces, one question: who decides what runs next
+
+"We want several of these running at once" can land on any of four surfaces. The discriminant is **who decides what runs next**:
+
+| Who decides | Surface | What the harness has to contain |
+|---|---|---|
+| Claude, turn by turn, inside one conversation | subagents | `.claude/agents/*.md` for a role that recurs; an ad hoc delegation needs no file |
+| The user, handing tasks off and checking back later | agent view (`claude agents`) | **Nothing.** A way of working, not a component — at most one CLAUDE.md line if the project has a habit worth naming |
+| A lead agent, assigning and supervising | agent teams | **Usually nothing** — a team forms at runtime. Pre-writing a teammate role as an ordinary subagent file is worth it only for a role that recurs, and buys less than it looks like (below) |
+| A script, fixed ahead of time | dynamic workflows | `.claude/workflows/*.js` (see references/workflows.md) |
+
+Two follow-ups settle what's left. **Do the workers need to talk to each other?** Subagents report only to whoever spawned them, and agent-view sessions report only to the user; teammates share a task list and message each other directly. **Do the tasks touch the same files?** Subagents and agent-view sessions can each take a worktree — teammates cannot, which is the next section.
+
+### When a team is actually right, and what it costs
+
+The antipattern above rules teams out as a *default* shape. This is the other half, and without it that warning has no honest opposite. Teams fit work that is genuinely independent and gets better from workers challenging each other: multi-angle research or review, competing-hypothesis debugging, cross-layer feature work where each layer has one owner. They fit badly in the mirror image — sequential steps, same-file edits, many dependencies — where a single session or plain subagents do better for less.
+
+Four costs, none of which an interview volunteers:
+
+- **Experimental, off by default.** `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` must be set in `settings.json` or the environment; without it Claude does not spawn or propose teammates at all. A harness whose plan assumes a team therefore does nothing at all for a user who hasn't set it — design the fallback in the same breath, the way a workflow-dependent harness has to.
+- **Token cost scales linearly with teammate count** — each has its own context window.
+- **No file isolation.** Teams do not put teammates in worktrees, so two teammates editing one file overwrite each other. The mitigation is partitioned ownership, and partitioning is a *design* act: a harness that recommends a team owes the user a rule for who owns which files, or it has recommended the overwrite.
+- **Permissions start from the lead's and cannot be set per-teammate at spawn** — individual modes can be changed afterward. A teammate can never approve a prompt on anyone's behalf, and teammate prompts surface to the lead.
+
+One trap on the pre-written-role idea: **a subagent definition's `skills:` and `mcpServers:` fields are not applied when that definition runs as a teammate.** A teammate loads skills and MCP servers from project and user settings like an ordinary session. So the file buys the body and the tool list, and silently not the preloads.
+
+### Distribution decides part of this before the interview does
+
+- **A plugin's subagents lose `hooks`, `mcpServers`, and `permissionMode`.** Those three fields are ignored when an agent loads from a plugin, for security reasons. An agent whose safety story rests on its own frontmatter hook has no safety story the moment it ships that way — and nothing reports the loss.
+- **There is no documented way for a plugin to ship a workflow.** The documented load paths are `.claude/workflows/` (project, walked up to the repo root) and `~/.claude/workflows/`, and the plugin component list has no workflows entry. Whether that is deliberate is unconfirmed, so hold it in that shape rather than as "plugins cannot" — the claim as written goes stale if the product adds it, where the stronger claim would have been false all along.
+
+Both push one way: a harness that depends on those fields, or on a workflow, is distributed as a repo `.claude/` tree rather than as a plugin. Ask the interview's Deployment question early enough that this is a design input rather than a discovery.
 
 ## The eligibility test: don't generate an agent by default
 

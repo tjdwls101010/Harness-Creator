@@ -633,6 +633,79 @@ class PackageClosureRegressionTests(unittest.TestCase):
                 self.assertIn(m.group(2), headings, f"{path.name} quotes a missing heading")
 
 
+class OrchestrationChoiceTests(unittest.TestCase):
+    """v6. The skill covered subagents and workflows and never said which of
+    the four parallel-work surfaces an interview answer should land on --
+    agent teams appeared exactly once, as an antipattern with no honest
+    opposite.
+
+    Each test below pins a sentence *this skill wrote*, not a product fact:
+    a substring check cannot notice the product changing underneath it. The
+    source line in every docstring is what makes the drift checkable by hand,
+    and it is there because the first draft of this section got one of these
+    claims wrong -- it said team permissions were fixed at spawn, when the
+    source says they start from the lead's and can be changed individually
+    afterward. Re-read the cited lines before editing any claim here.
+
+    Snapshot the claims were written against: `.tmp/docs_claude/
+    02-build-with-claude-code/01-agents-and-parallel-work/` (gitignored, not
+    part of this repo's history)."""
+
+    AGENTS = SKILL_DIR / "references" / "agents.md"
+    WORKFLOWS = SKILL_DIR / "references" / "workflows.md"
+
+    def test_the_discriminant_is_who_decides_what_runs_next(self):
+        """00-overview.md "Choose an approach": "Who coordinates the work?"
+        with four bullets -- Claude in one conversation / you hand off / Claude
+        plans and supervises / a script holds the plan."""
+        text = read(self.AGENTS)
+        self.assertIn("who decides what runs next", text)
+        for surface in ("agent view", "agent teams", "dynamic workflows"):
+            self.assertIn(surface, text, surface)
+
+    def test_teams_are_off_until_an_env_var_is_set(self):
+        """03-run-agent-teams.md:10,54 -- "disabled by default ... Without that
+        variable, no team is set up at session start ... Claude does not spawn
+        or propose teammates"."""
+        self.assertIn("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", read(self.AGENTS))
+
+    def test_teams_do_not_isolate_files(self):
+        """00-overview.md "Do the tasks touch the same files?" -- "Agent teams
+        don't isolate teammates in worktrees, so partition the work"; and
+        03-run-agent-teams.md:360 "Avoid file conflicts"."""
+        text = read(self.AGENTS)
+        self.assertIn("No file isolation", text)
+        self.assertIn("worktrees", text)
+
+    def test_teammates_message_each_other_and_subagents_do_not(self):
+        """00-overview.md "Do the workers need to talk to each other?" --
+        subagents report back to the spawning conversation, agent view sessions
+        report only to you, teammates share a task list and message directly."""
+        self.assertIn("message each other directly", read(self.AGENTS))
+
+    def test_team_permissions_are_not_described_as_fixed_at_spawn(self):
+        """03-run-agent-teams.md:255-259 and :420 -- "Teammates start with the
+        lead's permission settings ... After spawning, you can change
+        individual teammate modes, but you can't set per-teammate modes at
+        spawn time." The first draft of this section said "fixed at spawn",
+        which is the half of that sentence that is not true."""
+        text = read(self.AGENTS)
+        self.assertIn("cannot be set per-teammate at spawn", text)
+        self.assertIn("changed afterward", text)
+
+    def test_plugin_workflow_distribution_is_stated_as_undocumented(self):
+        """docs/plan/research/research-dynamic-workflows.md:55 ("NOT documented
+        as able to ship workflows") and :115, which files the same item under
+        OPEN QUESTIONS as "unconfirmed". Absence of documentation is not proof
+        of impossibility, and this test exists to keep the weaker claim."""
+        text = read(self.AGENTS)
+        self.assertIn("no documented way for a plugin to ship a workflow", text)
+        self.assertNotIn("plugins cannot ship", text)
+
+    def test_workflows_md_points_at_the_four_way_choice(self):
+        self.assertIn("references/agents.md", read(self.WORKFLOWS))
+
+
 class NoOrphanedHeadingsTests(unittest.TestCase):
     """v6. Two headings in agents.md announced a section and then handed the
     reader straight to the next heading -- their content had migrated into the
