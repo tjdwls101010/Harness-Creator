@@ -27,7 +27,12 @@
     ],
     "NotARealEvent": [
       {
-        "hooks": [{ "type": "command", "command": "echo hi" }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo hi"
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -44,6 +49,15 @@
     ]
   },
   "permissions": {
-    "allow": ["Bash(*)", "NotARealTool(foo)"]
+    "allow": [
+      "Bash(*)",
+      "NotARealTool(foo)",
+      "Bash(ls*)"
+    ],
+    "defaultMode": "auto",
+    "deny": [
+      "Write(docs/**)",
+      "Glob(secrets/**)"
+    ]
   }
 }

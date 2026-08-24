@@ -99,10 +99,17 @@ class Frontmatter:
     verify", never as "frontmatter is empty".
     """
 
-    def __init__(self, data, body, warnings):
+    def __init__(self, data, body, warnings, raw_blocks=None):
         self.data = data
         self.body = body
         self.warnings = warnings
+        # Raw lines of each key whose value is UNPARSED_BLOCK, indented as
+        # written. This parser still refuses to guess their shape -- `data`
+        # says so -- but refusing to guess and throwing the text away are
+        # different things, and a caller that knows one specific shape (a
+        # skill's `hooks:` block, say) can read it without a second parser
+        # re-deciding where the frontmatter ends.
+        self.raw_blocks = raw_blocks if raw_blocks is not None else {}
 
     @property
     def ok(self):
@@ -167,6 +174,7 @@ def parse_frontmatter(text):
     body = "\n".join(lines[end_idx + 1:])
 
     data = {}
+    raw_blocks = {}
     i = 0
     n = len(fm_lines)
     while i < n:
@@ -228,8 +236,10 @@ def parse_frontmatter(text):
                         "mapping; the conservative parser cannot read it"
                     )
                     return Frontmatter(None, body, warnings)
+                block_start = i
                 while i < n and (fm_lines[i].strip() == "" or fm_lines[i].startswith((" ", "\t"))):
                     i += 1
+                raw_blocks[key] = fm_lines[block_start:i]
                 warnings.append(
                     f"nested mapping under '{key}:' was not read -- its shape is "
                     "outside this parser, so its contents are neither validated "
@@ -250,7 +260,7 @@ def parse_frontmatter(text):
 
         data[key] = _unquote(rest)
 
-    return Frontmatter(data, body, warnings)
+    return Frontmatter(data, body, warnings, raw_blocks)
 
 
 def _unquote(value):

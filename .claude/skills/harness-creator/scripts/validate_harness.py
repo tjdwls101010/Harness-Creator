@@ -103,7 +103,7 @@ def check_settings(root, findings):
             _check_deny_subsumes_allow(str(rel), data["permissions"], findings)
 
 
-def _check_hooks_block(root, rel, hooks, findings):
+def _check_hooks_block(root, rel, hooks, findings, base_dir=None):
     if not hooks:
         return
     if not isinstance(hooks, dict):
@@ -165,7 +165,7 @@ def _check_hooks_block(root, rel, hooks, findings):
                         # path; shell form is only checked when it looks like a
                         # path too -- a bare command like "echo hi" isn't a
                         # script reference and shouldn't be flagged as one.
-                        _check_command_script_exists(root, loc, command, findings)
+                        _check_command_script_exists(root, loc, command, findings, base_dir)
                 if "if" in hook and event not in hc.TOOL_CONTEXT_EVENTS:
                     add(
                         findings, "W", loc,
@@ -195,18 +195,143 @@ def _check_hooks_block(root, rel, hooks, findings):
             )
 
 
-def _check_command_script_exists(root, loc, command, findings):
+def _check_command_script_exists(root, loc, command, findings, base_dir=None):
+    """`base_dir` is what a relative command path resolves against. It is the
+    project root for a settings.json hook and the skill's own directory for a
+    hook declared in a skill's frontmatter -- the same string means two
+    different files depending on where it was written."""
+    base = Path(base_dir) if base_dir else root
+    if base != root and "${CLAUDE_PROJECT_DIR}" in command:
+        add(
+            findings, "W", loc,
+            "a hook declared in a skill's frontmatter resolves its command "
+            "against the skill's own directory, so '${CLAUDE_PROJECT_DIR}' "
+            "here points somewhere other than the sibling script it looks "
+            "like -- use a path relative to the skill directory "
+            "(see references/skills.md)",
+        )
     resolved = command.replace("${CLAUDE_PROJECT_DIR}", str(root))
     if resolved.startswith("$") or "${" in resolved:
         return  # unresolved env var we don't know the value of -- skip, don't guess
     path = Path(resolved)
     if not path.is_absolute():
-        path = root / path
+        path = base / path
     if not path.exists():
         add(findings, "E", loc, f"hook command references a script that does not exist: {command}")
         return
     if path.is_file() and not (path.stat().st_mode & stat.S_IXUSR):
         add(findings, "E", loc, f"hook script exists but is not executable: {path.relative_to(root)}")
+
+
+class _BlockShapeError(Exception):
+    """The block is outside the subset below. Never a guess -- a wrong reading
+    reports a correct hook as broken, which is worse than declining to read."""
+
+
+_BLOCK_KEY = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$")
+
+
+def _block_scalar(text):
+    if text in ("true", "false"):
+        return text == "true"
+    if re.fullmatch(r"-?\d+", text):
+        return int(text)
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
+        return text[1:-1]
+    return text or None
+
+
+def _read_block(lines):
+    """Read the nested mapping/sequence subset a frontmatter `hooks:` block
+    uses. `harness_common.parse_frontmatter` deliberately does not guess at
+    nested shapes and keeps the raw lines instead; this is the caller that
+    knows one specific shape reading them, so frontmatter still has one parser
+    and this one never has to decide where the block begins or ends.
+
+    Returns (value, error). Flow collections, multi-line scalars and anything
+    else outside the subset come back as an error, not a partial reading."""
+    items = [
+        (len(raw) - len(raw.lstrip()), raw.strip())
+        for raw in lines
+        if raw.strip() and not raw.strip().startswith("#")
+    ]
+    if not items:
+        return None, None
+    try:
+        return _read_block_node(items), None
+    except _BlockShapeError as exc:
+        return None, str(exc)
+
+
+def _read_block_node(items):
+    base = items[0][0]
+    if items[0][1] == "-" or items[0][1].startswith("- "):
+        return _read_block_sequence(items, base)
+
+    result = {}
+    i = 0
+    while i < len(items):
+        indent, text = items[i]
+        if indent != base:
+            raise _BlockShapeError(f"unexpected indentation at: {text!r}")
+        m = _BLOCK_KEY.match(text)
+        if not m:
+            raise _BlockShapeError(f"expected 'key: value', got: {text!r}")
+        key, rest = m.group(1), m.group(2).strip()
+        i += 1
+        child = []
+        # A sequence may sit at its key's own indent, so take same-indent list
+        # items as children too -- but only when the key had no inline value.
+        while i < len(items) and (
+            items[i][0] > base
+            or (not rest and items[i][0] == base and items[i][1].startswith("- "))
+        ):
+            child.append(items[i])
+            i += 1
+        if rest and child:
+            raise _BlockShapeError(f"'{key}' has both an inline value and a nested block")
+        result[key] = _read_block_node(child) if child else _block_scalar(rest)
+    return result
+
+
+def _read_block_sequence(items, base):
+    result = []
+    i = 0
+    while i < len(items):
+        indent, text = items[i]
+        if indent != base or not (text == "-" or text.startswith("- ")):
+            raise _BlockShapeError(f"expected a list item, got: {text!r}")
+        inner = []
+        rest = text[1:].strip()
+        if rest:
+            if not text.startswith("- "):
+                raise _BlockShapeError(f"list item needs a space after '-': {text!r}")
+            inner.append((base + 2, rest))
+        i += 1
+        while i < len(items) and items[i][0] > base:
+            inner.append(items[i])
+            i += 1
+        result.append(_read_block_node(inner) if inner else None)
+    return result
+
+
+# Edit(path) also governs Write and NotebookEdit; Read(path) also governs Grep
+# and Glob. A path rule written against any of the governed tools is accepted
+# and then never consulted -- see references/hooks.md.
+_INERT_PATH_RULE_FIX = {
+    "Write": "Edit",
+    "NotebookEdit": "Edit",
+    "MultiEdit": "Edit",
+    "Glob": "Read",
+    "Grep": "Read",
+}
+# `Bash(ls *)` requires a space or end-of-string after the prefix; `Bash(ls*)`
+# does not, and so also matches `lsof` -- see references/hooks.md.
+_UNBOUNDED_PREFIX_RE = re.compile(r"^(Bash|PowerShell)\(([a-zA-Z0-9_.\-]+)\*\)$")
+
+_INERT_PATH_RULE_RE = re.compile(
+    r"^(" + "|".join(_INERT_PATH_RULE_FIX) + r")\((.+)\)$"
+)
 
 
 def _check_permissions_block(rel, permissions, findings):
@@ -215,6 +340,14 @@ def _check_permissions_block(rel, permissions, findings):
     if not isinstance(permissions, dict):
         add(findings, "E", str(rel), "'permissions' must be an object")
         return
+    if permissions.get("defaultMode") == "auto":
+        add(
+            findings, "W", f"{rel}#permissions.defaultMode",
+            "'defaultMode: \"auto\"' is ignored in a project settings file -- the session starts "
+            "in 'default' with no error, so this harness reads as configured and "
+            "behaves as if it weren't; only the user's own ~/.claude/settings.json "
+            "can grant auto mode (see references/hooks.md)",
+        )
     for bucket in ("allow", "deny", "ask"):
         rules = permissions.get(bucket, [])
         if not isinstance(rules, list):
@@ -229,13 +362,53 @@ def _check_permissions_block(rel, permissions, findings):
                     findings, "E", f"{rel}#permissions.{bucket}",
                     f"'{rule}' references unknown tool '{tool_name}'",
                 )
-            if bucket == "allow" and _BROAD_ALLOW_RE.match(rule):
+            inert = _INERT_PATH_RULE_RE.match(rule)
+            if inert:
                 add(
-                    findings, "W", f"{rel}#permissions.allow",
+                    findings, "E", f"{rel}#permissions.{bucket}",
+                    f"'{rule}' is parsed and then never consulted -- file "
+                    f"permission checks read Edit(path) and Read(path) rules "
+                    f"only, so this protects nothing. Write "
+                    f"{_INERT_PATH_RULE_FIX[inert.group(1)]}({inert.group(2)}) "
+                    f"instead (see references/hooks.md)",
+                )
+            if bucket == "allow" and _BROAD_ALLOW_RE.match(rule):
+                message = (
                     f"'{rule}' is a broad allow rule that gets dropped when the "
                     "session enters auto mode -- it has no durable value; prefer "
-                    "narrow rules (see references/hooks.md)",
+                    "narrow rules (see references/hooks.md)"
                 )
+                boundary = _UNBOUNDED_PREFIX_RE.match(rule)
+                if boundary:
+                    tool, prefix = boundary.groups()
+                    message += (
+                        f". A space before the trailing '*' also restores the word "
+                        f"boundary: '{tool}({prefix} *)' matches '{prefix}' and its "
+                        f"arguments, where '{rule}' also matches any command merely "
+                        f"starting with those characters"
+                    )
+                add(findings, "W", f"{rel}#permissions.allow", message)
+
+
+def _check_skill_frontmatter_hooks(root, skill_dir, loc, fm, findings):
+    """A skill's frontmatter declares hooks with the same event/matcher/handler
+    shape settings.json uses, so it earns the same checks -- and nothing was
+    running them, because the conservative frontmatter parser marks a nested
+    mapping unparsed and every validator downstream saw a field with no
+    contents. The one thing that genuinely differs is where a relative command
+    path resolves: against this directory, not the project root."""
+    raw = fm.raw_blocks.get("hooks")
+    if not raw:
+        return
+    hooks, error = _read_block(raw)
+    if error:
+        add(
+            findings, "W", f"{loc}#hooks",
+            f"frontmatter 'hooks:' block could not be read ({error}) -- it is "
+            "therefore unchecked, not confirmed correct",
+        )
+        return
+    _check_hooks_block(root, f"{loc}", hooks, findings, base_dir=skill_dir)
 
 
 def check_skills(root, findings):
@@ -271,6 +444,7 @@ def check_skills(root, findings):
                     "triggering-critical clause first",
                 )
             total_description_chars += len(combined)
+            _check_skill_frontmatter_hooks(root, skill_dir, loc, fm, findings)
 
         body_lines = fm.body.splitlines() if fm.ok else text.splitlines()
         if len(body_lines) > MAX_SKILL_BODY_LINES:

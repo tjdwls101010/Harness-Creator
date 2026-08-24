@@ -136,6 +136,74 @@ class PackageClosureTests(unittest.TestCase):
         )
 
 
+class BlockReaderTests(unittest.TestCase):
+    """The narrow reader for a frontmatter `hooks:` block. Its contract is not
+    "reads YAML" -- it is "reads one shape, and says so instead of guessing at
+    anything else," because a wrong reading reports a correct hook as broken,
+    which is worse than reporting nothing."""
+
+    def test_it_reads_the_documented_shape(self):
+        value, error = vh._read_block([
+            "  PreToolUse:",
+            "    - matcher: Bash",
+            "      hooks:",
+            "        - type: command",
+            "          command: hooks/check.sh",
+            "          once: true",
+        ])
+        self.assertIsNone(error)
+        handler = value["PreToolUse"][0]["hooks"][0]
+        self.assertEqual(handler["command"], "hooks/check.sh")
+        self.assertIs(handler["once"], True)
+
+    def test_a_sequence_at_its_key_s_own_indent_still_reads(self):
+        value, error = vh._read_block([
+            "  Stop:",
+            "  - hooks:",
+            "    - type: command",
+            "      command: hooks/check.sh",
+        ])
+        self.assertIsNone(error)
+        self.assertEqual(len(value["Stop"]), 1)
+
+    def test_ragged_indentation_is_refused_rather_than_guessed(self):
+        value, error = vh._read_block([
+            "  PreToolUse:",
+            "    - matcher: Bash",
+            "     hooks:",
+        ])
+        self.assertIsNone(value)
+        self.assertIn("indentation", error)
+
+    def test_a_key_with_both_a_value_and_a_block_is_refused(self):
+        value, error = vh._read_block([
+            "  PreToolUse: Bash",
+            "    - type: command",
+        ])
+        self.assertIsNone(value)
+        self.assertIn("inline value", error)
+
+
+class NearMissTests(unittest.TestCase):
+    """The false-positive guard for the four checks v6 added. Each shape here
+    looks like one of them and is correct, so any finding raised against this
+    fixture is a false positive by construction.
+
+    Kept out of good-harness on purpose, for the reason CliEdgeCaseTests
+    states: that fixture is the canonical example a generated harness gets
+    modelled on, and padding it with near-misses blunts what it teaches."""
+
+    def setUp(self):
+        self.root = REPO_ROOT / "tests" / "fixtures" / "near-miss-harness"
+        self.findings, self.exit_code = vh.run(self.root, strict=False)
+
+    def test_no_findings(self):
+        self.assertEqual(self.findings, [])
+
+    def test_strict_mode_still_passes(self):
+        self.assertEqual(vh.run(self.root, strict=True)[1], vh.hc.EXIT_OK)
+
+
 class BadHarnessTests(unittest.TestCase):
     def setUp(self):
         self.root = REPO_ROOT / "tests" / "fixtures" / "bad-harness"
@@ -249,6 +317,53 @@ class BadHarnessTests(unittest.TestCase):
 
     def test_component_inventory_listing_is_warning(self):
         self._assert_warning_contains("CLAUDE.md", "component inventory")
+
+    def test_a_skill_frontmatter_hook_is_checked_like_a_settings_hook(self):
+        """references/skills.md's `hooks` row -- a skill's frontmatter declares
+        hooks with the same event/matcher/handler shape as settings.json, and
+        command paths resolve against the skill's own directory. Nothing was
+        checking any of it: the conservative frontmatter parser marks a nested
+        mapping unparsed, so the block reached no validator at all."""
+        self._assert_error_contains("hooked-skill", "unknown hook event")
+        self._assert_error_contains("hooked-skill", "does not exist")
+
+    def test_project_dir_in_a_skill_hook_command_is_warning(self):
+        """references/skills.md's `hooks` row -- "Command paths resolve relative
+        to the skill's own directory, not `${CLAUDE_PROJECT_DIR}`." The variable
+        still expands, so the path is not broken; it just points somewhere other
+        than the sibling script it reads as."""
+        self._assert_warning_contains("hooked-skill", "CLAUDE_PROJECT_DIR")
+
+    def test_a_bash_prefix_rule_without_a_word_boundary_says_so(self):
+        """references/hooks.md:150 -- a trailing `*` preceded by a space
+        enforces a word boundary, so `Bash(ls *)` matches `ls -la` and not
+        `lsof`; `Bash(ls*)` drops the boundary and matches both.
+
+        The shape was already caught, by the broad-allow warning. What it
+        said was "prefer narrow rules", which names neither what goes wrong
+        nor the one-character fix -- and the fix also clears the original
+        warning, because `Bash(ls *)` is not the broad shape. So this is a
+        message repair, not a new check: the reader is at the point of
+        maximum attention exactly when the finding prints."""
+        self._assert_warning_contains("permissions.allow", "Bash(ls*)")
+        self._assert_warning_contains("permissions.allow", "word boundary")
+        self._assert_warning_contains("permissions.allow", "Bash(ls *)")
+
+    def test_a_path_rule_on_a_tool_that_never_consults_one_is_error(self):
+        """references/hooks.md:110 -- file permission checks consult `Edit(path)`
+        and `Read(path)` rules *only*. `deny: ["Write(docs/**)"]` parses fine,
+        looks like it protects docs/, and protects nothing. An Error rather
+        than a Warning because no valid alternative reading exists: the rule
+        is never consulted, so it cannot have been meant."""
+        self._assert_error_contains("permissions.deny", "Write(docs/**)")
+        self._assert_error_contains("permissions.deny", "Glob(secrets/**)")
+
+    def test_project_scope_default_mode_auto_is_warning(self):
+        """references/hooks.md:140-144 -- since v2.1.142 a project settings.json
+        setting `permissions.defaultMode: "auto"` is ignored outright, with no
+        error and no warning, and the session starts in `default`. A harness
+        that writes it looks configured and behaves as if it weren't."""
+        self._assert_warning_contains("settings.json", "defaultMode")
 
     def test_missing_harness_spec_is_warning(self):
         self._assert_warning_contains("harness-spec.md", "missing")

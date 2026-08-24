@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "deny": ["Edit(docs/**)", "Read(secrets/**)", "Write"],
+    "allow": ["Bash(ls *)", "Bash(npm test)"]
+  }
+}

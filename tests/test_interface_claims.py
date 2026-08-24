@@ -142,6 +142,17 @@ class NestedFrontmatterTests(unittest.TestCase):
         self.assertIs(fm.data["hooks"], hc.UNPARSED_BLOCK)
         self.assertTrue(any("hooks" in w for w in fm.warnings), fm.warnings)
 
+    def test_the_unparsed_block_keeps_its_raw_lines(self):
+        """v6. Refusing to guess at a nested shape and throwing the text away
+        are different things, and this parser now only does the first. The
+        assertion above is the half that must not change: `data` still says
+        nothing about what is in there, so no caller can mistake raw lines for
+        a parsed value."""
+        fm = hc.parse_frontmatter(self.NESTED)
+        raw = fm.raw_blocks["hooks"]
+        self.assertTrue(raw)
+        self.assertTrue(all(line.startswith((" ", "\t")) for line in raw if line.strip()))
+
     def test_a_skill_following_the_guide_clears_the_lint(self):
         tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, tmp, True)
