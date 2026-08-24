@@ -217,6 +217,7 @@ PR6이 해소하는 것 — `.claude/harness-spec.md` B9 행과 `:44`의 게이�
 
 계획이 지시한 것과 구현이 달라진 지점만 적는다. 계획을 조용히 벗어나는 것이 이 세대가 잡으려는 드리프트와 같은 종류이므로, 어긋난 곳은 어긋난 채로 기록한다.
 
+- **F3은 신규 검사가 아니라 메시지 수리가 됐다.** `Bash(ls*)`는 이미 `_BROAD_ALLOW_RE`에 걸려 경고가 나고 있었다 — 검사를 하나 더 붙이면 같은 줄에 두 경고가 뜬다. 없던 것은 검사가 아니라 **메시지**였다: 기존 문구는 *"prefer narrow rules"*라 무엇이 잘못되는지도, 한 글자짜리 해법도 말하지 않았고, 그 해법(`Bash(ls *)`)은 원래 경고까지 함께 지운다. 그래서 접두 와일드카드 형태일 때 워드 바운더리와 고칠 문장을 메시지에 붙였다. 검사의 실패 메시지도 인터페이스라는 v3 D33의 적용이다.
 - **PR1 ②의 판정 원문은 실행 불가능했다.** `grep "could the model.*re-derive"`가 `SKILL.md` 1건을 히트한다고 썼지만 `SKILL.md:95`의 실제 문구는 *"would let the model re-derive"*라 그 grep은 0건이다. 판정의 의도(litmus 문장이 한 곳에만 산다)는 그대로 두고 grep만 고쳤다.
 - **PR4가 `harness-spec.md`를 두 줄 건드린다 — PR6 단독 소유가 아니었다.** `re-entry.md`를 지우는 순간 `audit_harness.py`의 드리프트 검사가 B9 행(`validated`, 그 경로)을 잡아 `test_this_repo_reports_no_drift`가 red가 된다. 즉 이 한 줄은 삭제와 같은 커밋에 있어야 하고, 그것이 Hard line 3이 실제로 요구하는 바다. `:44`의 게이팅 설명도 삭제 직후 거짓이 되므로 함께 고쳤다. PR6은 서술 작업(B8 확장, Design rationale, Change history, 위키)을 맡는다. Gate A #1이 이 긴장을 지적했고 당시 "전부 PR6"으로 해소했는데, 기계 검사 쪽이 더 강했다.
 - **PR4 ②의 grep 범위를 `re-entry.md`(파일명)로 좁혔다.** 원문은 `grep -rn "re-entry"` 0건이었지만 "re-entry"는 개념어로도 쓰인다 — `audit_harness.py:334`가 *"references/interview.md's re-entry variants"*라고 정확히 가리키는 것까지 금지하게 된다. Hard line 1이 요구하는 것은 존재하지 않는 파일을 가리키는 포인터가 없는 것이므로 판정을 그 형태로 바꿨다. 스킬 디렉터리 내 `re-entry.md` 히트는 0건이다.
