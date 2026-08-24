@@ -633,6 +633,44 @@ class PackageClosureRegressionTests(unittest.TestCase):
                 self.assertIn(m.group(2), headings, f"{path.name} quotes a missing heading")
 
 
+class NoOrphanedHeadingsTests(unittest.TestCase):
+    """v6. Two headings in agents.md announced a section and then handed the
+    reader straight to the next heading -- their content had migrated into the
+    frontmatter table below without the heading being removed. A heading is a
+    promise about what follows, and one that promises nothing costs the reader
+    a lookup and costs the table of contents its accuracy.
+
+    This is the mechanical shadow of an edit nobody re-reads top to bottom:
+    moving a paragraph out is a diff a reviewer sees, and the heading left
+    behind is a diff nobody sees."""
+
+    HEADING = re.compile(r"^(#{2,})\s")
+
+    def _orphans(self, path):
+        """A container heading may hand straight to a deeper one -- `## The
+        five stages` above `### I1` promises the subsections and delivers them.
+        What has no reading is a heading whose next heading is at its own depth
+        or shallower: it promised a section and the section is somewhere else."""
+        lines = read(path).splitlines()
+        found = []
+        for i, line in enumerate(lines):
+            here = self.HEADING.match(line)
+            if not here:
+                continue
+            body = next((nxt for nxt in lines[i + 1:] if nxt.strip()), "")
+            after = self.HEADING.match(body)
+            if not body or (after and len(after.group(1)) <= len(here.group(1))):
+                found.append(f"{path.name}:{i + 1} {line}")
+        return found
+
+    def test_every_heading_is_followed_by_body_text(self):
+        orphans = [o for path in REFERENCES for o in self._orphans(path)]
+        self.assertEqual(orphans, [], "heading with no body before the next one")
+
+    def test_skill_md_has_none_either(self):
+        self.assertEqual(self._orphans(SKILL_MD), [])
+
+
 class NoExternalToolNamesTests(unittest.TestCase):
     """D14. The shipped skill is a self-contained plugin and must not name
     Claude Code UI commands."""
