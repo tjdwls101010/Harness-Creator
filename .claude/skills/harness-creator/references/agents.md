@@ -21,8 +21,6 @@ An agent's markdown body becomes its entire system prompt. Claude Code's default
 
 Write generated agent bodies as if briefing someone who has never used Claude Code and has no idea what "the default way Claude behaves" even means. If the agent's job requires being concise, say so. If it needs to run a verification step before finishing, spell that out — don't assume "run tests before declaring done" survives from some ambient default, because for this agent there is no ambient default.
 
-## `model` defaults to inherit; forcing a tier needs a reason
-
 ## Gotcha: Explore and Plan don't load CLAUDE.md or git status at all
 
 The two most commonly auto-invoked built-in subagents — Explore (fast read-only search) and Plan (research during plan mode) — skip the CLAUDE.md hierarchy and the parent session's git status entirely, by design, to keep exploration fast and cheap. This is not configurable per-agent; there's no frontmatter field that changes it. Every other built-in and every custom subagent you generate *does* load both. So if a harness rule genuinely needs to reach a delegated task — "ignore everything under `vendor/`," "never touch files in `legacy/`" — and that delegation happens to go through Explore or Plan, the rule in your generated CLAUDE.md simply never arrives. The main conversation sees Explore's or Plan's results with full CLAUDE.md context of its own, so most rules don't need to reach the subagent itself; the gap only matters for a rule the *subagent's own behavior* must obey while it's running, not a rule about how to interpret what it finds.
@@ -34,8 +32,6 @@ When the interview identifies a rule that must reach a delegated task, there are
 3. **Inject it via a `SubagentStart` hook's `additionalContext`.** A project-level hook matched on the agent type name fires when the subagent begins and can add context to its startup state programmatically, which reaches even the true built-ins (since the hook operates at the session level, not inside the agent definition). Use this when the rule is closer to "operational fact the subagent should know" than "constraint on the main conversation's phrasing," or when you want it enforced by configuration rather than by remembering to phrase things right in the moment.
 
 Pick (1) for a one-off or low-stakes case, (2) when you're generating a project that leans on Explore/Plan heavily and the rule is load-bearing, and (3) when you want the fix to live in `settings.json` rather than in prompt discipline or an agent file — e.g., because the same `additionalContext` should also reach other subagent types uniformly.
-
-## Gotcha: `skills:` preloads full skill bodies, not descriptions
 
 ## Gotcha: agent-scoped hooks and the `Stop`→`SubagentStop` conversion
 
