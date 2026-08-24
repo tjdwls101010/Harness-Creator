@@ -669,14 +669,29 @@ class OrchestrationChoiceTests(unittest.TestCase):
         plans and supervises / a script holds the plan."""
         text = read(self.AGENTS)
         self.assertIn("who decides what runs next", text)
-        for surface in ("agent view", "agent teams", "dynamic workflows"):
-            self.assertIn(surface, text, surface)
+        # The phrase appears in the heading and again in the sentence that
+        # introduces the table, so take the last occurrence, not the first.
+        table = text.split("who decides what runs next")[-1].split("\n## ")[0]
+        rows = [r for r in table.splitlines() if r.startswith("| ") and "---" not in r]
+        # Four surfaces, each on its own row, each paired with what it makes the
+        # harness contain -- a list of names elsewhere in the file is not this.
+        for surface in ("subagents", "agent view", "agent teams", "dynamic workflows"):
+            matching = [r for r in rows if surface in r]
+            self.assertEqual(len(matching), 1, surface)
+            self.assertEqual(matching[0].count("|"), 4, f"{surface} row is not 3 cells")
 
     def test_teams_are_off_until_an_env_var_is_set(self):
         """03-run-agent-teams.md:10,54 -- "disabled by default ... Without that
         variable, no team is set up at session start ... Claude does not spawn
         or propose teammates"."""
-        self.assertIn("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", read(self.AGENTS))
+        text = read(self.AGENTS)
+        self.assertIn("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", text)
+        bullet = next(
+            line for line in text.splitlines()
+            if "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" in line
+        )
+        # The name alone is a setting; the consequence is why it is a cost.
+        self.assertIn("does not spawn or propose", bullet)
 
     def test_teams_do_not_isolate_files(self):
         """00-overview.md "Do the tasks touch the same files?" -- "Agent teams
@@ -690,7 +705,11 @@ class OrchestrationChoiceTests(unittest.TestCase):
         """00-overview.md "Do the workers need to talk to each other?" --
         subagents report back to the spawning conversation, agent view sessions
         report only to you, teammates share a task list and message directly."""
-        self.assertIn("message each other directly", read(self.AGENTS))
+        text = read(self.AGENTS)
+        self.assertIn("message each other directly", text)
+        # The contrast is the whole claim: without the other half, "teammates
+        # message each other" reads as a feature rather than a discriminant.
+        self.assertIn("report only to whoever spawned them", text)
 
     def test_team_permissions_are_not_described_as_fixed_at_spawn(self):
         """03-run-agent-teams.md:255-259 and :420 -- "Teammates start with the

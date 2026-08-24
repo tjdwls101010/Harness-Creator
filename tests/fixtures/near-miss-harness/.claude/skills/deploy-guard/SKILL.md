@@ -10,6 +10,11 @@ hooks:
         - type: command
           command: hooks/check-target.sh
           once: true
+  "PostToolUse":
+    - matcher: Bash
+      hooks:
+        - type: command
+          command: ${CLAUDE_PROJECT_DIR}/.claude/hooks/shared-audit.sh
 ---
 
 # deploy-guard

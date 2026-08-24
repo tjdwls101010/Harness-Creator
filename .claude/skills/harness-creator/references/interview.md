@@ -114,6 +114,8 @@ Before routing anything to a hook, probe for an **interface** that would make th
 
 This has a direct corollary: **if the codebase already answers the question, don't ask it — state the finding.** If `package.json` has a `"test": "jest"` script, don't ask "what's your test runner?" Say "I see this project uses Jest via `npm test`" and move straight to the follow-up that's actually still open, like "should Claude always run a single file instead of the full suite?" Asking a question you could have answered yourself wastes a round trip and signals you didn't actually look.
 
+**Once the option space is small and known, switch to AskUserQuestion.** "Hook or CLAUDE.md rule?" and "block or warn?" are exactly that shape — a handful of options you can name in advance — and that is where the tool earns its keep, in contrast to I1's open questions.
+
 **An option's description carries the reason, not a restatement of the label.** A weak description says again what the header already said; a strong one gives the reason a reasonable person would pick it. For routing "block commits with raw SQL":
 
 - Header `Hook` — "Enforced automatically, can't be bypassed by context pressure — appropriate since you said this must never happen."
@@ -177,7 +179,7 @@ This is the exact section skeleton to generate and keep updated across every sta
 
 ### Reading the status column
 
-`proposed` → `approved` → `generated` → `validated` is a progression; `declined` and `retired` are terminal rather than sequential. Keep the terminal rows — a spec that only records what was built loses the record of what was decided against, and the next pass re-proposes it.
+`proposed` (surfaced in I2, not yet approved) → `approved` (survived its stage gate, locked as intent) → `generated` (a file now exists on disk) → `validated` (it passed lint, and e2e too if e2e was run) is a progression; `declined` and `retired` are terminal rather than sequential. Keep the terminal rows — a spec that only records what was built loses the record of what was decided against, and the next pass re-proposes it.
 
 Only two values assert that a file exists, and that is exactly what the sync drift check reads:
 
