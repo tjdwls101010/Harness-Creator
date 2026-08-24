@@ -161,7 +161,7 @@ Gate A가 잡은 오류 유형이라 규칙으로 세운다. `docs/plan/research
 |---|---|---|
 | PR0 | 이 문서 | 파일 존재, 개정 목록에 D22·D37·v5 결정 1 각각의 처분과 근거 명기 |
 | Gate A | codex(`gpt-5.6-sol`, xhigh, read-only)로 이 문서 적대 검토 | **완료** — 23건 반환, 반영본이 이 판본. 결정 4에 설계를 바꾼 항목 명기 |
-| PR1 | 독트린 4중 진술 제거 + `skills.md` 400→500 + `Date.now` 산문 축소. 대상: `skills.md`, `claude-md-and-rules.md`, `workflows.md` | ① `grep -rn "could the model.*re-derive" .claude/skills/harness-creator/`가 `SKILL.md` 1건만 ② `grep -n "400" references/skills.md`가 0건, `MAX_SKILL_BODY_LINES` 값과 일치하는 500이 대신 존재 ③ 세 파일 각각 `wc -w`가 before보다 작다(PR 본문에 before/after 기재) ④ `hooks.md:7`의 판별 질문이 `claude-md-and-rules.md`에서는 포인터로만 존재 ⑤ 전체 스위트 green |
+| PR1 | 독트린 4중 진술 제거 + `skills.md` 400→500 + `Date.now` 산문 축소. 대상: `skills.md`, `claude-md-and-rules.md`, `workflows.md` | ① `grep -rn "re-derive" .claude/skills/harness-creator/`에서 litmus 재진술이 0건 — 남는 히트는 `SKILL.md`의 정본 문단과 무관한 용례뿐 ② `grep -n "400" references/skills.md`가 0건 ③ 세 파일 각각 `wc -w`가 before보다 작다(PR 본문에 before/after 기재) ④ `hooks.md:7`의 판별 질문이 `claude-md-and-rules.md`에서는 포인터로만 존재 ⑤ 전체 스위트 green |
 | PR2 | `agents.md` 고아 헤더 2개 수정 + `NoOrphanedHeadingsTests` 신설 | 신규 테스트가 `git stash` 상태에서 red, 수정 후 green. 테스트는 `references/*.md` 전체를 스캔하고 헤더 직후 비어 있지 않은 본문 줄을 요구한다 |
 | PR3 | `agents.md` 4방향 오케스트레이션 섹션 신설 + `workflows.md` 교차 포인터 1줄 | ① 다섯 주장이 각각 substring 테스트로 고정 ② **각 테스트의 docstring에 출처 file:line을 적는다** — 테스트가 고정하는 것은 제품 사실이 아니라 *이 스킬이 쓴 문장*이므로, 출처를 테스트 안에 두어야 문서가 바뀔 때 사람이 대조할 지점이 생긴다(Gate A #13) ③ 두 주장은 Gate A가 정정한 형태로만 쓴다: teams 권한은 *"리드 설정으로 시작하고, 스폰 시점에 팀원별 모드를 지정할 수는 없지만 스폰 후 개별 변경은 가능"*, 플러그인 workflows는 결정 7의 문장 ④ PR 본문에 `.tmp/docs_claude` 출처 행 명기 |
 | PR4 | 모드 전면 병합 — `interview.md` 전면 재작성. `re-entry.md` 삭제, `SKILL.md` 루프 분기 축약(순감), e2e 날짜 단일 소유화 + 결함 3의 모순 해소, `AskUserQuestion` 스키마 재기술 삭제 | ① `test ! -f .claude/skills/harness-creator/references/re-entry.md` ② `grep -rn "re-entry" .claude/skills/harness-creator/ tests/`가 0건 ③ `wc -w .claude/skills/harness-creator/SKILL.md` < 2650 ④ `test_sync_path_does_not_require_interview_md` 삭제하고 **반대 방향 대체 테스트 신설** — 병합된 `interview.md`가 `sync`/`status`/`generated`/`validated`/`Change history`를 전부 담는지(원 테스트가 지키던 속성은 "sync 개념이 어딘가 있다"이고, 그것은 병합 후에도 지켜야 한다) ⑤ `SubtractionTests`의 `RE_ENTRY`/`"## Improve"` split을 병합 파일과 새 헤딩 레벨로 갱신 ⑥ `e2e-testing.md`에 "verified"와 "not verified"가 같은 대상에 대해 동시에 존재하지 않는다(PR 본문에 어느 문장이 무엇을 주장하는지 표로) ⑦ claim-loss audit 결과를 PR 본문에 첨부 — 추출한 claim 수와 대조 결과 ⑧ `validate_harness.py --path . --strict` exit 0 ⑨ 병합 파일 `wc -w` 실측값을 PR 본문에 기재(PR7이 CHANGELOG에 쓸 숫자) |
@@ -212,3 +212,10 @@ PR6이 해소하는 것 — `.claude/harness-spec.md` B9 행과 `:44`의 게이�
 - **claim-loss audit이 사람의 성실성에 의존한다.** 기계 검사가 없다. 완화: 추출 목록을 PR 본문에 첨부해 대조 가능하게 만들고, Gate B가 이 항목을 명시적으로 받는다.
 - **PR3의 주장 다섯이 실험 기능 문서에 근거한다.** agent teams는 기본 비활성 실험 기능이라 문서와 구현이 빠르게 바뀔 수 있다. substring 테스트는 정확성을 검증하지 못하고 *이 스킬이 쓴 문장*만 고정한다 — 그래서 각 테스트가 docstring에 출처 file:line을 들고 있어야 대조가 가능하다. Gate A가 초안의 권한 문장 하나를 이미 오서술로 잡았고, 그것이 이 위험의 실증이다.
 - **sync 비용 회귀의 실측치가 아직 없다.** PR4 완료 시점에 확정한다.
+
+## 실행 중 정정
+
+계획이 지시한 것과 구현이 달라진 지점만 적는다. 계획을 조용히 벗어나는 것이 이 세대가 잡으려는 드리프트와 같은 종류이므로, 어긋난 곳은 어긋난 채로 기록한다.
+
+- **PR1 ②의 판정 원문은 실행 불가능했다.** `grep "could the model.*re-derive"`가 `SKILL.md` 1건을 히트한다고 썼지만 `SKILL.md:95`의 실제 문구는 *"would let the model re-derive"*라 그 grep은 0건이다. 판정의 의도(litmus 문장이 한 곳에만 산다)는 그대로 두고 grep만 고쳤다.
+- **PR1 ②의 "500이 대신 존재"를 채택하지 않았다.** `skills.md:26`에서 숫자를 다시 쓰는 대신 검사 위임으로 갔다 — `validate_harness.py:276-280`의 메시지가 `MAX_SKILL_BODY_LINES`를 그대로 출력하므로, 숫자를 산문에 다시 적으면 *"편집하면 문장이 거짓이 되는"* 사본을 하나 더 만드는 셈이다. 결함 3이 지적한 것이 정확히 그 사본이므로, 같은 결함을 고치면서 같은 모양을 재생산하지 않는다.
