@@ -26,11 +26,11 @@ Four costs, none of which an interview volunteers:
 - **No file isolation.** Teams do not put teammates in worktrees, so two teammates editing one file overwrite each other. The mitigation is partitioned ownership, and partitioning is a *design* act: a harness that recommends a team owes the user a rule for who owns which files, or it has recommended the overwrite.
 - **Permissions start from the lead's and cannot be set per-teammate at spawn** — individual modes can be changed afterward. A teammate can never approve a prompt on anyone's behalf, and teammate prompts surface to the lead.
 
-One trap on the pre-written-role idea: **a subagent definition's `skills:` and `mcpServers:` fields are not applied when that definition runs as a teammate.** A teammate loads skills and MCP servers from project and user settings like an ordinary session. So the file buys the body and the tool list, and silently not the preloads.
+One trap on the pre-written-role idea: **a subagent definition's `skills:` and `mcpServers:` fields are not applied when that definition runs as a teammate.** A teammate loads skills and MCP servers from project and user settings like an ordinary session. So the file buys the body and the tool list, and not the preloads.
 
 ### Distribution decides part of this before the interview does
 
-- **A plugin's subagents lose `hooks`, `mcpServers`, and `permissionMode`.** Those three fields are ignored when an agent loads from a plugin, for security reasons. An agent whose safety story rests on its own frontmatter hook has no safety story the moment it ships that way — and nothing reports the loss.
+- **A plugin's subagents lose `hooks`, `mcpServers`, and `permissionMode`.** Those three fields are ignored when an agent loads from a plugin, for security reasons. An agent whose safety story rests on its own frontmatter hook has no safety story the moment it ships that way.
 - **There is no documented way for a plugin to ship a workflow.** The documented load paths are `.claude/workflows/` (project, walked up to the repo root) and `~/.claude/workflows/`, and the plugin component list has no workflows entry. Whether that is deliberate is unconfirmed, so hold it in that shape rather than as "plugins cannot" — the claim as written goes stale if the product adds it, where the stronger claim would have been false all along.
 
 Both push one way: a harness that depends on those fields, or on a workflow, is distributed as a repo `.claude/` tree rather than as a plugin. Ask the interview's Deployment question early enough that this is a design input rather than a discovery.

@@ -327,13 +327,6 @@ class BadHarnessTests(unittest.TestCase):
         self._assert_error_contains("hooked-skill", "unknown hook event")
         self._assert_error_contains("hooked-skill", "does not exist")
 
-    def test_project_dir_in_a_skill_hook_command_is_warning(self):
-        """references/skills.md's `hooks` row -- "Command paths resolve relative
-        to the skill's own directory, not `${CLAUDE_PROJECT_DIR}`." The variable
-        still expands, so the path is not broken; it just points somewhere other
-        than the sibling script it reads as."""
-        self._assert_warning_contains("hooked-skill", "CLAUDE_PROJECT_DIR")
-
     def test_a_bash_prefix_rule_without_a_word_boundary_says_so(self):
         """references/hooks.md:150 -- a trailing `*` preceded by a space
         enforces a word boundary, so `Bash(ls *)` matches `ls -la` and not
@@ -357,6 +350,14 @@ class BadHarnessTests(unittest.TestCase):
         is never consulted, so it cannot have been meant."""
         self._assert_error_contains("permissions.deny", "Write(docs/**)")
         self._assert_error_contains("permissions.deny", "Glob(secrets/**)")
+        # Every tool the source names, not just the two the fixture spells out:
+        # a partial implementation passes a fixture-shaped test and lets the
+        # other half through.
+        self.assertEqual(
+            set(vh._INERT_PATH_RULE_FIX),
+            {"Write", "NotebookEdit", "MultiEdit", "Glob"},
+            "the list must match references/hooks.md's, in both directions",
+        )
 
     def test_project_scope_default_mode_auto_is_warning(self):
         """references/hooks.md:140-144 -- since v2.1.142 a project settings.json

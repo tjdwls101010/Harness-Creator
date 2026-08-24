@@ -12,3 +12,6 @@ false positive by construction.
 - `.claude/skills/deploy-guard/` — a skill whose frontmatter `hooks:` block is
   correct, including a command path resolved against the skill's own directory
   and a `once: true` handler, which is honored in this position and nowhere else.
+  It also carries a quoted event key and a `${CLAUDE_PROJECT_DIR}` command: the
+  first is valid YAML the narrow reader has to accept rather than decline, and
+  the second is the documented way for a skill to reach a project-level script.

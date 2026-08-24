@@ -11,8 +11,6 @@ hooks:
       hooks:
         - type: command
           command: hooks/absent.sh
-        - type: command
-          command: ${CLAUDE_PROJECT_DIR}/.claude/hooks/noop.sh
 ---
 
 # hooked-skill

@@ -201,15 +201,6 @@ def _check_command_script_exists(root, loc, command, findings, base_dir=None):
     hook declared in a skill's frontmatter -- the same string means two
     different files depending on where it was written."""
     base = Path(base_dir) if base_dir else root
-    if base != root and "${CLAUDE_PROJECT_DIR}" in command:
-        add(
-            findings, "W", loc,
-            "a hook declared in a skill's frontmatter resolves its command "
-            "against the skill's own directory, so '${CLAUDE_PROJECT_DIR}' "
-            "here points somewhere other than the sibling script it looks "
-            "like -- use a path relative to the skill directory "
-            "(see references/skills.md)",
-        )
     resolved = command.replace("${CLAUDE_PROJECT_DIR}", str(root))
     if resolved.startswith("$") or "${" in resolved:
         return  # unresolved env var we don't know the value of -- skip, don't guess
@@ -228,7 +219,8 @@ class _BlockShapeError(Exception):
     reports a correct hook as broken, which is worse than declining to read."""
 
 
-_BLOCK_KEY = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$")
+# A quoted key is ordinary YAML and has to be read, not declined.
+_BLOCK_KEY = re.compile(r"^\"?'?([A-Za-z_][A-Za-z0-9_-]*)'?\"?:\s*(.*)$")
 
 
 def _block_scalar(text):
@@ -323,7 +315,6 @@ _INERT_PATH_RULE_FIX = {
     "NotebookEdit": "Edit",
     "MultiEdit": "Edit",
     "Glob": "Read",
-    "Grep": "Read",
 }
 # `Bash(ls *)` requires a space or end-of-string after the prefix; `Bash(ls*)`
 # does not, and so also matches `lsof` -- see references/hooks.md.
@@ -345,8 +336,9 @@ def _check_permissions_block(rel, permissions, findings):
             findings, "W", f"{rel}#permissions.defaultMode",
             "'defaultMode: \"auto\"' is ignored in a project settings file -- the session starts "
             "in 'default' with no error, so this harness reads as configured and "
-            "behaves as if it weren't; only the user's own ~/.claude/settings.json "
-            "can grant auto mode (see references/hooks.md)",
+            "behaves as if it weren't; a repository cannot grant itself auto mode "
+            "can grant auto mode -- only the user's own ~/.claude/settings.json or "
+            "managed settings can (see references/hooks.md)",
         )
     for bucket in ("allow", "deny", "ask"):
         rules = permissions.get(bucket, [])
