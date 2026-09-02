@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 """Measure what the model already knows, before a reference paragraph is cut.
 
-    probe.py quiz --questions <jsonl> --out <dir> [--runs 3] [--model M]
-    probe.py contrast --task <file> --reference <file> --out <dir> [--runs 1] [--model M]
+    probe.py quiz --questions <jsonl> --out <dir> [--runs 3] [--model M] [--isolation bare|safe-mode]
+    probe.py contrast --task <file> --reference <file> --out <dir> [--runs 1] [--model M] [--isolation ...]
 
-Every run is `claude --bare -p --tools ""` in a freshly created, empty
-temporary directory: no CLAUDE.md, skills, hooks, plugins, MCP servers or
-auto memory are discovered, and no tools are available, so the only thing
-the model can answer from is itself. The argv, the cwd and its listing at
-launch, the claude version, and the model the envelope reports are written
-into every result file -- those recorded facts are the isolation evidence,
-not the transcript.
+Every run is `claude -p --tools "" --output-format json` in a freshly
+created, empty temporary directory, under one of two isolation flags:
+`--bare` (default) skips discovery of hooks, skills, plugins, MCP servers,
+auto memory and CLAUDE.md, and also skips OAuth, so it needs
+ANTHROPIC_API_KEY; `--safe-mode` disables the same customizations while
+keeping normal authentication. Either way no tools are available, so the
+only thing the model can answer from is itself. The argv, the cwd and its
+listing at launch, the claude version, the models the envelope reports and
+the cost are written into every result file -- those recorded facts are the
+isolation evidence, not the transcript. A run whose envelope reports an
+error (an auth failure, say) is recorded as an error and fails the exit code.
 
 `quiz` asks each question `--runs` times and writes one JSON per run under
 `<out>/<question id>/`, plus `summary.json` with every answer beside its
@@ -54,21 +58,25 @@ def claude_version():
         return None
 
 
-def build_command(prompt, model):
-    cmd = ["claude", "--bare", "-p", prompt, "--tools", "", "--output-format", "json"]
+ISOLATION_FLAGS = {"bare": "--bare", "safe-mode": "--safe-mode"}
+
+
+def build_command(prompt, model, isolation="bare"):
+    cmd = ["claude", ISOLATION_FLAGS[isolation], "-p", prompt, "--tools", "", "--output-format", "json"]
     if model:
         cmd.extend(["--model", model])
     return cmd
 
 
-def run_isolated(prompt, model, timeout):
+def run_isolated(prompt, model, timeout, isolation="bare"):
     """One headless call in an empty temp cwd. Returns the record dict."""
     cwd = Path(tempfile.mkdtemp(prefix="probe-cwd-"))
     cwd_listing = sorted(os.listdir(cwd))
-    cmd = build_command(prompt, model)
+    cmd = build_command(prompt, model, isolation)
     env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
     record = {
         "argv": cmd,
+        "isolation": isolation,
         "cwd": str(cwd),
         "cwd_listing_at_launch": cwd_listing,
         "claude_version": claude_version(),
@@ -86,10 +94,17 @@ def run_isolated(prompt, model, timeout):
             envelope = None
             record["stdout"] = proc.stdout[-4000:]
         record["envelope"] = envelope
-        record["result"] = envelope.get("result") if isinstance(envelope, dict) else None
-        usage = envelope.get("modelUsage") if isinstance(envelope, dict) else None
+        ok = isinstance(envelope, dict)
+        record["result"] = envelope.get("result") if ok else None
+        usage = envelope.get("modelUsage") if ok else None
         record["model"] = sorted(usage) if isinstance(usage, dict) else None
-        record["error"] = None
+        record["total_cost_usd"] = envelope.get("total_cost_usd") if ok else None
+        if not ok:
+            record["error"] = f"claude exited {proc.returncode} without a JSON envelope"
+        elif envelope.get("is_error") or proc.returncode != 0:
+            record["error"] = f"claude reported an error (exit {proc.returncode}): {str(record['result'])[:200]}"
+        else:
+            record["error"] = None
     except subprocess.TimeoutExpired:
         record.update({"exit_code": None, "envelope": None, "result": None, "model": None,
                        "error": f"timed out after {timeout}s"})
@@ -127,14 +142,14 @@ def cmd_quiz(args):
         questions = [q for q in questions if q["id"] in wanted]
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    summary = {"runs": args.runs, "model_requested": args.model, "questions": []}
+    summary = {"runs": args.runs, "model_requested": args.model, "isolation": args.isolation, "questions": []}
     failures = 0
     for q in questions:
         qdir = out / q["id"]
         qdir.mkdir(parents=True, exist_ok=True)
         answers = []
         for i in range(1, args.runs + 1):
-            rec = run_isolated(q["question"] + QUIZ_SUFFIX, args.model, args.timeout)
+            rec = run_isolated(q["question"] + QUIZ_SUFFIX, args.model, args.timeout, args.isolation)
             rec["question_id"] = q["id"]
             rec["source"] = q.get("source")
             (qdir / f"run-{i}.json").write_text(json.dumps(rec, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -167,14 +182,14 @@ def cmd_contrast(args):
     )
     out = Path(args.out)
     failures = 0
-    summary = {"runs": args.runs, "model_requested": args.model, "task": str(task),
+    summary = {"runs": args.runs, "model_requested": args.model, "isolation": args.isolation, "task": str(task),
                "reference": str(reference), "arms": {}}
     for arm, prompt in (("without", task_text), ("with", with_prompt)):
         arm_dir = out / arm
         arm_dir.mkdir(parents=True, exist_ok=True)
         results = []
         for i in range(1, args.runs + 1):
-            rec = run_isolated(prompt, args.model, args.timeout)
+            rec = run_isolated(prompt, args.model, args.timeout, args.isolation)
             rec["arm"] = arm
             (arm_dir / f"run-{i}.json").write_text(json.dumps(rec, indent=2, ensure_ascii=False), encoding="utf-8")
             results.append(rec["result"])
@@ -196,6 +211,8 @@ def main():
     common.add_argument("--out", required=True, help="directory for per-run JSON files and summary.json")
     common.add_argument("--model", help="model id/alias passed to `claude --model`; omitted, the spawned claude picks its own default")
     common.add_argument("--timeout", type=int, default=180, help="seconds per run before it is recorded as timed out (default 180)")
+    common.add_argument("--isolation", choices=sorted(ISOLATION_FLAGS), default="bare",
+                        help="which claude flag isolates the run: bare skips discovery and OAuth (needs ANTHROPIC_API_KEY); safe-mode disables the same customizations and keeps normal auth (default bare)")
 
     p_quiz = sub.add_parser("quiz", parents=[common], help="ask each question in isolation, N times, and record the answers beside their keys")
     p_quiz.add_argument("--questions", required=True, help="JSONL file; each line has id, question, answer_key, and optionally source")

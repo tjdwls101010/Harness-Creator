@@ -31,7 +31,10 @@ ls -A "$PWD" > "$FAKE_CLAUDE_LOG.listing"
 : > "$FAKE_CLAUDE_LOG.argv"
 for a in "$@"; do printf '%s\\n' "$a" >> "$FAKE_CLAUDE_LOG.argv"; done
 if [ "$1" = "--version" ]; then echo "9.9.9 (fake)"; exit 0; fi
-printf '{"type":"result","result":"fake answer","modelUsage":{"claude-fake-1":{"inputTokens":1}}}'
+if [ -n "$FAKE_CLAUDE_ERROR" ]; then
+  printf '{"type":"result","is_error":true,"result":"Not logged in","modelUsage":{}}'; exit 1
+fi
+printf '{"type":"result","is_error":false,"result":"fake answer","total_cost_usd":0.01,"modelUsage":{"claude-fake-1":{"inputTokens":1}}}'
 """
 
 
@@ -115,11 +118,37 @@ class QuizTests(ProbeTestCase):
             self.assertTrue(q["answer_key"])
             self.assertEqual(q["answers"], ["fake answer"] * 3)
 
-    def test_version_and_model_are_recorded(self):
+    def test_version_model_and_cost_are_recorded(self):
         self.run_probe("quiz", "--questions", str(self.questions), "--out", str(self.out), "--runs", "1")
         rec = json.loads((self.out / "hooks-01" / "run-1.json").read_text(encoding="utf-8"))
         self.assertEqual(rec["claude_version"], "9.9.9 (fake)")
         self.assertEqual(rec["model"], ["claude-fake-1"])
+        self.assertEqual(rec["total_cost_usd"], 0.01)
+        self.assertEqual(rec["isolation"], "bare")
+
+    def test_safe_mode_isolation_swaps_the_flag_and_is_recorded(self):
+        """--bare skips OAuth, so a machine without ANTHROPIC_API_KEY needs the
+        documented alternative that disables the same customizations."""
+        code, _, err = self.run_probe("quiz", "--questions", str(self.questions), "--out", str(self.out),
+                                      "--runs", "1", "--isolation", "safe-mode")
+        self.assertEqual(code, 0, err)
+        rec = json.loads((self.out / "hooks-01" / "run-1.json").read_text(encoding="utf-8"))
+        self.assertIn("--safe-mode", rec["argv"])
+        self.assertNotIn("--bare", rec["argv"])
+        self.assertEqual(rec["argv"][rec["argv"].index("--tools") + 1], "")
+        self.assertEqual(rec["isolation"], "safe-mode")
+        summary = json.loads((self.out / "summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(summary["isolation"], "safe-mode")
+
+    def test_an_error_envelope_is_recorded_as_an_error_and_fails(self):
+        """The first real smoke run recorded `Not logged in` as a normal
+        answer with error None. An auth failure is not an answer."""
+        self.env["FAKE_CLAUDE_ERROR"] = "1"
+        code, _, err = self.run_probe("quiz", "--questions", str(self.questions), "--out", str(self.out), "--runs", "1")
+        self.assertEqual(code, 1, err)
+        rec = json.loads((self.out / "hooks-01" / "run-1.json").read_text(encoding="utf-8"))
+        self.assertIsNotNone(rec["error"])
+        self.assertIn("Not logged in", rec["error"])
 
     def test_only_restricts_to_the_named_ids(self):
         code, _, err = self.run_probe("quiz", "--questions", str(self.questions), "--out", str(self.out),
