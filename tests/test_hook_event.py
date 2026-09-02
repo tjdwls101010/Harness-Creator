@@ -16,6 +16,7 @@ SCRIPTS_DIR = REPO_ROOT / ".claude" / "skills" / "harness-creator" / "scripts"
 EVENTS_MD = SCRIPTS_DIR.parent / "references" / "hooks-events.md"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
+import harness_common as hc  # noqa: E402
 import hook_event as he  # noqa: E402
 
 
@@ -43,6 +44,12 @@ class CoverageTests(unittest.TestCase):
         being listed there, or listed without being defined, this fails."""
         text, expanded, tabled = he.load()
         self.assertEqual(set(he.event_names()), set(expanded) | set(tabled))
+
+    def test_the_two_shipped_event_lists_agree(self):
+        """test_hook.py takes --event from harness_common.HOOK_EVENTS;
+        hook_event.py derives its choices from hooks-events.md. Two
+        interfaces that can disagree is the drift this pins shut."""
+        self.assertEqual(set(he.event_names()), set(hc.HOOK_EVENTS))
 
     def test_order_is_lifecycle_not_alphabetical(self):
         names = he.event_names()

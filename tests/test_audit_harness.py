@@ -4,7 +4,11 @@
     python3 tests/test_audit_harness.py
 """
 
+import json
+import shutil
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -13,6 +17,110 @@ SCRIPTS_DIR = REPO_ROOT / ".claude" / "skills" / "harness-creator" / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 import audit_harness as ah  # noqa: E402
+import harness_common as hc  # noqa: E402
+
+AUDIT = SCRIPTS_DIR / "audit_harness.py"
+
+
+def run_cli(*args):
+    return subprocess.run([sys.executable, str(AUDIT), *args], capture_output=True, text=True, timeout=120)
+
+
+class ScopeAndJsonContractTests(unittest.TestCase):
+    """The audit checks existence, not content. Saying so on every run is
+    what keeps a clean report from reading as "nothing changed"."""
+
+    def setUp(self):
+        self.result = ah.run(REPO_ROOT / "tests" / "fixtures" / "good-harness")
+
+    def test_scope_is_stated_in_both_directions(self):
+        scope = self.result["scope"]
+        self.assertTrue(scope["detects"])
+        self.assertTrue(scope["does_not_detect"])
+        blind = " ".join(scope["does_not_detect"]).lower()
+        self.assertIn("claude.md", blind)
+        self.assertIn("body", blind)
+
+    def test_text_output_states_the_scope_even_when_clean(self):
+        text = run_cli("--path", str(REPO_ROOT / "tests" / "fixtures" / "good-harness")).stdout
+        self.assertIn("No drift detected", text)
+        self.assertIn("existence", text.lower())
+        self.assertNotIn("Suggested mode", text)
+        self.assertNotIn("ask before proposing", text)
+
+    def test_user_config_root_and_how_it_was_chosen_are_exposed(self):
+        self.assertIn("user_config_root", self.result)
+        self.assertIn(self.result["user_config_root_source"], ("CLAUDE_CONFIG_DIR", "default"))
+
+    def test_config_dir_env_var_moves_the_user_root(self):
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
+        root, source = ah.user_config_root({"CLAUDE_CONFIG_DIR": str(tmp)})
+        self.assertEqual(root, tmp)
+        self.assertEqual(source, "CLAUDE_CONFIG_DIR")
+        root, source = ah.user_config_root({})
+        self.assertEqual(root, Path.home() / ".claude")
+        self.assertEqual(source, "default")
+
+
+class TemplateTests(unittest.TestCase):
+    """`--template` prints the spec skeleton the parser reads, from the same
+    constants, so heading and column names cannot drift apart."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        proc = run_cli("--template")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.template = proc.stdout
+
+    def test_sections_come_in_dependency_order(self):
+        headings = [l for l in self.template.splitlines() if l.startswith("## ")]
+        self.assertEqual(headings, [f"## {name}" for name in hc.SPEC_SECTIONS])
+        self.assertEqual(hc.SPEC_SECTIONS, (
+            "Context", "Goals", "Behavior inventory", "Component specs",
+            "Design rationale", "Validation", "Change history",
+        ))
+
+    def test_inventory_header_and_status_vocabulary_come_from_the_shared_constants(self):
+        self.assertIn("| " + " | ".join(hc.INVENTORY_COLUMNS) + " |", self.template)
+        for status in hc.SPEC_STATUSES:
+            self.assertIn(f"`{status}`", self.template)
+        self.assertEqual(set(hc.STATUSES_CLAIMING_A_FILE), {"generated", "validated"})
+        self.assertLessEqual(set(hc.STATUSES_CLAIMING_A_FILE), set(hc.SPEC_STATUSES))
+
+    def test_example_rows_are_comments_the_parser_ignores(self):
+        self.assertEqual(list(hc.iter_inventory_rows(self.template)), [])
+        self.assertIn("<!--", self.template)
+
+    def test_change_history_has_no_mode_column(self):
+        section = self.template.split("## Change history")[1]
+        self.assertNotIn("mode", section.lower())
+        self.assertIn("date", section.lower())
+
+    def test_maintenance_rules_travel_as_comments(self):
+        for phrase in ("fold", "rejected alternative", "description"):
+            self.assertIn(phrase, self.template.lower())
+        # But not the approval policy, which belongs to the skill's prose
+        # (`approved` the status is vocabulary, not policy).
+        lowered = self.template.lower()
+        for policy in ("approval", "sign off", "signs off", "approve before", "gate"):
+            self.assertNotIn(policy, lowered)
+
+    def test_round_trip_reports_no_drift(self):
+        (self.tmp / ".claude").mkdir()
+        (self.tmp / ".claude" / "harness-spec.md").write_text(self.template, encoding="utf-8")
+        proc = run_cli("--path", str(self.tmp), "--json")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        drift = json.loads(proc.stdout)["spec_drift"]
+        self.assertTrue(drift["spec_exists"])
+        self.assertEqual(drift["in_spec_not_on_disk"], [])
+        self.assertEqual(drift["on_disk_not_in_spec"], [])
+
+    def test_template_and_path_are_mutually_exclusive_and_one_is_required(self):
+        self.assertEqual(run_cli().returncode, 2)
+        self.assertEqual(run_cli("--template", "--path", ".").returncode, 2)
+        self.assertEqual(run_cli("--template", "--json").returncode, 2)
 
 
 class GoodHarnessAuditTests(unittest.TestCase):
@@ -45,8 +153,12 @@ class GoodHarnessAuditTests(unittest.TestCase):
         self.assertEqual(h["non_executable_hook_count"], 0)
         self.assertEqual(h["total_lint_errors"], 0)
 
-    def test_suggested_mode_is_not_new(self):
-        self.assertNotIn("new --", self.result["suggested_mode"])
+    def test_reports_facts_not_a_mode(self):
+        """The audit says what is on disk and what the spec claims; which
+        kind of pass to run is the interviewer's call, made with the user."""
+        self.assertNotIn("suggested_mode", self.result)
+        self.assertTrue(self.result["spec_drift"]["spec_exists"])
+        self.assertTrue(self.result["inventory"]["skills"])
 
 
 class BadHarnessAuditTests(unittest.TestCase):
@@ -61,8 +173,12 @@ class BadHarnessAuditTests(unittest.TestCase):
         self.assertGreater(h["dead_link_count"], 0)
         self.assertGreater(h["total_lint_errors"], 0)
 
-    def test_suggested_mode_is_improve_when_spec_missing(self):
-        self.assertIn("improve", self.result["suggested_mode"])
+    def test_a_missing_spec_is_reported_with_the_way_to_start_one(self):
+        self.assertFalse(self.result["spec_drift"]["spec_exists"])
+        text = run_cli("--path", str(self.root)).stdout
+        self.assertIn("No harness-spec.md", text)
+        self.assertIn("--template", text)
+        self.assertNotIn("Suggested mode", text)
 
 
 class EmptyProjectAuditTests(unittest.TestCase):
@@ -76,8 +192,11 @@ class EmptyProjectAuditTests(unittest.TestCase):
         import shutil
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
-    def test_suggests_new_mode(self):
-        self.assertTrue(self.result["suggested_mode"].startswith("new"))
+    def test_an_empty_project_has_no_components_and_no_spec(self):
+        inv = self.result["inventory"]
+        self.assertFalse(any(inv[k] for k in ("claude_md", "rules", "skills", "agents", "workflows", "settings")))
+        self.assertFalse(self.result["spec_drift"]["spec_exists"])
+        self.assertNotIn("suggested_mode", self.result)
 
     def test_empty_inventory(self):
         inv = self.result["inventory"]
@@ -117,8 +236,10 @@ class SpecNotOnDiskDriftTests(unittest.TestCase):
         self.assertEqual(by_component[".claude/skills/ghost-skill"]["id"], "B2")
         self.assertEqual(by_component[".claude/agents/ghost-agent.md"]["status"], "validated")
 
-    def test_suggests_sync_mode(self):
-        self.assertTrue(ah.run(self.root)["suggested_mode"].startswith("sync"))
+    def test_missing_files_are_reported_as_facts(self):
+        result = ah.run(self.root)
+        self.assertTrue(result["spec_drift"]["in_spec_not_on_disk"])
+        self.assertNotIn("suggested_mode", result)
 
 
 class SpecDriftGranularityTests(unittest.TestCase):
@@ -174,6 +295,39 @@ class SpecDriftJsonContractTests(unittest.TestCase):
 
 
 class InventoryTableParsingTests(unittest.TestCase):
+    def test_an_escaped_pipe_inside_a_cell_does_not_shift_columns(self):
+        spec = (
+            "## Behavior inventory\n"
+            "| id | b | layer | component | status |\n"
+            "| B1 | allow `a`\\|`b` | hook | `.claude/hooks/x.sh` | generated |\n"
+        )
+        rows = list(ah._iter_inventory_rows(spec))
+        self.assertEqual(rows[0][3], "`.claude/hooks/x.sh`")
+        self.assertEqual(rows[0][4], "generated")
+
+    def test_a_comment_opened_after_prose_still_hides_its_rows(self):
+        spec = (
+            "## Behavior inventory\n"
+            "| id | b | layer | component | status |\n"
+            "Some prose <!-- a comment that runs on\n"
+            "| B9 | hidden | skill | `.claude/skills/ghost/` | generated |\n"
+            "--> and closes here\n"
+            "| B1 | real | skill | `.claude/skills/real/` | proposed |\n"
+        )
+        self.assertEqual([r[0] for r in ah._iter_inventory_rows(spec)], ["B1"])
+
+    def test_status_comparison_is_case_sensitive_like_the_template(self):
+        """`Validated` is not `validated`: V01 reports it, and the drift
+        check must not quietly read it as a file claim either."""
+        spec = (
+            "## Behavior inventory\n"
+            "| id | b | layer | component | status |\n"
+            "| B1 | x | skill | `.claude/skills/nope/` | Validated |\n"
+            "| B2 | y | skill | `.claude/skills/nope2/` | validated |\n"
+        )
+        rows = ah._spec_rows_without_files(REPO_ROOT, spec, set())
+        self.assertEqual([r["id"] for r in rows], ["B2"])
+
     def test_skips_header_and_separator_rows(self):
         spec = (
             "## Behavior inventory\n"

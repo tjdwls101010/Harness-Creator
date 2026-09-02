@@ -1,26 +1,21 @@
 #!/usr/bin/env python3
 """Spawn a headless Claude Code session against a project and record what happened.
 
-    python run_e2e.py --project <target-repo> --prompt "..." [--prompt-file f]
+    python run_e2e.py --project <target-repo> (--prompt "..." | --prompt-file f)
         [--model <id>] [--timeout 300] [--out <dir>] [--json]
-        [--permission-mode acceptEdits] [--isolate]
+        [--permission-mode acceptEdits] [--isolate [--keep-isolated]]
 
-This is the second, paid tier of validation (see references/e2e-testing.md);
-run it only with the user's consent, per the Validation-stage interview
-item. It does not grade anything itself -- it produces transcript.jsonl and
-summary.json in --out, and a separate grading agent (or workflow phase)
-reads those to judge trigger/behavior/artifact correctness against the
-spec's expected scenario.
+Runs `claude -p` against a project and writes transcript.jsonl and
+summary.json to --out. It grades nothing; the summary lists tool calls,
+skill invocations, heuristic hook evidence and the final result envelope
+for something else to judge.
 
-Permission handling: `--isolate` (which implies
-`--dangerously-skip-permissions` unless `--permission-mode` is given) was
-confirmed working end to end on 2026-08-22, three runs, no auth failure and
-no permission stall. Auth is per-machine, though, so a machine this has not
-run on before is still a fresh question -- see references/e2e-testing.md.
-
-Pass `--isolate` for anything that is not a purely read-only prompt: without
-it the session runs in --project itself, and a scenario that writes writes
-there.
+Without `--isolate` the session runs in --project itself, so a prompt that
+writes, writes there. `--isolate` copies the project to a temp dir first and
+implies `--dangerously-skip-permissions` unless `--permission-mode` is given.
+The spawned `claude` authenticates on its own: auth is per-machine, so a
+machine this has not run on may fail with "Not logged in" even when the
+calling session is authenticated.
 """
 
 import argparse
@@ -79,8 +74,8 @@ def run_session(project_dir, prompt, model, permission_mode, skip_permissions, t
     clean process exit (which says nothing about whether the SESSION
     succeeded -- that's for the caller to determine from summarize())."""
     cmd = build_command(prompt, model, permission_mode, skip_permissions)
-    # CLAUDECODE removal allows nesting claude -p inside this session --
-    # verified technique, carried over from skill-creator's run_eval.py.
+    # Without CLAUDECODE in the environment, `claude -p` can be nested
+    # inside a running session.
     env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
 
     try:
@@ -101,12 +96,9 @@ def run_session(project_dir, prompt, model, permission_mode, skip_permissions, t
 
 
 def parse_stream(lines):
-    """Parse stream-json lines into a structured summary. Schema verified
-    against a live `claude -p --output-format json` result envelope
-    (type/subtype/result/usage/session_id/etc. fields) and against
-    skill-creator's run_eval.py for the assistant/tool_use message shape --
-    both are the same underlying Claude API message stream, just
-    line-delimited here instead of a single final object."""
+    """Parse stream-json lines into a structured summary: the line-delimited
+    form of the `claude -p --output-format json` result envelope plus the
+    assistant/tool_use message shape of the Claude API stream."""
     tool_calls = []
     skill_invocations = []
     hook_evidence = []
@@ -171,21 +163,21 @@ def write_outputs(out_dir, lines, summary):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--project", required=True, help="path to the target project")
-    parser.add_argument("--prompt", help="the prompt to send")
-    parser.add_argument("--prompt-file", help="path to a file containing the prompt")
+    prompt_source = parser.add_mutually_exclusive_group(required=True)
+    prompt_source.add_argument("--prompt", help="the prompt to send")
+    prompt_source.add_argument("--prompt-file", help="path to a file containing the prompt")
     parser.add_argument("--model", help="model id/alias to use; omitted, the spawned `claude` picks its own default, which need not match this session's model")
     parser.add_argument("--timeout", type=int, default=300, help="seconds before giving up (default 300)")
     parser.add_argument("--out", default=None, help="directory to write transcript.jsonl and summary.json (default: a temp dir, path printed)")
     parser.add_argument("--json", action="store_true", help="print the summary as JSON to stdout too")
     parser.add_argument("--permission-mode", help="passed through to `claude -p --permission-mode`")
     parser.add_argument("--isolate", action="store_true", help="copy --project to a temp dir first and run there, so writes don't touch the original; implies --dangerously-skip-permissions unless --permission-mode is also given")
-    parser.add_argument("--keep-isolated", action="store_true", help="with --isolate, leave the temp copy on disk and record its path in summary.json; pass this when a scenario grades generated FILES, since the copy is where they are. Without it the copy is deleted -- a project copy per run is not collected by anything else")
+    parser.add_argument("--keep-isolated", action="store_true", help="requires --isolate: leave the temp copy on disk and record its path in summary.json, so files the session generated can be inspected there. Without it the copy is deleted -- a project copy per run is not collected by anything else")
     args = parser.parse_args()
 
-    if not args.prompt and not args.prompt_file:
-        print("error: one of --prompt or --prompt-file is required", file=sys.stderr)
-        return hc.EXIT_USAGE_ERROR
-    prompt = args.prompt or Path(args.prompt_file).read_text(encoding="utf-8")
+    if args.keep_isolated and not args.isolate:
+        parser.error("--keep-isolated requires --isolate")
+    prompt = args.prompt if args.prompt is not None else Path(args.prompt_file).read_text(encoding="utf-8")
 
     project_root = Path(args.project).resolve()
     if not project_root.is_dir():

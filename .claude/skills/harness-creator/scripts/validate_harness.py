@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
-"""Deterministic lint for a generated Claude Code harness.
+"""Deterministic lint for a Claude Code harness.
 
     python validate_harness.py --path <target-repo> [--json] [--strict]
 
-This is the free, always-run first tier of validation (see
-references/e2e-testing.md for the second, paid tier). harness-creator runs
-this immediately after generating or editing any component and does not
-declare the work done until it exits 0 -- a checklist that isn't
-mechanically enforced is exactly the failure mode this script exists to
-close.
+Checks the shape of what is on disk: settings.json hooks and permission
+rules, skill frontmatter and pointers, bundled-script CLI self-description,
+agent frontmatter, workflow meta and syntax, rule globs, CLAUDE.md length
+and @imports, harness-spec.md inventory rows, and package closure for
+plugin-shipped skills. Prints the always-loaded budget for the project scope.
+
+What it cannot see: behaviour. It does not know whether a hook ran, whether
+a description triggers on the prompts it should, or whether prose is
+followed -- only that the structure is well-formed. Findings that carry a
+code (V01, ...) are the checks a fixture pins by code.
 
 Exit codes: 0 = no errors (warnings still possible unless --strict),
 1 = at least one error (or, under --strict, at least one warning),
@@ -38,14 +42,10 @@ MODEL_ALIASES = ("inherit", "sonnet", "opus", "haiku", "fable")
 def is_plausible_model(value):
     """An alias, or any `claude-`-prefixed id.
 
-    This used to enumerate current model ids, which false-flagged a correct
-    harness every time a model shipped -- it rejected the documented alias
-    `fable` and the id `claude-opus-5` while accepting `claude-opus-4-8`.
-    A validator that goes wrong on its own as the world moves is worse than
-    a looser one, so this checks shape instead of membership: the docs
-    describe the real rule as an alias, an id this Claude Code version
-    knows, or an id starting with `claude-`, and only the first and third
-    are knowable from outside the running client."""
+    Shape, not membership: the docs describe the rule as an alias, an id
+    this Claude Code version knows, or an id starting with `claude-`, and
+    only the first and third are knowable from outside the running client.
+    Enumerating ids would fail a correct harness every time a model ships."""
     return isinstance(value, str) and (
         value in MODEL_ALIASES or value.startswith("claude-")
     )
@@ -81,8 +81,8 @@ _HARNESS_NAMESPACE = frozenset(
 )
 
 
-def add(findings, level, location, message):
-    findings.append((level, location, message))
+def add(findings, level, location, message, code=None):
+    findings.append(hc.Finding(level, location, message, code))
 
 
 def check_settings(root, findings):
@@ -336,9 +336,9 @@ def _check_permissions_block(rel, permissions, findings):
             findings, "W", f"{rel}#permissions.defaultMode",
             "'defaultMode: \"auto\"' is ignored in a project settings file -- the session starts "
             "in 'default' with no error, so this harness reads as configured and "
-            "behaves as if it weren't; a repository cannot grant itself auto mode "
-            "can grant auto mode -- only the user's own ~/.claude/settings.json or "
-            "managed settings can (see references/hooks.md)",
+            "behaves as if it weren't; a repository cannot grant itself auto mode -- "
+            "only the user's own ~/.claude/settings.json or managed settings can "
+            "(see references/hooks.md)",
         )
     for bucket in ("allow", "deny", "ask"):
         rules = permissions.get(bucket, [])
@@ -384,11 +384,9 @@ def _check_permissions_block(rel, permissions, findings):
 
 def _check_skill_frontmatter_hooks(root, skill_dir, loc, fm, findings):
     """A skill's frontmatter declares hooks with the same event/matcher/handler
-    shape settings.json uses, so it earns the same checks -- and nothing was
-    running them, because the conservative frontmatter parser marks a nested
-    mapping unparsed and every validator downstream saw a field with no
-    contents. The one thing that genuinely differs is where a relative command
-    path resolves: against this directory, not the project root."""
+    shape settings.json uses, so it gets the same checks. The one thing that
+    differs is where a relative command path resolves: against this
+    directory, not the project root."""
     raw = fm.raw_blocks.get("hooks")
     if not raw:
         return
@@ -454,8 +452,7 @@ def check_skills(root, findings):
             _check_package_closure(root, skill_dir, loc, text, findings)
 
         # Reference-to-reference pointers are as load-bearing as the ones in
-        # SKILL.md and were previously never scanned at all. There are only a
-        # handful of files, so this is cheap.
+        # SKILL.md. There are only a handful of files, so this is cheap.
         refs_dir = skill_dir / "references"
         if refs_dir.is_dir():
             for ref in sorted(p for p in refs_dir.rglob("*") if p.suffix in (".md", ".txt", ".rst")):
@@ -542,9 +539,7 @@ def iter_skill_pointers(text):
 
     Deliberately wrapper-agnostic: a pointer is just as dead when it is
     written as bare prose ("see references/hooks.md"), as a markdown link,
-    or inside a ${CLAUDE_SKILL_DIR} invocation as it is inside backticks.
-    Only matching the backticked form would leave most of a skill's own
-    pointers unchecked while Hard line 1 claims otherwise."""
+    or inside a ${CLAUDE_SKILL_DIR} invocation as it is inside backticks."""
     for m in re.finditer(_SKILL_POINTER_RE, text):
         # A `./`- or `/`-anchored path belongs to the target project, not to
         # this skill -- hook commands in the examples are exactly that shape.
@@ -1055,11 +1050,10 @@ def check_harness_spec(root, findings):
     for f in hc.iter_workflow_files(root):
         actual.add(f".claude/workflows/{f.name}")
 
-    # Two distinct findings, because collapsing them produced a false
-    # "isn't mentioned" on a spec that mentioned the component by bare name.
-    # The convention is a backticked repo-relative path (interview.md says
-    # so); a bare name is a nudge, not a defect, and only a component absent
-    # from the spec entirely is real drift.
+    # Two distinct findings: the convention is a backticked repo-relative
+    # path (the template says so), so a bare name is a nudge, not a defect,
+    # and only a component absent from the spec entirely is real drift.
+    _check_inventory_statuses(text, findings)
     for component in sorted(actual):
         bare = Path(component.rstrip("/")).name
         stem = Path(component.rstrip("/")).stem
@@ -1077,6 +1071,26 @@ def check_harness_spec(root, findings):
                 findings, "W", ".claude/harness-spec.md",
                 f"component exists on disk but isn't mentioned in the spec: {component}",
             )
+
+
+def _check_inventory_statuses(spec_text, findings):
+    """V01. A status outside the template's vocabulary is a row the drift
+    check cannot read: `done` claims nothing and `Validated` (capitalised)
+    is compared lowercase by the audit but not by anything else, so the row
+    silently stops asserting that its file exists."""
+    for row in hc.iter_inventory_rows(spec_text):
+        if len(row) < len(hc.INVENTORY_COLUMNS):
+            continue
+        status = row[-1].strip().strip("`")
+        if status in hc.SPEC_STATUSES or status.startswith("<"):
+            continue
+        add(
+            findings, "E", ".claude/harness-spec.md",
+            f"row {row[0]} has status '{status}', which is not one of "
+            f"{'/'.join(hc.SPEC_STATUSES)} -- the drift check reads only those, so this row "
+            "neither claims nor disclaims a file (status is case-sensitive; write it lowercase)",
+            code="V01",
+        )
 
 
 # Over this, the report adds a warning. It is the documented per-file
@@ -1185,8 +1199,8 @@ def run(root, strict):
             "is the cost of the layout, not a defect",
         )
 
-    has_error = any(level == "E" for level, _, _ in findings)
-    has_warning = any(level == "W" for level, _, _ in findings)
+    has_error = any(f[0] == "E" for f in findings)
+    has_warning = any(f[0] == "W" for f in findings)
     exit_code = hc.EXIT_LINT_FAILED if (has_error or (strict and has_warning)) else hc.EXIT_OK
     return findings, exit_code
 
@@ -1195,7 +1209,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--path", required=True, help="path to the target repo root")
     parser.add_argument("--json", action="store_true", help="machine-readable JSON output")
-    parser.add_argument("--strict", action="store_true", help="treat warnings as failures (exit 1); for CI")
+    parser.add_argument("--strict", action="store_true", help="treat warnings as failures (exit 1)")
     args = parser.parse_args()
 
     root = Path(args.path).resolve()
@@ -1206,8 +1220,8 @@ def main():
     findings, exit_code = run(root, args.strict)
 
     if args.json:
-        errors = sum(1 for level, _, _ in findings if level == "E")
-        warnings = sum(1 for level, _, _ in findings if level == "W")
+        errors = sum(1 for f in findings if f[0] == "E")
+        warnings = sum(1 for f in findings if f[0] == "W")
         print(json.dumps({
             "errors": errors, "warnings": warnings,
             "findings": hc.findings_to_json(findings),
