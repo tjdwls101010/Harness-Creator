@@ -349,8 +349,11 @@ def spec_template():
         "Context": "Language(s), build system, test runner, team size, and how much Claude Code vocabulary the user brought.",
         "Goals": "What this harness should change about how Claude behaves here, in the user's own words where they are sharper than a paraphrase.",
         "Behavior inventory": (
-            f"One row per behaviour, piece of knowledge, or constraint. `component` is a backticked repo-relative path. `status` is one of {statuses}; "
-            f"only {claiming} assert that the file exists, and the drift check reads exactly those two. Keep `declined` and `retired` rows: they are what stops the next pass re-proposing the same idea."
+            f"One row per behaviour, piece of knowledge, or constraint. `component` is a backticked repo-relative path. `status` is one of {statuses}: "
+            "`proposed` (surfaced, not yet approved) -> `approved` (locked as intent, nothing generated) -> `generated` (a file exists on disk) -> "
+            "`validated` (lint passed, and e2e too if it was run); `declined` (deliberately not built) and `retired` (deliberately removed) are terminal. "
+            f"Only {claiming} assert that the file exists, and the drift check reads exactly those two, so a `generated` row with no file means an interrupted "
+            "generation and a `validated` one means something removed it. Keep `declined` and `retired` rows: they are what stops the next pass re-proposing the same idea."
         ),
         "Component specs": "Per component, what generation needs and the spec uniquely knows: hooks need event/matcher/action/failure policy; skills need where their reference material comes from and any bundled scripts. Do not copy a skill's description here -- it lives in the frontmatter and the copy is the half that drifts.",
         "Design rationale": "Each routing decision and the alternatives rejected, and stop there. A rejected alternative is the expensive thing to lose; the sentences defending a choice are not. When a later pass supersedes a decision, rewrite the entry to its outcome instead of stacking.",

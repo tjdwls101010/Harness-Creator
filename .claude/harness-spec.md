@@ -11,7 +11,7 @@ The binding design record is `docs/plan/` (v1, D1-D12) as revised by `docs/plan/
 ## Goals
 
 - Ship a meta-skill that designs, generates, and validates a complete harness for another project through a structured interview.
-- Hold the always-loaded surface — what enters context on every invocation before the first prompt — under 2,650 words, because past roughly 5,000 tokens (~3,750 words) content is dropped silently at compaction rather than degrading. The 5,000-token ceiling is the product fact; 2,650 is the self-imposed margin, raised from v2's 2,500 when v3 added the compression doctrine (see Design rationale).
+- Hold the always-loaded surface — what enters context on every invocation before the first prompt — under 2,850 words. The number is a self-imposed size guardrail, not a product limit: the 5,000-token figure is the cap on what compaction *re-injects* per skill (a first invocation loads the whole body), and v7 measured the body at about 5,150 tokens and chose quality over designing around compaction (see Design rationale). Raised 2,500 → 2,650 (v3) → 2,850 (v7, interview knowledge K1–K15 folded in, then the reasons the adversarial review asked for).
 - Never assert a product mechanic the live docs don't support. A wrong gotcha is worse than no gotcha, and this skill's entire value is gotcha density.
 - Never let the skill claim an enforcement that doesn't exist. Hard line 1 forbids it, and the v2 audit found five violations of it.
 

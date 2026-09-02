@@ -127,27 +127,9 @@ The rule: every verdict a grading agent produces must name the specific transcri
 
 Surface-level compliance is not success. A scenario asking "does the harness prevent editing the protected `db/migrations/` directory" is satisfied on the surface if the transcript shows a blocked tool call — but if Claude's next move was to edit the same file through a Bash heredoc instead, the harness failed even though the specific hook "worked." A scenario asking whether an artifact was created correctly is satisfied on the surface if the right filename exists — but if the file is empty or the content is wrong, the task failed even though the assertion as literally worded passed. Grade the underlying outcome the assertion was trying to protect, not the letter of the assertion. When you notice an assertion that would pass even for an obviously wrong output, say so in the report — a passing grade on a weak assertion manufactures false confidence in a harness that hasn't actually been checked.
 
-## Feedback routing: from failure symptom to repair target
+## Feedback routing
 
-Every failure should resolve to one specific layer to edit — never "make it work better" in the abstract. This table is the same layer-routing logic from SKILL.md's framework, run in reverse: instead of asking "which layer does this new requirement belong in," you're asking "which layer's placement decision was wrong, given how it actually behaved."
-
-| Symptom | Repair target |
-|---|---|
-| Skill doesn't trigger, or triggers on prompts it shouldn't | Fix the description — strengthen boundary language. This is almost always a wording problem, not a body-content problem. |
-| Skill triggers but the behavior it produces is wrong | Fix the skill body — and specifically, strengthen the *why* before reaching for more rules. A skill that states a principle convincingly gets followed more reliably than one with a longer checklist. |
-| An always-required rule gets ignored | First, strengthen the CLAUDE.md phrasing. If that's still not enough after a re-run, escalate it to a hook — this re-decides which layer the requirement belongs in (advisory vs. enforced), so treat it with the same weight as the original layer-routing choice. |
-| Hook doesn't fire | Recheck the matcher and event choice, and reproduce the exact input with `test_hook.py` before touching anything else — this isolates whether the problem is the hook's logic or its trigger condition. |
-| Hook over-fires (blocks legitimate work) | Narrow the matcher, or downgrade the hook from a hard block to a warning if the underlying concern doesn't actually justify blocking. |
-| An agent ignores a rule that CLAUDE.md clearly states | Check first whether the agent is a built-in Explore or Plan agent — both never load CLAUDE.md at all, by design, regardless of how the rule is worded. If so, the fix is a restated delegation prompt that repeats the relevant constraint directly, or a custom agent with the rule baked into its own system prompt. |
-| The session feels slow or expensive | Check hook count and their timeouts, CLAUDE.md length, and the total skill-description budget across all installed skills — any of the three can silently inflate every single turn's cost, not just the turns that use them. |
-| A component seems to earn nothing | Raise retirement as a question, never as an action — see below. |
-| Nothing failed, and the harness is larger than it was last pass | The one row here that points down, and the only one no symptom announces. Ablate: remove one suspect rule, re-run the scenario it governed, restore it only if something breaks (SKILL.md's K15 says what may never be ablated). |
-
-### Retiring a component
-
-A harness only grows unless something makes it shrink, and every layer charges rent whether or not it earns it — an unfired skill's description still occupies the listing budget, a rule without `paths:` still loads at launch, an agent still costs a routing decision every time it exists as an option. So a pass on an existing harness looks for what to remove, not only what to add.
-
-**Every candidate is a question with its cost stated, never an action.** There is no invocation telemetry, so "unused" isn't observable from disk — only the user knows. And deleting something they deliberately added is worse than leaving it. Ask like this: "`changelog-helper`'s description costs listing budget every session — still earning it?" Offer `disable-model-invocation: true` before deletion; it keeps the skill under its explicit `/name` while dropping auto-triggering, which fits the usual answer. Mark the spec row `status: retired` rather than deleting it, for the same reason as `declined`.
+Every failure resolves to one layer to edit, never to "make it work better" in the abstract. The map is SKILL.md's layer-routing table, whose repair column runs the same routing backwards, and its rules for repairing the smallest causally supported set, re-running only the changed surface, and retiring a component as a question with its cost stated. Route each failure yourself; don't hand that judgment to another agent inside the workflow, since you are the one who then has to act on it.
 
 ## Re-run discipline
 

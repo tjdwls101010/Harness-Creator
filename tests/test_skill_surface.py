@@ -199,7 +199,7 @@ class AlwaysLoadedBudgetTests(unittest.TestCase):
     again only with the same kind of reason written down; the ceiling below
     is the one that must not move."""
 
-    WORD_BUDGET = 2750          # self-imposed; see docstring
+    WORD_BUDGET = 2850          # self-imposed; see docstring
 
     def test_skill_md_within_budget(self):
         """The 5,000-token figure is the compaction re-injection cap, not a
@@ -207,10 +207,13 @@ class AlwaysLoadedBudgetTests(unittest.TestCase):
         pre-rewrite body at about 5,250 tokens (3.0 chars/token) and chose
         not to design around compaction -- the body's quality comes first --
         so the word pin stays as the only size guardrail. v7 raised it
-        2,650 -> 2,750: deleting interview.md moved its knowledge (K1-K15,
-        about 550 words as rule-plus-reason pairs) into this file, and the
+        2,650 -> 2,850: deleting interview.md moved its knowledge (K1-K15,
+        about 550 words as rule-plus-reason pairs) into this file, the
         operating loop and hard lines it replaced gave back most but not all
-        of that. What remained over the old pin was knowledge, not argument."""
+        of that, and the adversarial review then asked for reasons the four
+        frames demand (why the diagnostic order, why the pair, what e2e
+        costs) -- reasons cost words. What remained over the old pin was
+        knowledge and reasons, not argument."""
         words = len(read(SKILL_MD).split())
         self.assertLess(words, self.WORD_BUDGET, f"SKILL.md is {words} words")
 
@@ -262,7 +265,7 @@ class HarnessEngineerKnowledgeTests(unittest.TestCase):
 
     K = {
         "K1": ("ask only what is left open", "spends the user's attention twice"),
-        "K2": ("what is now unnecessary", "there is no invocation telemetry"),
+        "K2": ("what is now unnecessary", "nothing on disk records what was used"),
         "K3": ("Read a file before overwriting it", "reads as zero drift"),
         "K4": ("keep every approved section the delta does not invalidate", "adds no evidence"),
         "K5": ("Ask which side is right before regenerating a file", "silently reverting a colleague's work is far worse"),
@@ -578,8 +581,10 @@ class SubtractionTests(unittest.TestCase):
         header = next(l for l in section.splitlines() if l.startswith("| What it is"))
         self.assertEqual(header.count("|"), 5, header)
         self.assertIn("fix", header.lower())
-        self.assertIn("K15", section)
-        self.assertIn("`retired`", section)
+        repair = section.split("Repair runs the table backwards")[1]
+        self.assertIn("never a deletion", repair)
+        self.assertIn("`retired`", repair)
+        self.assertRegex(repair, r"harness grew[^.]*K15")
 
 
 class GotchaCountTests(unittest.TestCase):
