@@ -1,6 +1,6 @@
 # E2E Testing
 
-This is the second, deeper tier of harness validation. Read this when the interview reaches the Validation stage (I5) and again right before you actually compose and launch the e2e run.
+This is the second, deeper tier of harness validation. Read this once the user has consented to an e2e run, right before you compose and launch it.
 
 ## Why this tier exists at all
 
@@ -8,7 +8,7 @@ This is the second, deeper tier of harness validation. Read this when the interv
 - It does not tell you whether the harness changes Claude's behavior: a skill with perfect frontmatter can still never trigger because its description's boundary language is fuzzy; a hook can be syntactically flawless and still fire on the wrong tool, or never fire, because the matcher assumed a tool-call shape that turned out wrong.
 - Lint proves the harness is well-formed; only a real run against a real prompt proves it does what the spec's Behavior inventory says it should do. That gap is what e2e closes — by spawning an actual headless Claude session against the generated harness and watching what happens.
 
-This costs real tokens and wall-clock time — a handful of full agentic sessions per scenario — so it runs only with the user's explicit consent, gathered as part of interview item I5 alongside the scenario list. Never launch it silently as part of "finishing" a generation: offer it, name the rough cost (scenario count × roughly one full session each), and proceed only on yes.
+This costs real tokens and wall-clock time — a handful of full agentic sessions per scenario — so it runs only with the user's explicit consent, gathered alongside the scenario list when the spec's Validation section is filled. Never launch it silently as part of "finishing" a generation: offer it, name the rough cost (scenario count × roughly one full session each), and proceed only on yes.
 
 ## Shape: a workflow composed on the spot, not a file you ship
 
@@ -95,7 +95,7 @@ Default the model to the user's actual currently-configured model, not a cheaper
 With/without-harness A/B comparison is optional in v1, not a default. It earns its cost in two situations:
 
 - Fresh build — the user is curious what baseline behavior looks like without any harness at all (motivating evidence for why the harness is worth having).
-- Improve-mode pass — comparing old-harness-behavior against new-harness-behavior on the same scenario is the most direct evidence a fix actually worked.
+- A repair pass on an existing harness — comparing old-harness-behavior against new-harness-behavior on the same scenario is the most direct evidence a fix actually worked.
 
 Outside those two cases, skip it — doubling every scenario to get a baseline nobody asked to see is exactly the kind of scope creep this skill is designed to resist.
 
@@ -141,11 +141,11 @@ Every failure should resolve to one specific layer to edit — never "make it wo
 | An agent ignores a rule that CLAUDE.md clearly states | Check first whether the agent is a built-in Explore or Plan agent — both never load CLAUDE.md at all, by design, regardless of how the rule is worded. If so, the fix is a restated delegation prompt that repeats the relevant constraint directly, or a custom agent with the rule baked into its own system prompt. |
 | The session feels slow or expensive | Check hook count and their timeouts, CLAUDE.md length, and the total skill-description budget across all installed skills — any of the three can silently inflate every single turn's cost, not just the turns that use them. |
 | A component seems to earn nothing | Raise retirement as a question, never as an action — see below. |
-| Nothing failed, and the harness is larger than it was last pass | The one row here that points down, and the only one no symptom announces. Ablate: remove one suspect rule, re-run the scenario it governed, restore it only if something breaks (see the ablation protocol in `references/interview.md`). |
+| Nothing failed, and the harness is larger than it was last pass | The one row here that points down, and the only one no symptom announces. Ablate: remove one suspect rule, re-run the scenario it governed, restore it only if something breaks (SKILL.md's K15 says what may never be ablated). |
 
 ### Retiring a component
 
-A harness only grows unless something makes it shrink, and every layer charges rent whether or not it earns it — an unfired skill's description still occupies the listing budget, a rule without `paths:` still loads at launch, an agent still costs a routing decision every time it exists as an option. So an improve pass looks for what to remove, not only what to add.
+A harness only grows unless something makes it shrink, and every layer charges rent whether or not it earns it — an unfired skill's description still occupies the listing budget, a rule without `paths:` still loads at launch, an agent still costs a routing decision every time it exists as an option. So a pass on an existing harness looks for what to remove, not only what to add.
 
 **Every candidate is a question with its cost stated, never an action.** There is no invocation telemetry, so "unused" isn't observable from disk — only the user knows. And deleting something they deliberately added is worse than leaving it. Ask like this: "`changelog-helper`'s description costs listing budget every session — still earning it?" Offer `disable-model-invocation: true` before deletion; it keeps the skill under its explicit `/name` while dropping auto-triggering, which fits the usual answer. Mark the spec row `status: retired` rather than deleting it, for the same reason as `declined`.
 
@@ -165,4 +165,4 @@ So on a machine you have not run this on before, say to the user that the first 
 
 ## What e2e cannot cover
 
-The interview itself can never be e2e-tested. `AskUserQuestion` is unavailable in headless (`-p`) and subagent contexts, so there is no way to spawn a scripted session that exercises the interview flow the way a real user would. The only validation path for the interview protocol — question phrasing, proficiency calibration, the gate sequence — is dogfooding: running it manually, interactively, yourself, against a real or sample project, and noticing where it feels wrong. Don't let a clean e2e report create the impression that the whole skill has been validated end to end; it validates the *generated harness*, never the *interview that produced it*.
+The interview itself can never be e2e-tested. `AskUserQuestion` is unavailable in headless (`-p`) and subagent contexts, so there is no way to spawn a scripted session that exercises the interview flow the way a real user would. The only validation path for the interview — question phrasing, proficiency calibration, the approval sequence — is dogfooding: running it manually, interactively, yourself, against a real or sample project, and noticing where it feels wrong. Don't let a clean e2e report create the impression that the whole skill has been validated end to end; it validates the *generated harness*, never the *interview that produced it*.

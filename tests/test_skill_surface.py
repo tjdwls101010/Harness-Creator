@@ -129,7 +129,14 @@ class DeadLinkCoverageTests(unittest.TestCase):
         return list(vh.iter_skill_pointers(text))
 
     def test_pointers_in_both_skill_md_and_references_are_scanned(self):
-        self.assertGreater(len(self._scan(read(SKILL_MD))), 10)
+        """SKILL.md routes to every reference the moment a component type is
+        picked, so every reference except the data file behind hook_event.py
+        must be reachable from it by a pointer the linter scans."""
+        pointed = set(self._scan(read(SKILL_MD)))
+        for ref in REFERENCES:
+            if ref.name == "hooks-events.md":
+                continue
+            self.assertIn(f"references/{ref.name}", pointed, ref.name)
         ref_hits = sum(len(self._scan(read(p))) for p in REFERENCES)
         self.assertGreater(ref_hits, 0, "reference-to-reference pointers must be scanned")
 
@@ -192,14 +199,18 @@ class AlwaysLoadedBudgetTests(unittest.TestCase):
     again only with the same kind of reason written down; the ceiling below
     is the one that must not move."""
 
-    WORD_BUDGET = 2650          # self-imposed; see docstring
+    WORD_BUDGET = 2750          # self-imposed; see docstring
 
     def test_skill_md_within_budget(self):
         """The 5,000-token figure is the compaction re-injection cap, not a
         load cap: a first invocation loads the whole body. v7 measured the
         pre-rewrite body at about 5,250 tokens (3.0 chars/token) and chose
         not to design around compaction -- the body's quality comes first --
-        so the word pin stays as the only size guardrail."""
+        so the word pin stays as the only size guardrail. v7 raised it
+        2,650 -> 2,750: deleting interview.md moved its knowledge (K1-K15,
+        about 550 words as rule-plus-reason pairs) into this file, and the
+        operating loop and hard lines it replaced gave back most but not all
+        of that. What remained over the old pin was knowledge, not argument."""
         words = len(read(SKILL_MD).split())
         self.assertLess(words, self.WORD_BUDGET, f"SKILL.md is {words} words")
 
