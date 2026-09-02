@@ -11,7 +11,7 @@ Every rule loads at launch. A rule with `paths:` loads only on a matching read.
 | `generated` | Yes |
 | `proposed` | No |
 
-Plain sentence with nothing to anchor. Another plain sentence, still nothing here.
+Plain sentence about the weather. Another plain sentence, still background.
 
 ```bash
 # fenced code is skipped: not a claim, never counted, 999 times
@@ -22,4 +22,4 @@ Plain sentence with nothing to anchor. Another plain sentence, still nothing her
 The ceiling is 5,000 tokens. It is not a target.
 
 - A bullet that names `validate_harness.py` is a claim.
-- A bullet with no marker in it is background.
+- A bullet that describes background.
