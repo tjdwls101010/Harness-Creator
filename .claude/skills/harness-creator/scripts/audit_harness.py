@@ -256,6 +256,17 @@ def check_user_scope_conflicts(root, inventory, user_root=None):
             "this harness is about to say"
         )
 
+    user_workflows = user_root / "workflows"
+    if user_workflows.is_dir():
+        for w in inventory["workflows"]:
+            candidate = user_workflows / Path(w["path"]).name
+            if candidate.exists():
+                conflicts.append(
+                    f"a personal workflow named '{candidate.stem}' also exists at {candidate} -- when a "
+                    "project workflow and a personal one share a name, the project one runs, so the "
+                    "personal one is shadowed in this repo"
+                )
+
     for name, path in _foreign_instruction_files(root):
         conflicts.append(
             f"{name} exists at {path} -- another coding agent's instructions. Claude Code does "

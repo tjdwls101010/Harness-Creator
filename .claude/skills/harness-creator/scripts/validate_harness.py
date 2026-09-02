@@ -103,7 +103,9 @@ def check_settings(root, findings):
             _check_deny_subsumes_allow(str(rel), data["permissions"], findings)
 
 
-def _check_hooks_block(root, rel, hooks, findings, base_dir=None):
+def _check_hooks_block(root, rel, hooks, findings, base_dir=None, once_honored=False):
+    """`once_honored` is True only for a skill's frontmatter; settings files
+    and agent frontmatter accept the field and ignore it."""
     if not hooks:
         return
     if not isinstance(hooks, dict):
@@ -159,6 +161,14 @@ def _check_hooks_block(root, rel, hooks, findings, base_dir=None):
                 if htype not in hc.HOOK_HANDLER_TYPES:
                     add(findings, "E", loc, f"unknown or missing handler type '{htype}'")
                     continue
+                if hook.get("once") is True and not once_honored:
+                    add(
+                        findings, "E", loc,
+                        "'once: true' is honored only for hooks declared in a skill's frontmatter; here it is "
+                        "accepted and ignored, so this hook runs on every matching event -- move the hook into "
+                        "a skill, or drop the field and build the one-shot behaviour into the script",
+                        code="V07",
+                    )
                 if htype == "command":
                     command = hook.get("command")
                     if not command:
@@ -521,7 +531,7 @@ def _check_skill_frontmatter_hooks(root, skill_dir, loc, fm, findings):
             "therefore unchecked, not confirmed correct",
         )
         return
-    _check_hooks_block(root, f"{loc}", hooks, findings, base_dir=skill_dir)
+    _check_hooks_block(root, f"{loc}", hooks, findings, base_dir=skill_dir, once_honored=True)
 
 
 def check_skills(root, findings):
@@ -795,6 +805,11 @@ def _check_cli_self_description(path, loc, findings):
         )
 
 
+# Tools tied to the main conversation's UI or session state; a subagent
+# cannot use them even when its `tools` field lists them.
+_UI_BOUND_TOOLS = frozenset({"AskUserQuestion", "EnterPlanMode", "ScheduleWakeup", "WaitForMcpServers"})
+
+
 def check_agents(root, findings):
     seen_names = {}
     for agent_file in hc.iter_agent_files(root):
@@ -829,15 +844,50 @@ def check_agents(root, findings):
             )
 
         tools = fm.data.get("tools")
+        tool_list = None
         if isinstance(tools, list):
-            for t in tools:
-                if not hc.is_known_tool_token(t):
-                    add(findings, "E", loc, f"'tools' references unknown tool '{t}'")
+            tool_list = [str(t).strip() for t in tools]
         elif isinstance(tools, str):
-            for t in tools.split(","):
-                t = t.strip()
-                if t and not hc.is_known_tool_token(t):
-                    add(findings, "E", loc, f"'tools' references unknown tool '{t}'")
+            tool_list = [t.strip() for t in tools.split(",") if t.strip()]
+        for t in tool_list or []:
+            if not hc.is_known_tool_token(t):
+                add(findings, "E", loc, f"'tools' references unknown tool '{t}'")
+            elif t in _UI_BOUND_TOOLS:
+                add(
+                    findings, "E", loc,
+                    f"'tools' lists {t}, which depends on the main conversation's UI or session state and is "
+                    "not available to a subagent even when listed -- an agent whose job needs it has to stay in "
+                    "the main conversation or work from a brief handed to it up front",
+                    code="V06",
+                )
+        if fm.data.get("memory") and tool_list is not None and not {"Write", "Edit"} <= set(tool_list):
+            add(
+                findings, "W", loc,
+                f"'memory: {fm.data.get('memory')}' automatically enables Read, Write and Edit so the agent can "
+                "manage its memory files, while 'tools' withholds Write/Edit -- the docs do not say which wins, "
+                "so a read-only agent that must not write should leave memory unset",
+                code="V08",
+            )
+        raw_hooks = fm.raw_blocks.get("hooks")
+        if raw_hooks:
+            hooks, error = _read_block(raw_hooks)
+            if error:
+                add(findings, "W", f"{loc}#hooks",
+                    f"frontmatter 'hooks:' block could not be read ({error}) -- it is therefore unchecked, not confirmed correct")
+            else:
+                _check_hooks_block(root, loc, hooks, findings, base_dir=agent_file.parent)
+
+
+# A meta value that is not a literal: an identifier (not true/false/null), a
+# call, or a template string. Object/array values are fine.
+_META_NON_LITERAL_RE = re.compile(
+    r":\s*(?!true\b|false\b|null\b)[A-Za-z_$][\w$]*\s*(?:[,}\n]|\()|:\s*`"
+)
+_WORKFLOW_IO_RE = re.compile(
+    r"require\(\s*['\"](?:node:)?(?:fs|fs/promises|child_process)['\"]\s*\)"
+    r"|from\s+['\"](?:node:)?(?:fs|fs/promises|child_process)['\"]"
+    r"|\b(?:execSync|spawnSync|execFileSync)\s*\("
+)
 
 
 def check_workflows(root, findings):
@@ -848,9 +898,42 @@ def check_workflows(root, findings):
         if not re.search(r"export\s+const\s+meta\s*=\s*\{", text):
             add(findings, "E", loc, "missing 'export const meta = {...}' literal")
         else:
-            meta_match = re.search(r"export\s+const\s+meta\s*=\s*\{(.*?)\n\}", text, re.DOTALL)
-            if meta_match and not re.search(r"\bname\s*:", meta_match.group(1)):
+            meta_match = re.search(r"export\s+const\s+meta\s*=\s*\{(.*?)\}", text, re.DOTALL)
+            body = meta_match.group(1) if meta_match else ""
+            if meta_match and not re.search(r"\bname\s*:", body):
                 add(findings, "E", loc, "'meta' object is missing a 'name' field")
+            problems = []
+            if meta_match and not re.search(r"\bdescription\s*:", body):
+                problems.append("has no 'description'")
+            if meta_match and _META_NON_LITERAL_RE.search(body):
+                problems.append("is not a pure literal (a value is an identifier, a call or a template string)")
+            if problems:
+                add(
+                    findings, "E", loc,
+                    "'meta' " + " and ".join(problems) + " -- the runtime reads meta from the file before "
+                    "executing anything, so it must be `export const meta = { name, description }` written out "
+                    "as literals",
+                    code="V09",
+                )
+
+        io_hits = sorted({m.group(0) for m in _WORKFLOW_IO_RE.finditer(text)})
+        if io_hits:
+            add(
+                findings, "E", loc,
+                f"the script touches the filesystem or shell directly ({', '.join(io_hits)}) -- a workflow "
+                "script has no filesystem or shell access; only the agents it spawns read, write and run "
+                "commands, so move this into an agent() prompt",
+                code="V10",
+            )
+        if "${CLAUDE_SKILL_DIR}" in text:
+            add(
+                findings, "W", loc,
+                "'${CLAUDE_SKILL_DIR}' appears in the workflow source -- it is substituted in a skill's "
+                "markdown and allowed-tools, and nothing documents a substitution inside a workflow, so it "
+                "most likely arrives as literal text; resolve the absolute path in the composing session and "
+                "pass it through args",
+                code="V11",
+            )
 
         for label, bad_call in (
             ("Date.now()", r"Date\.now\s*\("),
@@ -919,12 +1002,27 @@ def check_rules(root, findings):
         loc = str(rule_file.relative_to(root))
         text = hc.read_text(rule_file)
         fm = hc.parse_frontmatter(text)
+        if not fm.ok and text.lstrip().startswith("---"):
+            add(
+                findings, "E", loc,
+                "frontmatter did not parse (" + "; ".join(fm.warnings) + ") -- whether this rule is "
+                "path-scoped or loads at launch cannot be read, so it is neither confirmed nor reported as unscoped",
+                code="V12",
+            )
+            continue
         # A rule with no frontmatter at all has no 'paths' just as surely as
-        # one with frontmatter but no 'paths' key -- both loads at launch,
+        # one with frontmatter but no 'paths' key -- both load at launch,
         # so both get the same warning below. Only the glob-syntax check
         # needs parsed data to run at all.
         paths = fm.data.get("paths") if fm.ok else None
-        if paths is None:
+        if paths is hc.UNPARSED_BLOCK or (paths is not None and not isinstance(paths, (list, str))):
+            add(
+                findings, "W", loc,
+                "'paths:' is neither a list of globs nor a single glob string -- the documented shape is a "
+                "YAML list, and a mapping or other structure is not read as a scope",
+                code="V13",
+            )
+        elif paths is None:
             add(
                 findings, "W", loc,
                 "no 'paths:' frontmatter -- this rule loads at launch just like "
@@ -981,7 +1079,39 @@ def _check_glob_syntax(loc, pattern, findings):
         add(findings, "E", loc, f"paths glob '{pattern}' has an unmatched '{{' -- {_GLOB_CONSEQUENCE}")
 
 
+def _gitignore_covers(root, name):
+    patterns = []
+    for gi in (Path(root) / ".gitignore", Path(root) / ".git" / "info" / "exclude"):
+        if gi.is_file():
+            patterns += [l.strip() for l in hc.read_text(gi).splitlines() if l.strip() and not l.startswith("#")]
+    import fnmatch
+    for pat in patterns:
+        if pat.startswith("!"):
+            continue
+        candidate = pat.lstrip("/").rstrip("/")
+        if candidate == name or fnmatch.fnmatch(name, candidate):
+            return True
+    return False
+
+
+def _check_claude_local_ignored(root, findings):
+    """V14. `CLAUDE.local.md` holds one person's project preferences and the
+    docs say to gitignore it; committed, it becomes everyone's instructions."""
+    local = Path(root) / "CLAUDE.local.md"
+    if not local.is_file() or _gitignore_covers(root, "CLAUDE.local.md"):
+        return
+    in_repo = (Path(root) / ".git").exists()
+    add(
+        findings, "E" if in_repo else "W", "CLAUDE.local.md",
+        "exists but is not gitignored -- it is the per-person instructions file, and committed it loads for "
+        "every clone as if it were CLAUDE.md; add `CLAUDE.local.md` to .gitignore"
+        + ("" if in_repo else " (no .git here, so this is advisory)"),
+        code="V14",
+    )
+
+
 def check_claude_md(root, findings):
+    _check_claude_local_ignored(root, findings)
     paths = hc.claude_md_paths(root)
     if len(paths) > 1 and {p.name for p in paths} >= {"CLAUDE.md"} and any(
         p.parent.name == ".claude" for p in paths
