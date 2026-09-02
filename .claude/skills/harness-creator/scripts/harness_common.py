@@ -31,28 +31,27 @@ SPEC_STATUSES = ("proposed", "approved", "generated", "validated", "declined", "
 STATUSES_CLAIMING_A_FILE = frozenset({"generated", "validated"})
 
 
+_HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
+# A cell may contain an escaped pipe (`\|`); splitting on a bare pipe would
+# shift every column after it.
+_CELL_SPLIT_RE = re.compile(r"(?<!\\)\|")
+
+
 def iter_inventory_rows(spec_text):
     """Yield the data rows of the Behavior inventory table as lists of cell
     strings, skipping the header and separator rows and anything inside an
-    HTML comment. Ends at the next heading of any level."""
+    HTML comment (wherever the comment starts or ends). Ends at the next
+    heading of any level."""
+    masked = _HTML_COMMENT_RE.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), spec_text)
     in_section = False
-    in_comment = False
-    for line in spec_text.splitlines():
+    for line in masked.splitlines():
         stripped = line.strip()
-        if in_comment:
-            if "-->" in stripped:
-                in_comment = False
-            continue
-        if stripped.startswith("<!--"):
-            if "-->" not in stripped:
-                in_comment = True
-            continue
         if stripped.startswith("#"):
             in_section = stripped.lstrip("#").strip().lower() == INVENTORY_HEADING.lower()
             continue
         if not in_section or not stripped.startswith("|"):
             continue
-        cells = [c.strip() for c in stripped.strip("|").split("|")]
+        cells = [c.strip() for c in _CELL_SPLIT_RE.split(stripped.strip("|"))]
         if not cells or set("".join(cells)) <= set("-: "):
             continue
         if cells[0].lower() == INVENTORY_COLUMNS[0]:
@@ -532,12 +531,17 @@ def settings_paths(root):
 class Finding(tuple):
     """A lint finding. Unpacks as (level, location, message); `code` is an
     optional stable identifier (V01, ...) so a fixture can assert exactly
-    which check fired and a reader can look one up."""
+    which check fired and a reader can look one up. Equality and direct JSON
+    serialisation are those of the 3-tuple and ignore `code`; use
+    `findings_to_json` to carry it."""
 
     def __new__(cls, level, location, message, code=None):
         self = super().__new__(cls, (level, location, message))
         self.code = code
         return self
+
+    def __getnewargs__(self):
+        return (self[0], self[1], self[2], self.code)
 
 
 def print_findings_text(findings, title):

@@ -186,7 +186,7 @@ def _spec_rows_without_files(root, spec_text, on_disk):
     for row in hc.iter_inventory_rows(spec_text):
         if len(row) < 5:
             continue
-        component, status = row[3], row[4].lower()
+        component, status = row[3], row[4].strip("`")
         if status not in hc.STATUSES_CLAIMING_A_FILE:
             continue
         # The spec convention is a backticked repo-relative path, but accept

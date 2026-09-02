@@ -155,7 +155,7 @@ After a repair, re-run only the scenarios that failed — not the whole suite. T
 
 ## Headless permission handling: the mechanism is settled, the machine never is
 
-Headless `-p` permission handling — which combination of `--permission-mode`, `--dangerously-skip-permissions`, and pre-registered `permissions.allow` entries lets a scenario run to completion without stalling — went four generations without a confirmed run and now has one; `run_e2e.py`'s docstring holds the date and what was run, and is the only place that record lives.
+Headless `-p` permission handling — which combination of `--permission-mode`, `--dangerously-skip-permissions`, and pre-registered `permissions.allow` entries lets a scenario run to completion without stalling — went four generations without a confirmed run and now has one: `--isolate` plus skip-permissions completed three scenarios on 2026-08-22 (`claude` 2.1.239), no auth failure, no permission stall.
 
 That settles the flag combination and it does not settle the box you are on, because **auth is per-machine**: the credentials a spawned `claude` needs are the ones where it spawns, not the ones the calling session holds. A `claude` child spawned via Bash can fail with "Not logged in" even on a simple headless call, because the host session's OAuth/keychain credentials don't always propagate to a Bash-spawned child — and that link is what `run_e2e.py`'s `claude -p` invocation depends on.
 

@@ -414,6 +414,14 @@ class FindingCodeTests(unittest.TestCase):
             level, location, message = f
             self.assertIn(level, ("E", "W"))
 
+    def test_findings_survive_copy_and_pickle_with_their_code(self):
+        import copy, pickle
+        f = vh.hc.Finding("E", "x", "y", code="V01")
+        for clone in (copy.copy(f), copy.deepcopy(f), pickle.loads(pickle.dumps(f))):
+            self.assertEqual(tuple(clone), ("E", "x", "y"))
+            self.assertEqual(clone.code, "V01")
+        self.assertEqual(f, ("E", "x", "y"))  # equality is the tuple's; code rides alongside
+
 
 class MessageRepairTests(unittest.TestCase):
     def test_default_mode_message_has_no_duplicated_fragment(self):

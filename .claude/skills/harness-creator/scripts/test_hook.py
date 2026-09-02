@@ -168,9 +168,8 @@ def interpret(event, exit_code, stdout, stderr):
         except json.JSONDecodeError:
             if exit_code == 0:
                 lines.append("exit 0 with non-JSON stdout -- stdout is added as plain visible context (only a few events treat plain stdout as context at all; see the event's row in hooks-events.md), not parsed as a decision.")
-    # decision_json is only ACTUALLY read by Claude Code on exit 0 -- on any
-    # other exit code it's discarded, which is exactly the mixed-channel
-    # mistake flagged below when exit_code == 2.
+    # decision_json is only read by Claude Code on exit 0 -- on any other
+    # exit code it is discarded, which the exit_code == 2 branch reports.
     if exit_code != 0:
         stdout_json_for_exit2 = decision_json
         decision_json = None

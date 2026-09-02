@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Look up one hook event's schema instead of reading all thirty.
+"""Print one hook event's schema from references/hooks-events.md.
 
     hook_event.py --event PreToolUse
     hook_event.py --list
@@ -7,9 +7,8 @@
 Prints one event's section of references/hooks-events.md -- trigger timing,
 matcher, input fields, decision channel, typical use, version caveats --
 followed by the input fields every event shares. The --event choices are
-generated from that file, so this script's signature is the event list:
-several events postdate common training data, and the list is what shows
-they exist.
+generated from that file, so this script's signature is the complete event
+list.
 
 Python 3.10+, stdlib only.
 """

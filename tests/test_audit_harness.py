@@ -295,6 +295,39 @@ class SpecDriftJsonContractTests(unittest.TestCase):
 
 
 class InventoryTableParsingTests(unittest.TestCase):
+    def test_an_escaped_pipe_inside_a_cell_does_not_shift_columns(self):
+        spec = (
+            "## Behavior inventory\n"
+            "| id | b | layer | component | status |\n"
+            "| B1 | allow `a`\\|`b` | hook | `.claude/hooks/x.sh` | generated |\n"
+        )
+        rows = list(ah._iter_inventory_rows(spec))
+        self.assertEqual(rows[0][3], "`.claude/hooks/x.sh`")
+        self.assertEqual(rows[0][4], "generated")
+
+    def test_a_comment_opened_after_prose_still_hides_its_rows(self):
+        spec = (
+            "## Behavior inventory\n"
+            "| id | b | layer | component | status |\n"
+            "Some prose <!-- a comment that runs on\n"
+            "| B9 | hidden | skill | `.claude/skills/ghost/` | generated |\n"
+            "--> and closes here\n"
+            "| B1 | real | skill | `.claude/skills/real/` | proposed |\n"
+        )
+        self.assertEqual([r[0] for r in ah._iter_inventory_rows(spec)], ["B1"])
+
+    def test_status_comparison_is_case_sensitive_like_the_template(self):
+        """`Validated` is not `validated`: V01 reports it, and the drift
+        check must not quietly read it as a file claim either."""
+        spec = (
+            "## Behavior inventory\n"
+            "| id | b | layer | component | status |\n"
+            "| B1 | x | skill | `.claude/skills/nope/` | Validated |\n"
+            "| B2 | y | skill | `.claude/skills/nope2/` | validated |\n"
+        )
+        rows = ah._spec_rows_without_files(REPO_ROOT, spec, set())
+        self.assertEqual([r["id"] for r in rows], ["B2"])
+
     def test_skips_header_and_separator_rows(self):
         spec = (
             "## Behavior inventory\n"

@@ -11,9 +11,11 @@ written for the author and printed to the user. stdlib unittest only.
 """
 
 import ast
+import io
 import re
 import subprocess
 import sys
+import tokenize
 import unittest
 from pathlib import Path
 
@@ -39,6 +41,11 @@ LEAK_WORDS = (
     "interview.md",
     "re-entry",
     "Hard line",
+    "instead of reading all thirty",
+    "postdate common training data",
+    "pass this when",
+    "flagged below",
+    "the plan",
 )
 
 
@@ -60,9 +67,16 @@ def env_with_fake_claude():
     return env
 
 
+def _string_literals(node):
+    """Every string constant inside an expression, so a help= built by
+    concatenation or an f-string is scanned like a plain literal."""
+    return [n.value for n in ast.walk(node) if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+
+
 def user_facing_strings(path):
     """(kind, text) for every string the user can read: module and function
-    docstrings, `help=`/`description=` keywords, and comments."""
+    docstrings, `help=`/`description=` keywords (however assembled), and
+    every comment token, inline ones included."""
     source = path.read_text(encoding="utf-8")
     tree = ast.parse(source)
     out = []
@@ -76,12 +90,11 @@ def user_facing_strings(path):
                 out.append((f"docstring of {node.name}", d))
         if isinstance(node, ast.Call):
             for kw in node.keywords:
-                if kw.arg in ("help", "description") and isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
-                    out.append((f"{kw.arg}= at line {node.lineno}", kw.value.value))
-    for i, line in enumerate(source.splitlines(), 1):
-        stripped = line.strip()
-        if stripped.startswith("#") and not stripped.startswith("#!"):
-            out.append((f"comment at line {i}", stripped))
+                if kw.arg in ("help", "description"):
+                    out.append((f"{kw.arg}= at line {node.lineno}", " ".join(_string_literals(kw.value))))
+    for tok in tokenize.generate_tokens(io.StringIO(source).readline):
+        if tok.type == tokenize.COMMENT and not tok.string.startswith("#!"):
+            out.append((f"comment at line {tok.start[0]}", tok.string))
     return out
 
 

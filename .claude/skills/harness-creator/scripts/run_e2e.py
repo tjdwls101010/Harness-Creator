@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Spawn a headless Claude Code session against a project and record what happened.
 
-    python run_e2e.py --project <target-repo> --prompt "..." [--prompt-file f]
+    python run_e2e.py --project <target-repo> (--prompt "..." | --prompt-file f)
         [--model <id>] [--timeout 300] [--out <dir>] [--json]
-        [--permission-mode acceptEdits] [--isolate]
+        [--permission-mode acceptEdits] [--isolate [--keep-isolated]]
 
 Runs `claude -p` against a project and writes transcript.jsonl and
 summary.json to --out. It grades nothing; the summary lists tool calls,
@@ -172,7 +172,7 @@ def main():
     parser.add_argument("--json", action="store_true", help="print the summary as JSON to stdout too")
     parser.add_argument("--permission-mode", help="passed through to `claude -p --permission-mode`")
     parser.add_argument("--isolate", action="store_true", help="copy --project to a temp dir first and run there, so writes don't touch the original; implies --dangerously-skip-permissions unless --permission-mode is also given")
-    parser.add_argument("--keep-isolated", action="store_true", help="requires --isolate: leave the temp copy on disk and record its path in summary.json; pass this when a scenario grades generated FILES, since the copy is where they are. Without it the copy is deleted -- a project copy per run is not collected by anything else")
+    parser.add_argument("--keep-isolated", action="store_true", help="requires --isolate: leave the temp copy on disk and record its path in summary.json, so files the session generated can be inspected there. Without it the copy is deleted -- a project copy per run is not collected by anything else")
     args = parser.parse_args()
 
     if args.keep_isolated and not args.isolate:
