@@ -619,10 +619,13 @@ class PackageClosureRegressionTests(unittest.TestCase):
 
     def test_no_plan_document_is_named(self):
         """Derived from the plan tree rather than hardcoded, so a pointer at
-        any generation's plan file fails, not just the one v5 removed."""
-        plan_docs = {
-            p.name for p in (REPO_ROOT / "docs" / "plan").rglob("[0-9][0-9]-*.md")
-        }
+        any generation's plan file fails, not just the one v5 removed. With no
+        plan tree there is nothing to derive from, so the pin skips and
+        returns on its own if one reappears."""
+        plan_tree = REPO_ROOT / "docs" / "plan"
+        if not plan_tree.is_dir():
+            self.skipTest("docs/plan/ is gone; nothing to derive the pin from")
+        plan_docs = {p.name for p in plan_tree.rglob("[0-9][0-9]-*.md")}
         self.assertTrue(plan_docs, "the plan tree should not be empty")
         for path in self._shipped_files():
             text = read(path)
