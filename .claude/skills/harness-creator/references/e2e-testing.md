@@ -20,15 +20,18 @@ export const meta = {
   description: 'Run the spec Validation scenarios as headless sessions against the generated harness and grade each transcript.',
 }
 
-// Absolute path, resolved here -- ${CLAUDE_SKILL_DIR} is NOT substituted in
-// workflow prompt strings (see below).
+// Both resolved in the composing session: ${CLAUDE_SKILL_DIR} is NOT
+// substituted in workflow prompt strings (see below), and the spawned
+// claude picks its own default model unless told the user's.
 const SKILL_DIR = '/absolute/path/to/the/harness-creator/skill'
+const MODEL = 'the-model-the-user-actually-runs'
 
 // One entry per scenario in the spec's Validation section; `expect` is
 // copied verbatim from the spec -- the grading agent must never invent
-// what "correct" means.
+// what "correct" means. `keep` marks a scenario graded on files: the
+// isolated copy is kept and its path lands in summary.json.
 const scenarios = [
-  { id: 'V1', isolate: true,  prompt: 'Add a new API route for deleting a user account.',
+  { id: 'V1', isolate: true, keep: true, prompt: 'Add a new API route for deleting a user account.',
     expect: 'Should trigger the api-route-conventions skill and follow its error-handling pattern.' },
   { id: 'V2', isolate: false, prompt: 'What testing framework does this project use?',
     expect: 'Should answer "pytest" by reading CLAUDE.md, not by guessing or searching.' },
@@ -44,14 +47,16 @@ const VERDICT = { type: 'object', required: ['verdict', 'evidence'], properties:
 const grades = await pipeline(
   scenarios,
   s => agent(
-    `Run: python "${SKILL_DIR}/scripts/run_e2e.py" --project . --prompt ${JSON.stringify(s.prompt)} ` +
-    `--out .claude/.e2e-runs/${s.id} --json ${s.isolate ? '--isolate' : ''}. ` +
+    `Run: python "${SKILL_DIR}/scripts/run_e2e.py" --project . --model ${MODEL} ` +
+    `--prompt ${JSON.stringify(s.prompt)} --out .claude/.e2e-runs/${s.id} --json ` +
+    `${s.isolate ? '--isolate' : ''} ${s.keep ? '--keep-isolated' : ''}. ` +
     `Report the summary.json contents back verbatim.`,
     { label: `run:${s.id}` },
   ),
   (_summary, s) => agent(
     `Grade .claude/.e2e-runs/${s.id}/transcript.jsonl against this expectation: "${s.expect}". ` +
-    `Cite specific tool_use events or response text as evidence. ` +
+    `If summary.json names an isolated_copy, read the files there rather than the transcript's account of them. ` +
+    `Cite specific tool_use events, response text or file contents as evidence. ` +
     `Surface-level compliance without real supporting evidence is a FAIL, not a PASS.`,
     { label: `grade:${s.id}`, schema: VERDICT },
   ).then(v => ({ ...v, id: s.id })),
@@ -60,7 +65,7 @@ const grades = await pipeline(
 return { passed: grades.filter(g => g.verdict === 'pass').length, total: grades.length, grades }
 ```
 
-The script never decides whether a transcript shows real trigger evidence or what "correct behavior" means — both live in the prompt strings and the spec. Route each failure to a repair target yourself with SKILL.md's layer-routing table, whose repair column is the same routing run backwards; don't hand that judgment to an agent inside the workflow, since you are the one who then acts on it.
+The script never decides whether a transcript shows real trigger evidence or what "correct behavior" means — both live in the prompt strings and the spec. The Report phase is yours, in the main session: take the returned `grades`, route each failure to a repair target with SKILL.md's layer-routing table (its repair column is the same routing run backwards), and delete any kept isolated copies once graded. Don't hand that judgment to an agent inside the workflow, since you are the one who then acts on it. Before launching, check that `permissions.allow` covers the Bash call the Run agents make — a workflow's agents stall on an unapproved call with nobody watching the prompt (references/workflows.md) — or take the fallback below.
 
 **Two failures in this shape are silent.** `${CLAUDE_SKILL_DIR}` is substituted in a skill's own markdown and in `allowed-tools` rules — **not** in a workflow's prompt strings or a subagent's shell environment. Written there it arrives as literal text and becomes a permission stall or a `python "/scripts/run_e2e.py"` file-not-found, which reads like a permissions problem and isn't one; resolve the absolute path in the composing session. And an `agent()` call **without** a `schema` returns its final text as a plain string, so reading a property off it (`run.label`, `run.id`) silently yields `undefined` and a path like `.e2e-runs/undefined/`; attach a schema, or carry the identity from the original item as the second stage above does.
 
@@ -88,7 +93,7 @@ Every scenario's expected behaviour should map to a checkable assertion type. Th
 | CLAUDE.md knowledge reflected | Ask a project-fact question CLAUDE.md is supposed to answer and check the final response for the right fact, not the right words. |
 | Artifact quality | Inspect the files the session created or modified, in an isolated copy. Read the file; a transcript can claim it wrote correct code while the file is empty or wrong. |
 
-Trigger, hook and knowledge are binary — an event is in the transcript or it isn't, a fact is right or wrong — so a rubric adds ceremony without resolution. Compliance and artifact quality are where a grader can honestly say "mostly", and where the lazy PASS lives, so give those a `rubric:` in the spec's scenario row listing the dimensions that matter, and have the grader score each:
+A binary assertion — an event is in the transcript or it isn't, a fact is right or wrong, as with trigger, hook and knowledge — needs no rubric; it would add ceremony without resolution. An assertion a grader can honestly call "mostly" satisfied, as with compliance and artifact quality, is where the lazy PASS lives, so give it a `rubric:` in the spec's scenario row listing the dimensions that matter, and have the grader score each:
 
 ```markdown
 | V4 | Artifact quality | Generated migration has a rollback path | rubric: has-rollback; idempotent; names the table |
@@ -108,12 +113,12 @@ After a repair, re-run the scenarios that failed and any whose surface the repai
 
 ## Headless permission handling: the mechanism is settled, the machine never is
 
-The flag combination that lets a headless scenario run to completion is settled: `--isolate` plus skip-permissions completed three scenarios on 2026-08-22 (`claude` 2.1.239), no auth failure, no permission stall. What that does not settle is the box you are on, because **auth is per-machine**: the credentials a spawned `claude` needs are the ones where it spawns, and a child spawned via Bash can fail with "Not logged in" even when the calling session is logged in.
+The flag combination that lets a headless scenario run to completion is settled (`--isolate` with skip-permissions, confirmed against real sessions; the record is this repo's spec). What it does not settle is the box you are on, because **auth is per-machine**: the credentials a spawned `claude` needs are the ones where it spawns, and a child spawned via Bash can fail with "Not logged in" even when the calling session is logged in.
 
 **`--isolate` is opt-in**, so choosing it is a decision you make per run: without it the headless session runs in the user's actual working tree, and a scenario that writes, writes there. Attach it for anything that isn't purely read-only, use `--permission-mode` when a scenario needs to run under a specific mode rather than with permissions skipped, and say which you picked when you propose the run. The isolated copy is where an artifact-quality scenario's files are, so keep it for those and delete it once graded — nothing else collects it.
 
-On a machine you have not run this on before, tell the user the first run *is* the confirmation and read its outcome that way: scenarios that complete with a sensible transcript settle it; a stall on a permission prompt nobody answers, or an auth-shaped failure, means adjust the flag combination, not that something else is broken. Note which happened in the spec's Validation section so the next run doesn't re-litigate it.
+On a machine you have not run this on before, tell the user the first run *is* the confirmation and read its outcome that way: scenarios that complete with a sensible transcript settle it; a stall on a permission prompt nobody answers means adjust the permission flags; "Not logged in" means the spawned `claude` needs authenticating on that machine, and no flag fixes it. Note which happened in the spec's Validation section so the next run doesn't re-litigate it.
 
 ## What e2e cannot cover
 
-The interview can never be e2e-tested: `AskUserQuestion` is unavailable in headless (`-p`) and subagent contexts, so no scripted session can exercise question phrasing, vocabulary calibration or the approval sequence the way a real user would. That is verified only by dogfooding — running it yourself, interactively, against a real or sample project. A clean e2e report validates the *generated harness*, never the interview that produced it.
+The interview can never be e2e-tested: `AskUserQuestion` is unavailable in headless (`-p`) and subagent contexts, so no scripted session can exercise question phrasing, calibration to the user's proficiency and vocabulary, or the approval sequence the way a real user would. That is verified only by dogfooding — running it yourself, interactively, against a real or sample project. A clean e2e report validates the *generated harness*, never the interview that produced it.
