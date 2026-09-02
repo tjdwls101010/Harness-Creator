@@ -860,14 +860,16 @@ def check_agents(root, findings):
                     "the main conversation or work from a brief handed to it up front",
                     code="V06",
                 )
-        if fm.data.get("memory") and tool_list is not None and not {"Write", "Edit"} <= set(tool_list):
-            add(
-                findings, "W", loc,
-                f"'memory: {fm.data.get('memory')}' automatically enables Read, Write and Edit so the agent can "
-                "manage its memory files, while 'tools' withholds Write/Edit -- the docs do not say which wins, "
-                "so a read-only agent that must not write should leave memory unset",
-                code="V08",
-            )
+        if fm.data.get("memory") and tool_list is not None:
+            missing = [t for t in ("Read", "Write", "Edit") if t not in tool_list]
+            if missing:
+                add(
+                    findings, "W", loc,
+                    f"'memory: {fm.data.get('memory')}' automatically enables Read, Write and Edit so the agent "
+                    f"can manage its memory files, while 'tools' withholds {', '.join(missing)} -- the docs do "
+                    "not say which wins, so an agent that must not have those tools should leave memory unset",
+                    code="V08",
+                )
         raw_hooks = fm.raw_blocks.get("hooks")
         if raw_hooks:
             hooks, error = _read_block(raw_hooks)
@@ -881,13 +883,48 @@ def check_agents(root, findings):
 # A meta value that is not a literal: an identifier (not true/false/null), a
 # call, or a template string. Object/array values are fine.
 _META_NON_LITERAL_RE = re.compile(
-    r":\s*(?!true\b|false\b|null\b)[A-Za-z_$][\w$]*\s*(?:[,}\n]|\()|:\s*`"
+    r":\s*(?!true\b|false\b|null\b)[A-Za-z_$][\w$]*\s*(?:[,}\n.\[]|\()|:\s*`"
 )
+# Matched against the source with string literals and comments blanked, so a
+# prompt that *mentions* `import fs` is not a hit. Module specifiers survive
+# the blanking as their quotes, hence the `["']["']` shapes below.
 _WORKFLOW_IO_RE = re.compile(
-    r"require\(\s*['\"](?:node:)?(?:fs|fs/promises|child_process)['\"]\s*\)"
-    r"|from\s+['\"](?:node:)?(?:fs|fs/promises|child_process)['\"]"
+    r"\brequire\(\s*\bMOD_(?:fs|fs_promises|child_process)\b\s*\)"
+    r"|\bfrom\s+MOD_(?:fs|fs_promises|child_process)\b"
+    r"|\bimport\(\s*MOD_(?:fs|fs_promises|child_process)\b\s*\)"
     r"|\b(?:execSync|spawnSync|execFileSync)\s*\("
 )
+_JS_MODULE_SPECIFIER_RE = re.compile(r"""(['"])(?:node:)?(fs/promises|fs|child_process)\1""")
+
+
+def _strip_js_strings_and_comments(source):
+    """Blank string literals, template strings and comments, keeping the
+    module specifiers the IO check needs as `MOD_<name>` tokens. Not a
+    parser: an unbalanced quote inside a regex literal can mis-blank a line,
+    which errs toward silence, not toward a false finding."""
+    source = _JS_MODULE_SPECIFIER_RE.sub(lambda m: "MOD_" + m.group(2).replace("/", "_"), source)
+    out = []
+    i, n = 0, len(source)
+    while i < n:
+        ch = source[i]
+        if source.startswith("//", i):
+            j = source.find("\n", i)
+            j = n if j == -1 else j
+            out.append(" " * (j - i)); i = j
+        elif source.startswith("/*", i):
+            j = source.find("*/", i + 2)
+            j = n if j == -1 else j + 2
+            out.append(re.sub(r"[^\n]", " ", source[i:j])); i = j
+        elif ch in "'\"`":
+            j = i + 1
+            while j < n and source[j] != ch:
+                j += 2 if source[j] == "\\" else 1
+            j = min(j + 1, n)
+            out.append(ch + re.sub(r"[^\n]", " ", source[i + 1:j - 1]) + (ch if j - 1 < n else ""))
+            i = j
+        else:
+            out.append(ch); i += 1
+    return "".join(out)
 
 
 def check_workflows(root, findings):
@@ -895,10 +932,11 @@ def check_workflows(root, findings):
         loc = str(wf_file.relative_to(root))
         text = hc.read_text(wf_file)
 
+        code_only = _strip_js_strings_and_comments(text)
         if not re.search(r"export\s+const\s+meta\s*=\s*\{", text):
             add(findings, "E", loc, "missing 'export const meta = {...}' literal")
         else:
-            meta_match = re.search(r"export\s+const\s+meta\s*=\s*\{(.*?)\}", text, re.DOTALL)
+            meta_match = re.search(r"export\s+const\s+meta\s*=\s*\{(.*?)\}", code_only, re.DOTALL)
             body = meta_match.group(1) if meta_match else ""
             if meta_match and not re.search(r"\bname\s*:", body):
                 add(findings, "E", loc, "'meta' object is missing a 'name' field")
@@ -907,6 +945,9 @@ def check_workflows(root, findings):
                 problems.append("has no 'description'")
             if meta_match and _META_NON_LITERAL_RE.search(body):
                 problems.append("is not a pure literal (a value is an identifier, a call or a template string)")
+            first = re.sub(r"^\s+", "", code_only)
+            if not first.startswith("export const meta") and not re.match(r"export\s+const\s+meta\b", first):
+                problems.append("is not the file's first statement")
             if problems:
                 add(
                     findings, "E", loc,
@@ -916,7 +957,7 @@ def check_workflows(root, findings):
                     code="V09",
                 )
 
-        io_hits = sorted({m.group(0) for m in _WORKFLOW_IO_RE.finditer(text)})
+        io_hits = sorted({m.group(0) for m in _WORKFLOW_IO_RE.finditer(code_only)})
         if io_hits:
             add(
                 findings, "E", loc,
@@ -1079,6 +1120,21 @@ def _check_glob_syntax(loc, pattern, findings):
         add(findings, "E", loc, f"paths glob '{pattern}' has an unmatched '{{' -- {_GLOB_CONSEQUENCE}")
 
 
+def _git_says_ignored(root, name):
+    """(ignored, tracked) from git itself, or None when git is unavailable."""
+    import shutil, subprocess
+    if not shutil.which("git"):
+        return None
+    try:
+        ignored = subprocess.run(["git", "-C", str(root), "check-ignore", "-q", name],
+                                 capture_output=True, timeout=10).returncode == 0
+        tracked = subprocess.run(["git", "-C", str(root), "ls-files", "--error-unmatch", name],
+                                 capture_output=True, timeout=10).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return ignored, tracked
+
+
 def _gitignore_covers(root, name):
     patterns = []
     for gi in (Path(root) / ".gitignore", Path(root) / ".git" / "info" / "exclude"):
@@ -1098,13 +1154,23 @@ def _check_claude_local_ignored(root, findings):
     """V14. `CLAUDE.local.md` holds one person's project preferences and the
     docs say to gitignore it; committed, it becomes everyone's instructions."""
     local = Path(root) / "CLAUDE.local.md"
-    if not local.is_file() or _gitignore_covers(root, "CLAUDE.local.md"):
+    if not local.is_file():
         return
     in_repo = (Path(root) / ".git").exists()
+    verdict = _git_says_ignored(root, "CLAUDE.local.md") if in_repo else None
+    if verdict is not None:
+        ignored, tracked = verdict
+        if ignored and not tracked:
+            return
+        why = "is tracked by git" if tracked else "is not gitignored"
+    else:
+        if _gitignore_covers(root, "CLAUDE.local.md"):
+            return
+        why = "is not gitignored"
     add(
         findings, "E" if in_repo else "W", "CLAUDE.local.md",
-        "exists but is not gitignored -- it is the per-person instructions file, and committed it loads for "
-        "every clone as if it were CLAUDE.md; add `CLAUDE.local.md` to .gitignore"
+        f"{why} -- it is the per-person instructions file, and committed it loads for every clone as if it "
+        "were CLAUDE.md; add `CLAUDE.local.md` to .gitignore" + (" and `git rm --cached` it" if verdict and verdict[1] else "")
         + ("" if in_repo else " (no .git here, so this is advisory)"),
         code="V14",
     )

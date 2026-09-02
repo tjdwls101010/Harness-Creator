@@ -126,21 +126,75 @@ class PositiveFixtureTests(unittest.TestCase):
         self.assertEqual(set(self.coded), set(CODES))
 
 
+class WorkflowShapeBoundaryTests(unittest.TestCase):
+    """One invalid shape per case, plus valid shapes that look invalid."""
+
+    def _wf(self, source):
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
+        wf = tmp / ".claude" / "workflows"
+        wf.mkdir(parents=True)
+        (wf / "w.js").write_text(source, encoding="utf-8")
+        findings, _ = vh.run(tmp, strict=False)
+        return {code: [f[2] for f in fs] for code, fs in by_code(findings).items()}
+
+    GOOD = "export const meta = { name: 'w', description: 'Maps input: value, then more', phases: [{ title: 'A' }] }\n"
+
+    def test_a_literal_meta_with_colons_in_strings_and_a_phases_array_is_fine(self):
+        self.assertNotIn("V09", self._wf(self.GOOD + "const r = await agent('go')\nreturn { r }\n"))
+
+    def test_missing_description_alone(self):
+        codes = self._wf("export const meta = { name: 'w' }\nreturn {}\n")
+        self.assertEqual(len(codes.get("V09", [])), 1)
+        self.assertIn("description", codes["V09"][0])
+
+    def test_computed_value_alone(self):
+        codes = self._wf("export const meta = { name: config.name, description: 'x' }\nreturn {}\n")
+        self.assertEqual(len(codes.get("V09", [])), 1)
+        self.assertIn("literal", codes["V09"][0])
+
+    def test_meta_after_another_statement(self):
+        codes = self._wf("const NAME = 'w'\nexport const meta = { name: 'w', description: 'x' }\nreturn {}\n")
+        self.assertEqual(len(codes.get("V09", [])), 1)
+        self.assertIn("first statement", codes["V09"][0])
+
+    def test_a_prompt_that_mentions_fs_is_not_io(self):
+        codes = self._wf(self.GOOD + "const r = await agent(\"Use `import fs from 'node:fs'` in the script you write.\")\n// import fs from 'fs'\nreturn { r }\n")
+        self.assertNotIn("V10", codes)
+
+    def test_dynamic_import_and_require_are_io(self):
+        for line in ("const fs = await import('node:fs')", "const cp = require('child_process')", "execSync('ls')"):
+            codes = self._wf(self.GOOD + line + "\nreturn {}\n")
+            self.assertEqual(len(codes.get("V10", [])), 1, line)
+
+
 class ClaudeLocalGitignoreTests(unittest.TestCase):
     """memory, CLAUDE.md locations: "Local instructions -- `./CLAUDE.local.md`
     -- Personal project-specific preferences; add to `.gitignore`". An error
     inside a git repository, where the file will otherwise be committed; a
     warning outside one, where nothing can be inferred."""
 
-    def _project(self, git, ignored):
+    def _project(self, git, ignored, gitignore="CLAUDE.local.md\n", tracked=False):
         tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, tmp, True)
         (tmp / "CLAUDE.local.md").write_text("# mine\n", encoding="utf-8")
         if git:
-            (tmp / ".git").mkdir()
+            subprocess.run(["git", "init", "-q", str(tmp)], check=True, capture_output=True)
         if ignored:
-            (tmp / ".gitignore").write_text("CLAUDE.local.md\n", encoding="utf-8")
+            (tmp / ".gitignore").write_text(gitignore, encoding="utf-8")
+        if tracked:
+            subprocess.run(["git", "-C", str(tmp), "add", "-f", "CLAUDE.local.md"], check=True, capture_output=True)
         return tmp
+
+    def test_negation_after_a_broad_pattern_is_read_the_way_git_reads_it(self):
+        findings, _ = vh.run(self._project(git=True, ignored=True, gitignore="*.md\n!CLAUDE.local.md\n"), strict=False)
+        self.assertEqual(len(by_code(findings).get("V14", [])), 1)
+
+    def test_a_tracked_file_is_an_error_even_when_a_pattern_matches(self):
+        findings, _ = vh.run(self._project(git=True, ignored=True, tracked=True), strict=False)
+        hits = by_code(findings).get("V14", [])
+        self.assertEqual(len(hits), 1)
+        self.assertIn("tracked", hits[0][2])
 
     def test_error_in_a_repo_that_does_not_ignore_it(self):
         findings, _ = vh.run(self._project(git=True, ignored=False), strict=False)
@@ -157,7 +211,6 @@ class ClaudeLocalGitignoreTests(unittest.TestCase):
     def test_silent_when_ignored(self):
         findings, _ = vh.run(self._project(git=True, ignored=True), strict=False)
         self.assertEqual(by_code(findings).get("V14", []), [])
-        findings, _ = vh.run(self._project(git=True, ignored=True).parent, strict=False)
 
 
 class WorkflowNameCollisionTests(unittest.TestCase):
