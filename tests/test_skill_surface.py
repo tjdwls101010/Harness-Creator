@@ -30,32 +30,37 @@ def read(path):
     return path.read_text(encoding="utf-8")
 
 
-class WrapUpOrderTests(unittest.TestCase):
-    """B2. The Wrap-up ran validate_harness.py first, then edited the spec and
-    CLAUDE.md -- so the state that actually got committed was never validated,
-    and a line claimed the earlier run would 'independently catch' drift that
-    did not exist yet when it ran."""
+class PassOrderTests(unittest.TestCase):
+    """The pass is one paragraph of dependency order, each step consuming the
+    one before it. Two orderings inside it are load-bearing: the wrap-up's
+    re-validation has to come after the spec and CLAUDE.md edits it checks
+    (v2 ran it first and committed an unvalidated state), and the handoff
+    comes last, stated as a principle that defers to the target project's
+    git conventions rather than as an unconditional commit."""
 
     def setUp(self):
-        self.lines = read(SKILL_MD).splitlines()
-        start = next(i for i, l in enumerate(self.lines) if "Wrap-up" in l)
-        self.block = self.lines[start:start + 12]
-
-    def _index_of(self, needle):
-        for i, line in enumerate(self.block):
-            if needle in line:
-                return i
-        self.fail(f"{needle!r} not found in the Wrap-up block")
+        text = read(SKILL_MD)
+        self.para = text.split("## How a pass runs")[1].split("\n## ")[0]
+        self.wrap = self.para.split("Wrap up")[1]
 
     def test_validation_runs_after_the_edits_it_checks(self):
-        change_history = self._index_of("Change history")
-        pointers = self._index_of("update CLAUDE.md's pointers")
-        validate = self._index_of("validate_harness.py")
+        change_history = self.wrap.index("Change history")
+        pointers = self.wrap.index("update CLAUDE.md's pointers")
+        validate = self.wrap.index("validate_harness.py")
         self.assertLess(change_history, validate)
         self.assertLess(pointers, validate)
 
-    def test_commit_is_proposed_last(self):
-        self.assertLess(self._index_of("validate_harness.py"), self._index_of("propose a commit"))
+    def test_the_handoff_is_last_and_defers_to_the_project(self):
+        self.assertLess(self.wrap.index("validate_harness.py"), self.wrap.index("handoff"))
+        self.assertIn("git conventions", self.wrap)
+        self.assertNotIn("propose a commit", read(SKILL_MD))
+
+    def test_the_reference_reload_rule_carries_its_reason(self):
+        """v6 said "reload before generating, every time" with no reason; the
+        reason is that compaction summarizes a reference read away while it
+        re-attaches this file, and a rule without it cannot be re-derived."""
+        self.assertIn("read it again after a compaction", self.para)
+        self.assertIn("summarizes a reference read away", self.para)
 
     def test_false_independence_claim_is_gone(self):
         self.assertNotIn("will independently catch", read(SKILL_MD))
@@ -124,7 +129,14 @@ class DeadLinkCoverageTests(unittest.TestCase):
         return list(vh.iter_skill_pointers(text))
 
     def test_pointers_in_both_skill_md_and_references_are_scanned(self):
-        self.assertGreater(len(self._scan(read(SKILL_MD))), 10)
+        """SKILL.md routes to every reference the moment a component type is
+        picked, so every reference except the data file behind hook_event.py
+        must be reachable from it by a pointer the linter scans."""
+        pointed = set(self._scan(read(SKILL_MD)))
+        for ref in REFERENCES:
+            if ref.name == "hooks-events.md":
+                continue
+            self.assertIn(f"references/{ref.name}", pointed, ref.name)
         ref_hits = sum(len(self._scan(read(p))) for p in REFERENCES)
         self.assertGreater(ref_hits, 0, "reference-to-reference pointers must be scanned")
 
@@ -187,44 +199,106 @@ class AlwaysLoadedBudgetTests(unittest.TestCase):
     again only with the same kind of reason written down; the ceiling below
     is the one that must not move."""
 
-    WORD_BUDGET = 2650          # self-imposed; see docstring and D34/C15
-    HARD_CEILING = 3750         # ~5,000 tokens; past here content is dropped
+    WORD_BUDGET = 2850          # self-imposed; see docstring
 
     def test_skill_md_within_budget(self):
+        """The 5,000-token figure is the compaction re-injection cap, not a
+        load cap: a first invocation loads the whole body. v7 measured the
+        pre-rewrite body at about 5,250 tokens (3.0 chars/token) and chose
+        not to design around compaction -- the body's quality comes first --
+        so the word pin stays as the only size guardrail. v7 raised it
+        2,650 -> 2,850: deleting interview.md moved its knowledge (K1-K15,
+        about 550 words as rule-plus-reason pairs) into this file, the
+        operating loop and hard lines it replaced gave back most but not all
+        of that, and the adversarial review then asked for reasons the four
+        frames demand (why the diagnostic order, why the pair, what e2e
+        costs) -- reasons cost words. What remained over the old pin was
+        knowledge and reasons, not argument."""
         words = len(read(SKILL_MD).split())
         self.assertLess(words, self.WORD_BUDGET, f"SKILL.md is {words} words")
 
-    def test_skill_md_under_the_compaction_ceiling(self):
-        self.assertLess(len(read(SKILL_MD).split()), self.HARD_CEILING)
-
-    def test_interview_md_is_not_loaded_unconditionally(self):
-        """WS8 step 2. If SKILL.md ever tells the model to load interview.md
-        on every invocation again, the always-loaded surface doubles and this
-        whole workstream is undone."""
-        text = read(SKILL_MD)
-        for phrase in (
-            "load it before Phase 1 of any invocation",
-            "load references/interview.md)",
-        ):
-            self.assertNotIn(phrase, text, phrase)
-
-    def test_the_sync_procedure_is_reachable(self):
-        """Replaces WS8's test_sync_path_does_not_require_interview_md, which
-        asserted the sync procedure lived in re-entry.md specifically. v6
-        merged that file into interview.md, so the old test would have passed
-        by having its path swapped -- and it verified the opposite property of
-        the one v6 wants. The property worth keeping is the one underneath:
-        sync has to find its procedure somewhere, and now that somewhere is
-        the merged file."""
-        text = read(SKILL_DIR / "references" / "interview.md")
-        for concept in ("sync", "status", "generated", "validated", "Change history"):
-            self.assertIn(concept, text, concept)
-
-    def test_the_merged_file_is_the_only_interview_surface(self):
-        """Hard line 1: nothing may point at a file that isn't there."""
-        self.assertFalse((SKILL_DIR / "references" / "re-entry.md").exists())
-        for path in [SKILL_MD] + REFERENCES:
+    def test_no_interview_file_and_nothing_points_at_one(self):
+        """v7 deleted interview.md: its protocol (modes, stages, scripts) was
+        a rail the model does not need, and its knowledge moved into SKILL.md
+        as K1-K15. Nothing shipped may point at it or its predecessor."""
+        for name in ("interview.md", "re-entry.md"):
+            self.assertFalse((SKILL_DIR / "references" / name).exists(), name)
+        for path in [SKILL_MD] + REFERENCES + sorted(SCRIPTS_DIR.glob("*.py")):
+            self.assertNotIn("interview.md", read(path), path.name)
             self.assertNotIn("re-entry.md", read(path), path.name)
+
+
+class NoModeVocabularyTests(unittest.TestCase):
+    """The four-mode classification (new/extend/improve/sync) and the I1-I5
+    stage numbers were the rail v7 removed. `extend` and `improve` looked
+    identical on disk, so the audit could not tell them apart and SKILL.md
+    had to say so -- a gotcha the classification itself created. The concept
+    of syncing spec and disk stays; the mode names as a taxonomy do not."""
+
+    MODE_NEAR_MARKER = re.compile(
+        r"\b(new|extend|improve|sync)\b[- ]?(mode|pass|모드)|\b(mode|pass|모드)s?\b[^.\n]{0,20}\b(new|extend|improve|sync)\b"
+        r"|`(new|extend|improve|sync)`",
+        re.IGNORECASE,
+    )
+    STAGE_NUMBER = re.compile(r"\bI[1-5]\b")
+    SHIPPED = [SKILL_MD] + REFERENCES + sorted(SCRIPTS_DIR.glob("*.py"))
+
+    def test_no_mode_taxonomy_in_shipped_files(self):
+        for path in self.SHIPPED:
+            hits = [m.group(0) for m in self.MODE_NEAR_MARKER.finditer(read(path))]
+            self.assertEqual(hits, [], f"{path.name} still classifies passes by mode")
+
+    def test_no_stage_numbers_in_shipped_files(self):
+        for path in self.SHIPPED:
+            self.assertIsNone(self.STAGE_NUMBER.search(read(path)), f"{path.name} names an interview stage")
+
+    def test_the_audit_does_not_suggest_a_mode(self):
+        self.assertNotIn("suggested mode", read(SKILL_MD).lower())
+        self.assertNotIn("suggested_mode", read(SCRIPTS_DIR / "audit_harness.py"))
+
+
+class HarnessEngineerKnowledgeTests(unittest.TestCase):
+    """K1-K15: the interview knowledge that survived the protocol's deletion.
+    Each entry pins a rule anchor and a reason anchor, because the reason is
+    what lets the model re-derive the rule, and the first thing a compression
+    pass cuts is the clause after the dash."""
+
+    K = {
+        "K1": ("ask only what is left open", "spends the user's attention twice"),
+        "K2": ("what is now unnecessary", "nothing on disk records what was used"),
+        "K3": ("Read a file before overwriting it", "reads as zero drift"),
+        "K4": ("keep every approved section the delta does not invalidate", "adds no evidence"),
+        "K5": ("Ask which side is right before regenerating a file", "silently reverting a colleague's work is far worse"),
+        "K6": ("`declined` row", "the next pass re-proposes it"),
+        "K7": ("approve each section before the next depends on it", "mixing them makes both harder to judge"),
+        "K8": ("surface every enforced-versus-advisory call", "the one judgment with a real cost when it is wrong"),
+        "K9": ("look for an interface that makes the wrong move unavailable", "a hook fires after Claude has already decided"),
+        "K10": ("`permissions.allow` entries get their own question", "removes a checkpoint the user has today"),
+        "K11": ("Ask once whether any of this must work beyond this repo", "no portable form"),
+        "K12": ("what language the generated harness should be written in", "may differ from the language of the interview"),
+        "K13": ("converge with AskUserQuestion", "what lets the user judge"),
+        "K14": ("Offer e2e only after stating its cost and getting consent", "spends real tokens"),
+        "K15": ("never ablate a hook or a permission rule", "too expensive to observe even once"),
+    }
+
+    def _items(self):
+        section = read(SKILL_MD).split("## What a harness engineer asks")[1].split("\n## ")[0]
+        items = {}
+        for line in section.splitlines():
+            m = re.match(r"- \*\*(K\d+)\.\*\* (.*)", line)
+            if m:
+                items[m.group(1)] = m.group(2)
+        return items
+
+    def test_all_fifteen_are_present_as_their_own_items(self):
+        self.assertEqual(sorted(self._items(), key=lambda k: int(k[1:])), [f"K{i}" for i in range(1, 16)])
+
+    def test_each_item_carries_its_rule_and_its_reason(self):
+        items = self._items()
+        for k, (rule, reason) in self.K.items():
+            self.assertIn(rule, items[k], f"{k} lost its rule")
+            self.assertIn(reason, items[k], f"{k} lost its reason")
+            self.assertIn("—", items[k], f"{k} has no reason clause")
 
 
 class GuardrailTests(unittest.TestCase):
@@ -484,31 +558,33 @@ class SubtractionTests(unittest.TestCase):
     a rule written to fight a model's old default reads exactly like one
     still fighting the current default."""
 
-    INTERVIEW = SKILL_DIR / "references" / "interview.md"
-    E2E = SKILL_DIR / "references" / "e2e-testing.md"
+    def _routing_section(self):
+        return read(SKILL_MD).split("## The layer-routing framework")[1].split("\n## ")[0]
 
-    def test_improve_asks_what_is_unnecessary_alongside_what_is_wanted(self):
-        """The slice runs from the improve opening to the next top-level
-        heading, so it covers the ablation subsection under it -- which is
-        where the downward arrow is actually spelled out."""
-        text = read(self.INTERVIEW)
-        improve = text.split("### Improve")[1].split("\n## ")[0]
-        self.assertIn("what is now unnecessary", improve)
+    def test_the_existing_harness_question_asks_what_is_unnecessary(self):
+        self.assertIn("what is now unnecessary", read(SKILL_MD))
 
-    def test_ablation_is_a_proposal_not_an_action(self):
-        self.assertIn("it is a proposal, not an action", read(self.INTERVIEW))
+    def test_ablation_is_evidence_not_proof_and_one_rule_at_a_time(self):
+        text = read(SKILL_MD)
+        self.assertIn("Ablate one rule at a time", text)
+        self.assertIn("evidence for retiring it, not proof", text)
 
     def test_hooks_and_permissions_are_excluded_from_ablation(self):
         """The guard that makes the rest safe to state. Ablating a hook means
         observing the failure the hook exists to prevent."""
-        self.assertIn("never ablate a hook or a permission rule", read(self.INTERVIEW).lower())
+        self.assertIn("never ablate a hook or a permission rule", read(SKILL_MD).lower())
 
-    def test_the_routing_table_has_a_row_that_ends_in_removal(self):
-        rows = [l for l in read(self.E2E).splitlines() if l.startswith("| ")]
-        self.assertTrue(
-            any("Ablate" in r for r in rows),
-            "every repair target pointed at more machinery",
-        )
+    def test_the_routing_table_carries_a_repair_column_and_a_downward_arrow(self):
+        """Repair is the routing table run backwards, so it lives as a column
+        of that table rather than as a second table in another file."""
+        section = self._routing_section()
+        header = next(l for l in section.splitlines() if l.startswith("| What it is"))
+        self.assertEqual(header.count("|"), 5, header)
+        self.assertIn("fix", header.lower())
+        repair = section.split("Repair runs the table backwards")[1]
+        self.assertIn("never a deletion", repair)
+        self.assertIn("`retired`", repair)
+        self.assertRegex(repair, r"harness grew[^.]*K15")
 
 
 class GotchaCountTests(unittest.TestCase):
