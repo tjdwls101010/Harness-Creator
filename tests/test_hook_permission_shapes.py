@@ -74,11 +74,22 @@ class PositiveFixtureTests(unittest.TestCase):
         `/Users/alice/file` isn't an absolute path. The single leading slash
         anchors at the settings source, not the filesystem root. Use
         `//Users/alice/file` for absolute paths." (The 2026-08 snapshot said
-        `<project root>`; the live page says primary working directory.)"""
+        `<project root>`; the live page says primary working directory.) The
+        check fires only on a single slash followed by a filesystem-root
+        directory name, the docs' own failure example; a plain `/src/**` is the
+        documented anchor and is left alone."""
         m = self._one("V03", "W")
-        self.assertIn("Edit(/src/**/*.ts)", m)
+        self.assertIn("Edit(/Users/alice/src/**)", m)
         for anchor in ("//", "~/", "settings"):
             self.assertIn(anchor, m)
+
+    def test_v03_leaves_the_documented_settings_source_anchor_alone(self):
+        """`Edit(/src/**/*.ts)` is the docs' own example of the `/path` form, so
+        it is correct as written; V03 fires only when the segment after the
+        single slash is one that exists at the filesystem root."""
+        findings = []
+        vh._check_permissions_block("s.json", {"allow": ["Edit(/src/**/*.ts)", "Read(/docs/**)"]}, findings)
+        self.assertEqual([f for f in findings if getattr(f, "code", None) == "V03"], [])
 
     def test_v04_bare_mcp_server_matcher_matches_nothing(self):
         """hooks: "To match every tool from a server, append `.*` to the server
@@ -131,6 +142,20 @@ class NearMissTests(unittest.TestCase):
         findings, code = vh.run(NEAR_MISSES[0], strict=True)
         self.assertEqual(findings, [])
         self.assertEqual(code, vh.hc.EXIT_OK)
+
+    def test_v02_respects_glob_depth_identity_and_bare_tool_denies(self):
+        """permissions: Read/Edit rules follow gitignore, where `*` does not
+        cross a path separator and `**` does; a bare tool deny "removes the
+        tool from Claude's context entirely"."""
+        def codes(perms):
+            findings = []
+            vh._check_deny_subsumes_allow("s.json", perms, findings)
+            return [f for f in findings if getattr(f, "code", None) == "V02"]
+        self.assertEqual(codes({"deny": ["Read(src/*)"], "allow": ["Read(src/deep/file.py)"]}), [])
+        self.assertEqual(len(codes({"deny": ["Read(src/**)"], "allow": ["Read(src/deep/file.py)"]})), 1)
+        self.assertEqual(len(codes({"deny": ["Bash(aws *)"], "allow": ["Bash(aws *)"]})), 1)
+        self.assertEqual(len(codes({"deny": ["Bash"], "allow": ["Bash(npm test)"]})), 1)
+        self.assertEqual(codes({"deny": ["Bash(rm *)"], "allow": ["Bash(npm test)"]}), [])
 
     def test_v04_does_not_read_permission_rules(self):
         findings = []

@@ -163,23 +163,22 @@ def _check_hooks_block(root, rel, hooks, findings, base_dir=None):
                     command = hook.get("command")
                     if not command:
                         add(findings, "E", loc, "command hook missing 'command' field")
-                    elif "args" in hook or "/" in command:
-                        # exec form (args present) always names a real executable
-                        # path; shell form is only checked when it looks like a
-                        # path too -- a bare command like "echo hi" isn't a
-                        # script reference and shouldn't be flagged as one.
+                    elif "/" in command or "${" in command:
+                        # Checked only when the command looks like a path. A bare
+                        # name (`python3`, `echo`) resolves on PATH in either form
+                        # and is not a script reference.
                         _check_command_script_exists(root, loc, command, findings, base_dir)
-                    if command and base_dir is None and "args" not in hook and _PLACEHOLDER_RE.search(command):
+                    if command and "args" not in hook and _has_unquoted_placeholder(command):
                         add(
                             findings, "W", loc,
-                            f"'{command}' carries a path placeholder in shell form (no 'args') -- the shell "
-                            "re-tokenizes the substituted path, so a directory with a space or an apostrophe "
-                            "breaks it; add \"args\": [] to switch to exec form, where the placeholder is "
-                            "substituted as one argument",
+                            f"'{command}' carries an unquoted path placeholder in shell form (no 'args') -- the "
+                            "shell re-tokenizes the substituted path, so a directory with a space or an "
+                            "apostrophe breaks it; add \"args\": [] to switch to exec form, where the "
+                            "placeholder is substituted as one argument, or double-quote it",
                             code="V15",
                         )
                     if command and event in ("Stop", "SubagentStop"):
-                        _check_stop_loop_guard(root, loc, command, findings, base_dir)
+                        _check_stop_loop_guard(root, loc, command, hook.get("args"), findings, base_dir)
                 if "if" in hook and event not in hc.TOOL_CONTEXT_EVENTS:
                     add(
                         findings, "W", loc,
@@ -210,14 +209,53 @@ def _check_hooks_block(root, rel, hooks, findings, base_dir=None):
 
 
 _PLACEHOLDER_RE = re.compile(r"\$\{[A-Z_]+\}")
+
+
+def _has_unquoted_placeholder(command):
+    """A placeholder inside double quotes survives shell re-tokenization; a
+    bare one does not. Tokenize on whitespace outside quotes and look for a
+    token that carries a placeholder without being wrapped in quotes."""
+    for token in command.split():
+        if _PLACEHOLDER_RE.search(token) and not (token.startswith('"') or token.startswith("'")):
+            return True
+    return False
 _BARE_MCP_MATCHER_RE = re.compile(r"^mcp__[A-Za-z0-9_-]+$")
 # `mcp__<server>__.*` is the documented way to match every tool from a server;
 # it is a regex by construction, so the unanchored-regex warning would fire on
 # the exact shape the docs prescribe.
-_DOCUMENTED_MCP_MATCHER_RE = re.compile(r"^mcp__[A-Za-z0-9_-]+__\.\*$")
-# A Stop-hook script that can keep Claude working: it prints a decision or
-# blocks. Scripts that only log have nothing to guard.
-_STOP_BLOCK_RE = re.compile(r'"decision"|\bdecision\b\s*[:=]|\bblock\b|exit\s+2\b')
+_DOCUMENTED_MCP_MATCHER_RE = re.compile(r"^mcp__[A-Za-z0-9_.*-]+__[A-Za-z0-9_.*-]+$")
+# A Stop-hook script that can keep Claude working: it emits a decision,
+# additionalContext, or a blocking exit. Scripts that only log have nothing
+# to guard. Matched against the script with comments removed.
+_STOP_BLOCK_RE = re.compile(
+    r'["\']decision["\']\s*:|\bdecision\b\s*[:=]|["\']block["\']|additionalContext|exit\s+2\b|SystemExit\(\s*2\s*\)|sys\.exit\(\s*2\s*\)'
+)
+# Either is a loop guard the docs accept: reading the field, or reading the
+# transcript ("Check this value or process the transcript").
+_STOP_GUARD_RE = re.compile(r"stop_hook_active|transcript_path")
+_COMMENT_RE = re.compile(r"(^|\s)#[^\n]*")
+
+
+def _hook_script_path(root, command, args, base_dir):
+    """The file a command hook runs: the command itself when it is a path,
+    else the first path-shaped operand (exec-form `args` first, then the
+    shell-form command's tokens). None when nothing resolvable is named."""
+    candidates = [command] + [a for a in (args or []) if isinstance(a, str)]
+    if not args:
+        candidates += command.split()
+    for token in candidates:
+        token = token.strip().strip("\"'")
+        if not token or "${" in token.replace("${CLAUDE_PROJECT_DIR}", ""):
+            continue
+        resolved = token.replace("${CLAUDE_PROJECT_DIR}", str(root))
+        if "/" not in resolved and not resolved.endswith((".sh", ".py", ".js")):
+            continue
+        path = Path(resolved)
+        if not path.is_absolute():
+            path = Path(base_dir) / path if base_dir else root / path
+        if path.is_file():
+            return path
+    return None
 
 
 def _check_bare_mcp_matcher(rel, event, gi, matcher, findings):
@@ -237,32 +275,26 @@ def _check_bare_mcp_matcher(rel, event, gi, matcher, findings):
             )
 
 
-def _check_stop_loop_guard(root, loc, command, findings, base_dir):
-    """V05. A Stop/SubagentStop script that can block but never reads
-    `stop_hook_active` blocks every stop until the built-in cap ends the turn,
-    so the condition it gates on is never actually re-checked by a person.
-    Only when the script is a readable file that visibly emits a decision."""
-    resolved = command.replace("${CLAUDE_PROJECT_DIR}", str(root))
-    if "${" in resolved:
-        return
-    path = Path(resolved.split()[0]) if resolved.strip() else None
+def _check_stop_loop_guard(root, loc, command, args, findings, base_dir):
+    """V05. A Stop/SubagentStop script that can block but reads neither
+    `stop_hook_active` nor the transcript blocks every stop until the
+    built-in cap ends the turn. Only when the script is a readable file that
+    visibly emits a decision; comments are ignored on both sides, and a
+    script the linter cannot resolve is not judged."""
+    path = _hook_script_path(root, command, args, base_dir)
     if path is None:
         return
-    if not path.is_absolute():
-        path = Path(base_dir) / path if base_dir else root / path
-    if not path.is_file():
-        return
     try:
-        text = hc.read_text(path)
+        text = _COMMENT_RE.sub(" ", hc.read_text(path))
     except (OSError, UnicodeDecodeError):
         return
-    if "stop_hook_active" in text or not _STOP_BLOCK_RE.search(text):
+    if _STOP_GUARD_RE.search(text) or not _STOP_BLOCK_RE.search(text):
         return
     add(
         findings, "W", loc,
-        f"{path.name} can block a stop but never reads stop_hook_active -- when the condition stays "
-        "unmet it blocks every stop until Claude Code's consecutive-block cap gives up, and the turn "
-        "ends unvalidated; read the field first and exit 0 when it is true",
+        f"{path.name} can block a stop but reads neither stop_hook_active nor the transcript -- when the "
+        "condition stays unmet it blocks every stop until Claude Code's consecutive-block cap gives up, "
+        "and the turn ends unvalidated; read stop_hook_active first and exit 0 when it is true",
         code="V05",
     )
 
@@ -273,7 +305,9 @@ def _check_command_script_exists(root, loc, command, findings, base_dir=None):
     hook declared in a skill's frontmatter -- the same string means two
     different files depending on where it was written."""
     base = Path(base_dir) if base_dir else root
-    resolved = command.replace("${CLAUDE_PROJECT_DIR}", str(root))
+    # A shell-form command may quote the path; the quotes are shell syntax,
+    # not part of the file name.
+    resolved = command.strip().strip("\"'").replace("${CLAUDE_PROJECT_DIR}", str(root))
     if resolved.startswith("$") or "${" in resolved:
         return  # unresolved env var we don't know the value of -- skip, don't guess
     path = Path(resolved)
@@ -392,7 +426,12 @@ _INERT_PATH_RULE_FIX = {
 # does not, and so also matches `lsof` -- see references/hooks.md.
 _UNBOUNDED_PREFIX_RE = re.compile(r"^(Bash|PowerShell)\(([a-zA-Z0-9_.\-]+)\*\)$")
 
-_SINGLE_SLASH_PATH_RULE_RE = re.compile(r"^(Read|Edit)\((/[^/].*)\)$")
+# `/path` is the documented settings-source anchor, so a single slash alone is
+# not a defect. What is: a single slash in front of a segment that only makes
+# sense from the filesystem root -- the docs' own example is `/Users/alice/file`.
+_SINGLE_SLASH_PATH_RULE_RE = re.compile(
+    r"^(Read|Edit)\((/(?:Users|home|etc|tmp|var|opt|root|private|usr|Volumes)(?:/.*)?)\)$"
+)
 
 _INERT_PATH_RULE_RE = re.compile(
     r"^(" + "|".join(_INERT_PATH_RULE_FIX) + r")\((.+)\)$"
@@ -432,11 +471,10 @@ def _check_permissions_block(rel, permissions, findings):
             if anchored:
                 add(
                     findings, "W", f"{rel}#permissions.{bucket}",
-                    f"'{rule}' starts with a single '/', which anchors at the settings file's own root "
-                    f"(the primary working directory, for a project settings file), not the filesystem root -- '//' is "
-                    f"absolute, '~/' is the home directory, and a bare path is relative to the current "
-                    f"directory. Correct if the project root was meant; if the filesystem root was, write "
-                    f"'{anchored.group(1)}(/{anchored.group(2)})'",
+                    f"'{rule}' starts with a single '/' but names a filesystem-root directory -- a single "
+                    f"'/' anchors at the settings file's own root (the primary working directory, for a project "
+                    f"settings file), so this matches '<project>{anchored.group(2)}'. For the filesystem root "
+                    f"write '{anchored.group(1)}(/{anchored.group(2)})'; '~/' is the home directory",
                     code="V03",
                 )
             inert = _INERT_PATH_RULE_RE.match(rule)
@@ -1067,15 +1105,28 @@ def _check_deny_subsumes_allow(loc, permissions, findings):
     denies = [d for d in permissions.get("deny", []) if isinstance(d, str)]
     allows = [a for a in permissions.get("allow", []) if isinstance(a, str)]
     for deny in denies:
-        m = re.match(r"^([A-Za-z_]+)\((.*)\)$", deny.strip())
-        if not m or not m.group(2).endswith("*"):
-            continue
-        tool, prefix = m.group(1), m.group(2)[:-1]
+        deny = deny.strip()
+        m = re.match(r"^([A-Za-z_]+)\((.*)\)$", deny)
+        bare_tool = deny if re.fullmatch(r"[A-Za-z_]+", deny) else None
         for allow in allows:
-            am = re.match(r"^([A-Za-z_]+)\((.*)\)$", allow.strip())
-            if not am or am.group(1) != tool:
+            allow = allow.strip()
+            am = re.match(r"^([A-Za-z_]+)\((.*)\)$", allow)
+            if bare_tool:
+                # A bare tool deny removes the tool entirely, so every scoped
+                # allow for it is dead.
+                covered = allow == bare_tool or (am is not None and am.group(1) == bare_tool)
+            elif not m or not am or am.group(1) != m.group(1):
                 continue
-            if am.group(2).startswith(prefix) and am.group(2) != prefix + "*":
+            elif allow == deny:
+                covered = True
+            elif m.group(1) in ("Read", "Edit"):
+                # gitignore semantics: only `**` crosses path segments, so a
+                # `*` prefix proves nothing about a deeper path.
+                covered = m.group(2).endswith("**") and am.group(2).startswith(m.group(2)[:-2]) and am.group(2) != m.group(2)
+            else:
+                # Bash-style prefix rules: `X *` covers every `X ...`.
+                covered = m.group(2).endswith("*") and am.group(2).startswith(m.group(2)[:-1]) and am.group(2) != m.group(2)
+            if covered:
                 add(
                     findings, "W", loc,
                     f"deny rule '{deny}' already covers allow rule '{allow}' -- deny is "
