@@ -12,12 +12,13 @@
     # Show the matcher matrix without executing anything:
     python test_hook.py --settings .claude/settings.json --matrix
 
-Hooks are hard to verify without spawning a real session -- this script
-substitutes for that by reproducing matcher evaluation exactly (see
-references/hooks.md's matcher gotcha) and running the hook's script with a
-realistic sample input, then explaining what its exit code and output
-actually mean for the event in question. Every hook harness-creator
-generates should pass this before being considered delivered.
+Runs a hook's command with a sample stdin built from the documented input
+shape for the event, then explains what its exit code and output mean for
+that event. Matcher evaluation is a documentation-based approximation:
+Claude Code tests a non-exact matcher with a JavaScript RegExp, and this
+script approximates that with Python `re`. The sample input is representative,
+not a recording. What a real session does is final; PASS here means the hook
+ran and its exit code is one the event can act on.
 """
 
 import argparse
@@ -46,7 +47,7 @@ COMMON_FIELDS = {
 
 def _event_fields(event, tool):
     """Return event-specific sample fields, layered on COMMON_FIELDS. Field
-    shapes are taken directly from references/hooks-events.md."""
+    shapes follow references/hooks-events.md."""
     tool = tool or "Bash"
     tool_inputs = {
         "Bash": {"command": "echo hello"},
@@ -103,9 +104,10 @@ def build_sample_input(event, tool, overrides):
 
 
 def matches_matcher(matcher, candidate):
-    """Reproduce Claude Code's matcher evaluation exactly (references/hooks.md):
+    """Approximate Claude Code's matcher evaluation (references/hooks.md):
     exact-string/list mode unless a non-exact character is present, in which
-    case it's an UNANCHORED regex test."""
+    case Claude Code runs an UNANCHORED JavaScript RegExp test, approximated
+    here with Python `re.search`."""
     if matcher is None or matcher == "":
         return True
     if hc.is_exact_matcher(matcher):
@@ -230,13 +232,11 @@ def cmd_matrix(settings, tools=None):
 
 
 def verdict(results, quiet=False):
-    """What "passes" means for SKILL.md's Hard line 2.
-
-    Not "the hook exited 0": a blocking hook exits 2 on the path it exists
+    """Not "the hook exited 0": a blocking hook exits 2 on the path it exists
     to block, and that is the hook working. What fails is a hook that could
     not be exercised, or one whose exit code makes it a no-op --
     references/hooks.md documents exit 1 as the mistake that leaves a policy
-    silently doing nothing, and a gate that passes it is not a gate."""
+    silently doing nothing."""
     failures = []
     for r in results:
         if "error" in r:
@@ -256,15 +256,22 @@ def verdict(results, quiet=False):
                 print(f"  - {f}")
         return hc.EXIT_LINT_FAILED
     if not quiet:
-        print("\nPASS")
+        print("\nPASS " + FINALITY_NOTE)
     return hc.EXIT_OK
+
+
+FINALITY_NOTE = (
+    "(sample input, matcher approximated with Python re; what a real session does is final)"
+)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--settings", help="path to settings.json to look up hooks in")
-    parser.add_argument("--command", help="run this script directly, bypassing settings.json lookup")
-    parser.add_argument("--event", help="hook event name")
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--settings", help="path to settings.json to look up hooks in")
+    source.add_argument("--command", help="run this script directly, bypassing settings.json lookup")
+    parser.add_argument("--event", choices=sorted(hc.HOOK_EVENTS), metavar="EVENT",
+                        help="hook event name; one of: " + ", ".join(sorted(hc.HOOK_EVENTS)))
     parser.add_argument("--tool", help="tool name, for matcher evaluation and building tool_input (default: Bash)")
     parser.add_argument("--input", help="path to a JSON file to use as the hook's stdin input")
     parser.add_argument("--input-field", action="append", default=[], metavar="k=v", help="override/add a field in the sample input; repeatable")
@@ -288,8 +295,7 @@ def main():
 
     if args.matrix:
         if not args.settings:
-            print("error: --matrix requires --settings", file=sys.stderr)
-            return hc.EXIT_USAGE_ERROR
+            parser.error("--matrix requires --settings")
         data, err = hc.load_json_lenient(Path(args.settings))
         if err:
             print(f"error: {err}", file=sys.stderr)
@@ -303,8 +309,7 @@ def main():
         return hc.EXIT_OK
 
     if not args.event:
-        print("error: --event is required (unless using --matrix)", file=sys.stderr)
-        return hc.EXIT_USAGE_ERROR
+        parser.error("--event is required (unless using --matrix)")
 
     if args.input:
         input_data, err = hc.load_json_lenient(Path(args.input))
@@ -357,12 +362,10 @@ def main():
                     "exit_code": exit_code, "stdout": stdout, "stderr": stderr,
                     "interpretation": interpretation,
                 })
-    else:
-        print("error: either --settings or --command is required", file=sys.stderr)
-        return hc.EXIT_USAGE_ERROR
 
     if args.json:
-        print(json.dumps({"event": args.event, "input": input_data, "results": results}, indent=2))
+        print(json.dumps({"event": args.event, "input": input_data, "results": results,
+                          "note": FINALITY_NOTE}, indent=2))
     else:
         print(f"Event: {args.event}  Tool: {args.tool or '(default: Bash)'}")
         print(f"Sample input: {json.dumps(input_data)}")

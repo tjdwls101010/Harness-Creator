@@ -1,12 +1,10 @@
 """Shared helpers for harness-creator's validation/audit/test scripts.
 
 Not a CLI itself -- imported by validate_harness.py, audit_harness.py, and
-test_hook.py. A single conservative frontmatter parser and a single canonical
-fact table (tool names, hook events, matcher support) live here so every
-script agrees on what's valid, instead of each one re-implementing (and
-silently disagreeing with) the same parsing and the same fact list. That
-divergence is exactly the mistake skill-creator made (a hand-rolled parser in
-utils.py that disagreed with a real-YAML expectation in validate.py).
+test_hook.py. One conservative frontmatter parser, one fact table (tool
+names, hook events, matcher support) and one spec-template vocabulary live
+here so every script agrees on what is valid instead of each one
+re-implementing, and silently disagreeing on, the same parsing and facts.
 """
 
 import json
@@ -17,6 +15,49 @@ from pathlib import Path
 EXIT_OK = 0
 EXIT_LINT_FAILED = 1
 EXIT_USAGE_ERROR = 2
+
+# The harness-spec.md template, shared by the printer (audit --template) and
+# the parsers (audit drift, validate V01) so headings, columns and the status
+# vocabulary cannot drift apart.
+SPEC_SECTIONS = (
+    "Context", "Goals", "Behavior inventory", "Component specs",
+    "Design rationale", "Validation", "Change history",
+)
+INVENTORY_HEADING = "Behavior inventory"
+INVENTORY_COLUMNS = ("id", "behavior/knowledge/constraint", "layer", "component", "status")
+SPEC_STATUSES = ("proposed", "approved", "generated", "validated", "declined", "retired")
+# Only these two assert that a file exists on disk; the others are intent or
+# terminal, so a row at any of them is never drift.
+STATUSES_CLAIMING_A_FILE = frozenset({"generated", "validated"})
+
+
+def iter_inventory_rows(spec_text):
+    """Yield the data rows of the Behavior inventory table as lists of cell
+    strings, skipping the header and separator rows and anything inside an
+    HTML comment. Ends at the next heading of any level."""
+    in_section = False
+    in_comment = False
+    for line in spec_text.splitlines():
+        stripped = line.strip()
+        if in_comment:
+            if "-->" in stripped:
+                in_comment = False
+            continue
+        if stripped.startswith("<!--"):
+            if "-->" not in stripped:
+                in_comment = True
+            continue
+        if stripped.startswith("#"):
+            in_section = stripped.lstrip("#").strip().lower() == INVENTORY_HEADING.lower()
+            continue
+        if not in_section or not stripped.startswith("|"):
+            continue
+        cells = [c.strip() for c in stripped.strip("|").split("|")]
+        if not cells or set("".join(cells)) <= set("-: "):
+            continue
+        if cells[0].lower() == INVENTORY_COLUMNS[0]:
+            continue
+        yield cells
 
 # Verified against the Claude Code tools reference:
 # https://code.claude.com/docs/en/tools-reference
@@ -224,12 +265,11 @@ def parse_frontmatter(text):
                     i += 1
                     continue
                 # Indented but not a list item -> a nested map. This parser
-                # will not guess its shape, but discarding the whole file
-                # over it is worse: `hooks:` in a skill's or agent's own
-                # frontmatter is a documented, generated shape, and giving
-                # up here reported a correct component's auto-triggering as
-                # dead. Consume the block, mark the key unparsed, keep the
-                # fields around it.
+                # will not guess its shape, but `hooks:` in a skill's or
+                # agent's frontmatter is a documented shape, so discarding
+                # the whole file over it would report a correct component's
+                # auto-triggering as dead. Consume the block, mark the key
+                # unparsed, keep the fields around it.
                 if saw_list:
                     warnings.append(
                         f"line {i + 2}: '{key}:' mixes list items and a nested "
@@ -363,10 +403,8 @@ def plugin_skills_roots(root):
     """Skills roots a plugin manifest declares, or its default.
 
     A plugin ships its skills from `./skills` unless plugin.json's `skills`
-    field says otherwise. Discovery that only knew `.claude/skills/` skipped
-    every skill in a plugin laid out the default way and reported a clean
-    run -- so this is gated on the manifest existing, because `skills/` is
-    an ordinary directory name in a repo that is not a plugin."""
+    field says otherwise. Gated on the manifest existing, because `skills/`
+    is an ordinary directory name in a repo that is not a plugin."""
     manifest = Path(root) / ".claude-plugin" / "plugin.json"
     if not manifest.is_file():
         return []
@@ -491,6 +529,17 @@ def settings_paths(root):
     return [p for p in candidates if p.is_file()]
 
 
+class Finding(tuple):
+    """A lint finding. Unpacks as (level, location, message); `code` is an
+    optional stable identifier (V01, ...) so a fixture can assert exactly
+    which check fired and a reader can look one up."""
+
+    def __new__(cls, level, location, message, code=None):
+        self = super().__new__(cls, (level, location, message))
+        self.code = code
+        return self
+
+
 def print_findings_text(findings, title):
     """findings: list of (level, location, message) where level is 'E' or
     'W'. Human-readable text output -- the default across every script here,
@@ -499,9 +548,19 @@ def print_findings_text(findings, title):
     if not findings:
         print("  (no findings)")
         return
-    for level, location, message in findings:
-        print(f"  [{level}] {location}: {message}")
+    for f in findings:
+        level, location, message = f
+        code = getattr(f, "code", None)
+        print(f"  [{level}] {code + ' ' if code else ''}{location}: {message}")
 
 
 def findings_to_json(findings):
-    return [{"level": level, "location": location, "message": message} for level, location, message in findings]
+    out = []
+    for f in findings:
+        level, location, message = f
+        entry = {"level": level, "location": location, "message": message}
+        code = getattr(f, "code", None)
+        if code:
+            entry["code"] = code
+        out.append(entry)
+    return out

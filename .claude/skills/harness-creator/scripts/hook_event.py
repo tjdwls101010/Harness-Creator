@@ -4,23 +4,12 @@
     hook_event.py --event PreToolUse
     hook_event.py --list
 
-references/hooks-events.md is a lookup table: pick your event in
-hooks.md's router, then read that event's row. But markdown's unit of
-access is the whole file, so reading it at all costs ~3,800 words to get
-the ~300 that apply. This makes the access pattern match the content.
-
-The markdown stays the source of truth rather than moving to a queryable
-store. Every fact in it is a product mechanic where being wrong is worse
-than being absent, and this repo's method for keeping those right is
-adversarial reading of diffs -- the cross-file audit that caught two
-factually wrong router rows would not have been possible against a
-binary. So: text on disk, a query in front of it.
-
-The --event choices are generated from the file, so this script's own
-signature is also the authoritative event list. That matters beyond
-ergonomics: several of these events postdate common training data, and a
-model that cannot see them listed will refuse to author one as
-nonexistent rather than look it up.
+Prints one event's section of references/hooks-events.md -- trigger timing,
+matcher, input fields, decision channel, typical use, version caveats --
+followed by the input fields every event shares. The --event choices are
+generated from that file, so this script's signature is the event list:
+several events postdate common training data, and the list is what shows
+they exist.
 
 Python 3.10+, stdlib only.
 """
@@ -123,14 +112,12 @@ def main():
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     names = event_names()
-    parser.add_argument("--event", choices=names or None, metavar="EVENT",
-                        help="hook event to describe; one of: " + ", ".join(names))
-    parser.add_argument("--list", action="store_true",
-                        help="print every event name, one per line")
+    what = parser.add_mutually_exclusive_group(required=True)
+    what.add_argument("--event", choices=names or None, metavar="EVENT",
+                      help="hook event to describe; one of: " + ", ".join(names))
+    what.add_argument("--list", action="store_true",
+                      help="print every event name, one per line")
     args = parser.parse_args()
-
-    if not args.list and not args.event:
-        parser.error("one of --event or --list is required")
 
     if args.list:
         for n in names:

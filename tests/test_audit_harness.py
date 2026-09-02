@@ -101,8 +101,11 @@ class TemplateTests(unittest.TestCase):
     def test_maintenance_rules_travel_as_comments(self):
         for phrase in ("fold", "rejected alternative", "description"):
             self.assertIn(phrase, self.template.lower())
-        # But not the approval policy, which belongs to the skill's prose.
-        self.assertNotIn("approv", self.template.lower())
+        # But not the approval policy, which belongs to the skill's prose
+        # (`approved` the status is vocabulary, not policy).
+        lowered = self.template.lower()
+        for policy in ("approval", "sign off", "signs off", "approve before", "gate"):
+            self.assertNotIn(policy, lowered)
 
     def test_round_trip_reports_no_drift(self):
         (self.tmp / ".claude").mkdir()
