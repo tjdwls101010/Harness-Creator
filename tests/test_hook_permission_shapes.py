@@ -10,7 +10,7 @@ neither it nor any new code. A finding here predicts nothing about what a
 session decides -- trust, mode, protected paths and cwd all enter that -- it
 reports a shape the docs say cannot mean what it looks like it means.
 
-Sources re-read live on 2026-09-02 (https://code.claude.com/docs/en/settings,
+Sources re-read live on 2026-09-02 (https://code.claude.com/docs/en/permissions,
 https://code.claude.com/docs/en/hooks); excerpts sit on each test.
 stdlib unittest only.
 """
@@ -57,7 +57,7 @@ class PositiveFixtureTests(unittest.TestCase):
         return hits[0][2]
 
     def test_v02_deny_pattern_covers_an_allow_rule(self):
-        """settings: "Rules are evaluated in order: deny, then ask, then allow.
+        """permissions: "Rules are evaluated in order: deny, then ask, then allow.
         The first match in that order determines the outcome, and rule
         specificity doesn't change the order. A broad deny rule like
         `Bash(aws *)` blocks every matching call, including calls that also
@@ -68,12 +68,13 @@ class PositiveFixtureTests(unittest.TestCase):
         self.assertIn("Bash(aws s3 ls)", m)
 
     def test_v03_single_slash_anchors_at_the_settings_source(self):
-        """settings, Read/Edit pattern table: "`/path` -- Path relative to the
-        settings source -- `Edit(/src/**/*.ts)` -- `<project root>/src/**/*.ts`
-        in project settings"; and "A pattern like `/Users/alice/file` isn't an
-        absolute path. The single leading slash anchors at the settings
-        source, not the filesystem root. Use `//Users/alice/file` for
-        absolute paths." """
+        """permissions, Read/Edit pattern table: "`/path` -- Path relative to
+        the settings source -- `Edit(/src/**/*.ts)` -- `<primary working
+        directory>/src/**/*.ts` in project settings"; and "A pattern like
+        `/Users/alice/file` isn't an absolute path. The single leading slash
+        anchors at the settings source, not the filesystem root. Use
+        `//Users/alice/file` for absolute paths." (The 2026-08 snapshot said
+        `<project root>`; the live page says primary working directory.)"""
         m = self._one("V03", "W")
         self.assertIn("Edit(/src/**/*.ts)", m)
         for anchor in ("//", "~/", "settings"):

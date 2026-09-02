@@ -127,13 +127,16 @@ def _check_hooks_block(root, rel, hooks, findings, base_dir=None):
 
             matcher = group.get("matcher")
             if matcher is not None:
+                if event not in hc.NON_MATCHER_EVENTS:
+                    _check_bare_mcp_matcher(rel, event, gi, matcher, findings)
                 if event in hc.NON_MATCHER_EVENTS:
                     add(
                         findings, "E", f"{rel}#hooks.{event}[{gi}]",
                         f"'{event}' does not support a 'matcher' field -- it fires "
                         "unconditionally, so this matcher is silently ignored",
                     )
-                elif not hc.is_exact_matcher(matcher) and not re.match(r"^\^.*\$$", matcher):
+                elif (not hc.is_exact_matcher(matcher) and not re.match(r"^\^.*\$$", matcher)
+                      and not _DOCUMENTED_MCP_MATCHER_RE.match(matcher)):
                     add(
                         findings, "W", f"{rel}#hooks.{event}[{gi}]",
                         f"matcher '{matcher}' contains a character outside "
@@ -166,6 +169,17 @@ def _check_hooks_block(root, rel, hooks, findings, base_dir=None):
                         # path too -- a bare command like "echo hi" isn't a
                         # script reference and shouldn't be flagged as one.
                         _check_command_script_exists(root, loc, command, findings, base_dir)
+                    if command and base_dir is None and "args" not in hook and _PLACEHOLDER_RE.search(command):
+                        add(
+                            findings, "W", loc,
+                            f"'{command}' carries a path placeholder in shell form (no 'args') -- the shell "
+                            "re-tokenizes the substituted path, so a directory with a space or an apostrophe "
+                            "breaks it; add \"args\": [] to switch to exec form, where the placeholder is "
+                            "substituted as one argument",
+                            code="V15",
+                        )
+                    if command and event in ("Stop", "SubagentStop"):
+                        _check_stop_loop_guard(root, loc, command, findings, base_dir)
                 if "if" in hook and event not in hc.TOOL_CONTEXT_EVENTS:
                     add(
                         findings, "W", loc,
@@ -193,6 +207,64 @@ def _check_hooks_block(root, rel, hooks, findings, base_dir=None):
                 "confirmed statically, so verify with test_hook.py if any of these "
                 "hooks rewrites input",
             )
+
+
+_PLACEHOLDER_RE = re.compile(r"\$\{[A-Z_]+\}")
+_BARE_MCP_MATCHER_RE = re.compile(r"^mcp__[A-Za-z0-9_-]+$")
+# `mcp__<server>__.*` is the documented way to match every tool from a server;
+# it is a regex by construction, so the unanchored-regex warning would fire on
+# the exact shape the docs prescribe.
+_DOCUMENTED_MCP_MATCHER_RE = re.compile(r"^mcp__[A-Za-z0-9_-]+__\.\*$")
+# A Stop-hook script that can keep Claude working: it prints a decision or
+# blocks. Scripts that only log have nothing to guard.
+_STOP_BLOCK_RE = re.compile(r'"decision"|\bdecision\b\s*[:=]|\bblock\b|exit\s+2\b')
+
+
+def _check_bare_mcp_matcher(rel, event, gi, matcher, findings):
+    """V04. A hook matcher is exact-string unless it has a regex character;
+    `mcp__memory` has none, so it is compared as a literal tool name that no
+    tool has. Hook matchers only -- a *permission* rule `mcp__memory` means
+    the whole server, a different grammar."""
+    for token in re.split(r"[|,]", matcher):
+        token = token.strip()
+        if _BARE_MCP_MATCHER_RE.match(token) and token.count("__") == 1:
+            add(
+                findings, "E", f"{rel}#hooks.{event}[{gi}]",
+                f"matcher '{token}' names an MCP server with no tool part and no '.*', so it is "
+                f"compared as an exact tool name and matches nothing -- write '{token}__.*' for every "
+                f"tool from that server, or '{token}__<tool>' for one",
+                code="V04",
+            )
+
+
+def _check_stop_loop_guard(root, loc, command, findings, base_dir):
+    """V05. A Stop/SubagentStop script that can block but never reads
+    `stop_hook_active` blocks every stop until the built-in cap ends the turn,
+    so the condition it gates on is never actually re-checked by a person.
+    Only when the script is a readable file that visibly emits a decision."""
+    resolved = command.replace("${CLAUDE_PROJECT_DIR}", str(root))
+    if "${" in resolved:
+        return
+    path = Path(resolved.split()[0]) if resolved.strip() else None
+    if path is None:
+        return
+    if not path.is_absolute():
+        path = Path(base_dir) / path if base_dir else root / path
+    if not path.is_file():
+        return
+    try:
+        text = hc.read_text(path)
+    except (OSError, UnicodeDecodeError):
+        return
+    if "stop_hook_active" in text or not _STOP_BLOCK_RE.search(text):
+        return
+    add(
+        findings, "W", loc,
+        f"{path.name} can block a stop but never reads stop_hook_active -- when the condition stays "
+        "unmet it blocks every stop until Claude Code's consecutive-block cap gives up, and the turn "
+        "ends unvalidated; read the field first and exit 0 when it is true",
+        code="V05",
+    )
 
 
 def _check_command_script_exists(root, loc, command, findings, base_dir=None):
@@ -320,6 +392,8 @@ _INERT_PATH_RULE_FIX = {
 # does not, and so also matches `lsof` -- see references/hooks.md.
 _UNBOUNDED_PREFIX_RE = re.compile(r"^(Bash|PowerShell)\(([a-zA-Z0-9_.\-]+)\*\)$")
 
+_SINGLE_SLASH_PATH_RULE_RE = re.compile(r"^(Read|Edit)\((/[^/].*)\)$")
+
 _INERT_PATH_RULE_RE = re.compile(
     r"^(" + "|".join(_INERT_PATH_RULE_FIX) + r")\((.+)\)$"
 )
@@ -353,6 +427,17 @@ def _check_permissions_block(rel, permissions, findings):
                 add(
                     findings, "E", f"{rel}#permissions.{bucket}",
                     f"'{rule}' references unknown tool '{tool_name}'",
+                )
+            anchored = _SINGLE_SLASH_PATH_RULE_RE.match(rule)
+            if anchored:
+                add(
+                    findings, "W", f"{rel}#permissions.{bucket}",
+                    f"'{rule}' starts with a single '/', which anchors at the settings file's own root "
+                    f"(the primary working directory, for a project settings file), not the filesystem root -- '//' is "
+                    f"absolute, '~/' is the home directory, and a bare path is relative to the current "
+                    f"directory. Correct if the project root was meant; if the filesystem root was, write "
+                    f"'{anchored.group(1)}(/{anchored.group(2)})'",
+                    code="V03",
                 )
             inert = _INERT_PATH_RULE_RE.match(rule)
             if inert:
@@ -998,6 +1083,7 @@ def _check_deny_subsumes_allow(loc, permissions, findings):
                     "never fires. An exception has to be carved out of the deny pattern "
                     "itself. (Project-scope rules only; a deny in another settings scope "
                     "isn't visible here.)",
+                    code="V02",
                 )
 
 
