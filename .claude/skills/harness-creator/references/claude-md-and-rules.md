@@ -1,16 +1,16 @@
 # CLAUDE.md and rules
 
-This is the authoring guide for the first, most-loaded layer of any harness. Read this before drafting a project's CLAUDE.md or any `.claude/rules/*.md` file, and re-check the generated output against it before declaring the component done.
+This is the authoring guide for the first, most-loaded layer of any harness. Read it the moment a CLAUDE.md line or a rule becomes a candidate in routing, and re-check the generated output against it before declaring the component done.
 
 ## What CLAUDE.md actually is
 
 CLAUDE.md content is delivered as a user message injected after the system prompt — it is not the system prompt, and Claude Code makes no enforcement guarantee about it. Claude reads it and tries to comply, the same way it tries to comply with anything else in the conversation, but a determined or confused model can still deviate, and two contradictory instructions get resolved arbitrarily rather than by any override rule. This is why "always/never" language in CLAUDE.md reads as strong to a human but is mechanically just advisory text.
 
-Anything that must hold with zero exceptions — blocking a dangerous command, refusing to touch a path, guaranteeing a lint step runs — does not belong in CLAUDE.md. This file's job is to carry facts and steer behavior; hooks and permissions are the layer that makes behavior non-optional. Make that call with the eligibility test in `references/hooks.md` rather than here: its second question is the one that can come back negative, and deciding "must this always hold?" alone routes almost everything to a hook.
+A guarantee — blocking a dangerous command, refusing to touch a path, a lint step that always runs — is not carried by CLAUDE.md; hooks and permissions make behaviour non-optional, and the eligibility test in `references/hooks.md` decides which items earn that (its second question is the one that can come back negative). What CLAUDE.md carries about a guarantee is its *reason*: one line saying why a block is about to happen turns a confusing refusal into an expected one, and under auto mode that line also steers the classifier (loading semantics, below). The rule lives in the deny; the why lives here.
 
 ## Target length: ~200 lines
 
-Longer CLAUDE.md files measurably reduce adherence — the model has more text to track and important rules get lost in the noise, so a file that is technically complete but bloated can perform worse than a shorter, sharper one. Target under 200 lines per file. The one stated exception: a monorepo root CLAUDE.md that still overflows after you've already split path-specific content into `.claude/rules/*.md` may legitimately exceed 200 lines, because at that point the remaining content is all genuinely cross-cutting and there's nowhere left to push it. Don't reach for that exception as a shortcut — try the split first.
+Longer CLAUDE.md files measurably reduce adherence — important rules get lost in the noise, so a complete but bloated file performs worse than a shorter, sharper one. Target under 200 lines per file. The one exception: a monorepo root CLAUDE.md that still overflows after path-specific content has gone into `.claude/rules/*.md`, because what remains is genuinely cross-cutting. Try the split first.
 
 Apply this same eligibility test line by line while drafting: "would removing this line cause Claude to make a mistake?" If not, cut it. A rule Claude already follows correctly without being told is dead weight that pushes real rules further down.
 
@@ -18,7 +18,7 @@ Apply this same eligibility test line by line while drafting: "would removing th
 
 Do not list the project's skills, agents, or hooks by name inside CLAUDE.md. The filesystem is the single source of truth for what components exist; a hand-maintained inventory in CLAUDE.md immediately starts drifting the moment someone adds, renames, or removes a component, and nobody remembers to update the prose list. This exact pattern — full registries of every skill and agent spelled out in CLAUDE.md — goes stale within a few iterations, actively misleading the model about what's available.
 
-Instead, CLAUDE.md holds two kinds of content: trigger rules (when to reach for a capability, stated as a condition, not a name-dump) and core facts (build commands, architecture, environment gotchas). Nothing in it announces what exists, because the client already does — a skill reaches the listing through its own `description`, agents arrive as a list, a hook speaks when it fires, a rule loads when its path matches. A reader who needs the exact set lists `.claude/skills/` — always correct, unlike prose.
+Instead, CLAUDE.md holds two kinds of content: trigger rules (when to reach for a capability, stated as a condition, not a name-dump) and core facts (build commands, architecture, environment gotchas). It does not announce what exists, because the client already does — a skill reaches the listing through its own `description`, agents arrive as a list, a hook speaks when it fires, a rule loads when its path matches. The line "`.claude/hooks/no-raw-sql.sh` blocks an edit that adds raw SQL" is not an inventory entry: it is the reason a block will happen, stated before it happens, which is a trigger rule. An inventory is a list of names with no condition attached; a reader who needs that lists `.claude/skills/`, which is always correct.
 
 Don't redirect that job to `.claude/harness-spec.md` either. A pointer inherits its target's reader, and the spec's reader is a maintainer: it carries design rationale and an inventory hand-maintained enough to need its own drift check. A working session sent there pays for all of that to answer a question it never had. A maintainer who wants the way in gets it from an HTML comment, which costs nothing (see the loading semantics below).
 
@@ -36,9 +36,9 @@ Write them as intent, not prohibition, and the reason is the rail argument again
 
 ## Write concretely and verifiably
 
-Every instruction should be checkable, not aspirational. "Use 2-space indentation" is verifiable — you can look at a file and confirm it's true or false. "Format code properly" is not — there's no way to check compliance, so the model has nothing concrete to aim for and reviewers have nothing concrete to check against. Apply this test to every line you generate: could someone glance at the codebase and confirm this rule is (or isn't) being followed? If not, sharpen it until they can.
+Every instruction should be checkable: "Use 2-space indentation" can be confirmed true or false by looking at a file; "Format code properly" cannot, so the model has nothing concrete to aim for and a reviewer nothing to check. Could someone glance at the codebase and confirm this rule is being followed? If not, sharpen it until they can.
 
-Emphasis markers like "IMPORTANT" or "YOU MUST" measurably raise compliance on the line they're attached to, but this effect saturates and then reverses: a file where every third line is shouted stops reading as prioritized and starts reading as noise, and the model can no longer tell which of the ten "IMPORTANT"s is the one that actually matters this session. Reserve emphasis for the handful of rules where getting it wrong is genuinely costly, and let the rest read as plain, confident statements.
+Emphasis markers like "IMPORTANT" or "YOU MUST" raise compliance on the line they're attached to, and the effect saturates and reverses when every third line is shouted — the model can no longer tell which "IMPORTANT" matters this session. Reserve emphasis for the handful of rules where getting it wrong is costly.
 
 ## The scope axis: who needs this, and who writes it
 
@@ -46,24 +46,22 @@ The eligibility test asks whether a fact is derivable. It doesn't ask the second
 
 | | You write it | Claude writes it |
 |---|---|---|
-| **Everyone gets it** | `CLAUDE.md`, `.claude/rules/` — committed, reviewed, shared | *(nothing — Claude never authors a shared file)* |
+| **Everyone gets it** | `CLAUDE.md`, `.claude/rules/` — committed, reviewed, shared | *(nothing on its own initiative — a shared file Claude writes through this skill is the user writing it, at their request, and reviewed)* |
 | **Only this machine** | `CLAUDE.local.md` — gitignored, deterministic, yours | **auto memory** — `MEMORY.md` + topic files |
 
 `CLAUDE.local.md` sits at the project root and loads right after `CLAUDE.md`; it's the documented home for "your sandbox URLs, preferred test data." Route personal facts there and gitignore it in the same pass. Worktree caveat: a gitignored file exists only in the worktree that created it, so a fact that should follow the developer belongs in their home directory, imported as `@~/.claude/my-notes.md`.
 
 **Auto memory is the surface to know about and never to depend on.** Claude writes it into `~/.claude/projects/<project>/memory/`, and `MEMORY.md`'s first 200 lines or 25KB (whichever comes first) load every conversation — a second always-loaded surface holding the same *kind* of content this file routes to CLAUDE.md, which is why it belongs in the budget. But it is nondeterministic by design ("Claude doesn't save something every session. It decides what's worth remembering"), can be switched off entirely (`autoMemoryEnabled: false`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`), and never travels — not committed, not across machines, not into subagents unless one declares its own `memory` field. So it is never the answer to "where should this requirement live." Its use to a generator is subtractive: a reason not to spend a shared line on something Claude learns after one correction.
 
-Read it, don't script it: the slug encoding is undocumented and these are private notes.
+Reading `MEMORY.md` during the audit (SKILL.md's K1) is by hand, not by script: the slug encoding is undocumented and these are private notes.
 
 ## Interoperating with AGENTS.md and other agents' rule files
 
-Claude Code reads `CLAUDE.md`, **not `AGENTS.md`**. A repo that already has `AGENTS.md`, `.cursorrules`, or `.github/copilot-instructions.md` is not a repo with a working Claude harness, and the fix is not to copy the content across — a parallel body of instructions drifts the moment either side is edited, and then two agents disagree about the same project. Make `@AGENTS.md` the first line of `CLAUDE.md` and add Claude-specific guidance below it, or symlink one to the other when there's nothing Claude-specific to add.
-
-Treat those files as the best interview material in the repo. Someone already did the work of writing down what an agent needs to know here; the interview's job is to ask what's missing or stale, not to re-elicit it from scratch.
+Claude Code reads `CLAUDE.md`, **not `AGENTS.md`**. A repo with `AGENTS.md`, `.cursorrules`, or `.github/copilot-instructions.md` has no working Claude harness yet, and copying the content across makes two bodies of instructions that drift the moment either is edited. Make `@AGENTS.md` the first line of `CLAUDE.md` and add Claude-specific guidance below it, or symlink when there is nothing Claude-specific to add. Those files are the best interview material in the repo: someone already wrote down what an agent needs to know here, so ask what's missing or stale rather than re-eliciting it.
 
 ## Loading semantics — the gotchas that break naive assumptions
 
-These behaviors are not what most people expect from "a config file Claude reads," and each one has a direct implication for how you generate or advise on CLAUDE.md.
+Each of these has a direct implication for how you generate or advise on CLAUDE.md.
 
 - **Loaded once at session start, not live.** A project's CLAUDE.md (and any already-loaded rule) is read when a session begins; editing it mid-session has no effect until `/clear`, `/compact`, or a restart. You author harnesses before the sessions that use them, so this rarely bites you — but when you edit an existing CLAUDE.md in a live session, tell the user to restart before trusting that the change took effect.
 - **All CLAUDE.md files concatenate; there is no override.** Managed policy, user (`~/.claude/CLAUDE.md`), project, and local files are all appended into context together, ordered broad-to-specific, with no mechanism for a more-specific file to supersede a broader one. If the user-level file says "always use tabs" and the project file you're generating says "use 2-space indentation," both are in context and the model may pick either arbitrarily. During the audit phase, always check whether `~/.claude/CLAUDE.md` exists and read it — a generated project CLAUDE.md that silently conflicts with the user's personal file is a bug you introduced, not a pre-existing condition.
@@ -107,9 +105,11 @@ What survives the rules above states only what the code can't tell you:
 
 ## IMPORTANT
 Never write raw SQL in route handlers — use the Knex query builder in
-`src/db/`. `.claude/hooks/no-raw-sql.sh` blocks an edit that would add one,
-through `Bash` as well as `Edit`; this line exists so you know why before
-you hit it.
+`src/db/`, because it is the only layer that knows every tenant query must
+carry the `tenant_id` scope; a raw string bypasses that and leaks rows
+across tenants. `.claude/hooks/no-raw-sql.sh` blocks an edit that would add
+one, through `Bash` as well as `Edit`; this line exists so you know why
+before you hit it.
 ```
 
-Everything that survived is something the repo cannot tell you itself: which port, how long the suite takes, where auth actually lives, and why a hook is about to block you.
+Everything that survived is something the repo cannot tell you itself: which port, how long the suite takes, where auth actually lives, the invariant the query builder protects, and why a hook is about to block you.
