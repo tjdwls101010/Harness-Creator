@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "deny": ["Bash(aws *)"],
+    "allow": ["Bash(aws s3 ls)", "Edit(/src/**/*.ts)"]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__memory",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/log.sh",
+            "args": []
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/gate.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
