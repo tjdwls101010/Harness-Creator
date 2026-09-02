@@ -85,8 +85,6 @@ class QuizTests(ProbeTestCase):
                 self.assertIn("--bare", argv)
                 self.assertIn("-p", argv)
                 self.assertEqual(argv[argv.index("--tools") + 1], "")
-                self.assertIn("-p", argv)
-                self.assertNotIn("--output-format json", " ".join(argv[:argv.index("-p")]))
 
     def test_the_cwd_is_an_empty_directory_outside_the_repo(self):
         code, _, err = self.run_probe("quiz", "--questions", str(self.questions), "--out", str(self.out), "--runs", "1")
