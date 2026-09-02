@@ -3,10 +3,12 @@
 
     python3 tests/test_validate_harness.py
 
-stdlib unittest only, no pytest (per docs/plan/04-scripts-and-validation.md).
+stdlib unittest only, no pytest.
 """
 
+import json
 import re
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -368,6 +370,62 @@ class BadHarnessTests(unittest.TestCase):
 
     def test_missing_harness_spec_is_warning(self):
         self._assert_warning_contains("harness-spec.md", "missing")
+
+
+class FindingCodeTests(unittest.TestCase):
+    """Checks added from v7 on carry a stable code so a fixture can assert
+    exactly which check fired, and a reader can look one up."""
+
+    def setUp(self):
+        self.root = REPO_ROOT / "tests" / "fixtures" / "spec-bad-status"
+        self.findings, self.exit_code = vh.run(self.root, strict=False)
+
+    def _codes(self, findings=None):
+        return [getattr(f, "code", None) for f in (findings if findings is not None else self.findings)]
+
+    def test_v01_fires_on_a_status_outside_the_vocabulary(self):
+        v01 = [f for f in self.findings if getattr(f, "code", None) == "V01"]
+        self.assertEqual(len(v01), 2, self.findings)
+        levels = {f[0] for f in v01}
+        self.assertEqual(levels, {"E"})
+        messages = " ".join(f[2] for f in v01)
+        self.assertIn("done", messages)
+        self.assertIn("Validated", messages)          # case matters: the drift check compares lowercase, the template does not
+        for status in vh.hc.SPEC_STATUSES:
+            self.assertIn(status, messages)
+        self.assertEqual(self.exit_code, vh.hc.EXIT_LINT_FAILED)
+
+    def test_v01_is_silent_on_the_canonical_fixture_and_this_repo(self):
+        for root in (REPO_ROOT / "tests" / "fixtures" / "good-harness", REPO_ROOT):
+            findings, _ = vh.run(root, strict=False)
+            self.assertNotIn("V01", self._codes(findings), root)
+
+    def test_codes_reach_text_and_json(self):
+        proc = subprocess.run([sys.executable, str(SCRIPTS_DIR / "validate_harness.py"), "--path", str(self.root), "--json"],
+                              capture_output=True, text=True)
+        report = json.loads(proc.stdout)
+        self.assertIn("V01", {f.get("code") for f in report["findings"]})
+        text = subprocess.run([sys.executable, str(SCRIPTS_DIR / "validate_harness.py"), "--path", str(self.root)],
+                              capture_output=True, text=True).stdout
+        self.assertIn("V01", text)
+
+    def test_legacy_findings_unpack_as_three_tuples(self):
+        for f in self.findings:
+            level, location, message = f
+            self.assertIn(level, ("E", "W"))
+
+
+class MessageRepairTests(unittest.TestCase):
+    def test_default_mode_message_has_no_duplicated_fragment(self):
+        findings, _ = vh.run(REPO_ROOT / "tests" / "fixtures" / "bad-harness", strict=False)
+        m = next(msg for _, _, msg in findings if "defaultMode" in msg)
+        self.assertNotIn("auto mode can grant auto mode", m)
+        self.assertIn("cannot grant itself auto mode", m)
+
+    def test_strict_help_does_not_prescribe_where_to_run_it(self):
+        proc = subprocess.run([sys.executable, str(SCRIPTS_DIR / "validate_harness.py"), "--help"],
+                              capture_output=True, text=True)
+        self.assertNotIn("for CI", proc.stdout)
 
 
 class ConsequenceClauseTests(unittest.TestCase):
