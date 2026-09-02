@@ -761,10 +761,8 @@ class HeuristicFalsePositiveTests(unittest.TestCase):
         self.assertEqual(
             self._deny_allow({"deny": ["Bash(rm *)"], "allow": ["Bash(npm test)"]}), []
         )
-        # An allow identical to the deny is a different (already-reported) problem.
-        self.assertEqual(
-            self._deny_allow({"deny": ["Bash(aws *)"], "allow": ["Bash(aws *)"]}), []
-        )
+        # An allow identical to the deny is the plainest dead allow there is.
+        self.assertTrue(self._deny_allow({"deny": ["Bash(aws *)"], "allow": ["Bash(aws *)"]}))
 
     def _glob(self, pattern):
         findings = []

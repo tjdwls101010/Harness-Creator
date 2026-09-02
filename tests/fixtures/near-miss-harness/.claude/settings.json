@@ -1,7 +1,75 @@
 {
   "permissions": {
     "defaultMode": "acceptEdits",
-    "deny": ["Edit(docs/**)", "Read(secrets/**)", "Write"],
-    "allow": ["Bash(ls *)", "Bash(npm test)"]
+    "deny": [
+      "Edit(docs/**)",
+      "Read(secrets/**)",
+      "Write",
+      "Read(src/*)",
+      "Edit(/src/**/*.ts)"
+    ],
+    "allow": [
+      "Bash(ls *)",
+      "Bash(npm test)",
+      "mcp__puppeteer",
+      "Edit(//tmp/scratch/**)",
+      "Read(~/Documents/*.pdf)",
+      "Edit(notes/**)",
+      "Read(src/deep/file.py)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__memory__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/shared-audit.sh",
+            "args": []
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__.*__write.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PROJECT_DIR}/.claude/hooks/shared-audit.sh\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/shared-audit.sh",
+            "args": []
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/gate-with-transcript.py"
+            ]
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/log-mentions-block.sh",
+            "args": []
+          }
+        ]
+      }
+    ]
   }
 }
