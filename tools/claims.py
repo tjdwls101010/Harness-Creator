@@ -5,15 +5,17 @@ that every frozen claim survived the rewrite or was dropped on purpose.
     claims.py extract <file>                      -> JSON claim list on stdout
     claims.py check <claims.json> <file> --dispositions <file> [--json]
 
-`extract` finds claim candidates -- headings, bold spans, table rows, and
-any sentence carrying a negation, a number, or a backticked identifier --
-and gives each a stable ID (C1, C2, ...) in document order with the exact
-text as its anchor. Save that output before rewriting: the IDs are the
-contract the rewrite is checked against.
+`extract` finds claim candidates -- `#` headings, bold spans, pipe-delimited
+table rows, and any sentence carrying a negation, a number, or a backticked
+identifier; with --all-sentences, every sentence -- and gives each a stable
+ID (C1, C2, ...) in document order with the exact text as its anchor. Fenced
+code and HTML comments are never claims. Prune the list by hand, then save
+it: the IDs are the contract the rewrite is checked against.
 
 `check` requires every frozen ID to be accounted for: its anchor is still in
-the target file (whitespace and bold markers ignored), or the dispositions
-file names it with a verb --
+the target's visible text (whitespace and `**` ignored; fenced code and HTML
+comments do not count, and N identical anchors need N occurrences), or the
+dispositions file names it with a verb --
 
     C3 DROP <reason>                  deliberately removed; a reason is required
     C7 REWORDED <new anchor>          the new wording, which must be in the target
@@ -29,7 +31,7 @@ a claim that lost part of itself while its anchor survived, and a claim the
 extractor never found because it carried none of the markers above. Those
 are the reviewer's job. This tool is a floor under a rewrite, not a proof.
 
-Development-only; not shipped with the skill. Python 3.10+, stdlib only.
+Python 3.10+, stdlib only.
 """
 
 import argparse
@@ -44,7 +46,7 @@ EXIT_USAGE = 2
 
 _FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
 _HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
-_HEADING_RE = re.compile(r"^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$")
+_HEADING_RE = re.compile(r"^\s{0,3}(#{1,6})\s+(.+?)(?:\s+#+)?\s*$")
 _TABLE_ROW_RE = re.compile(r"^\s*\|.*\|\s*$")
 _BULLET_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
 _BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
@@ -68,13 +70,13 @@ def _strip_comments_and_fences(text):
         m = _FENCE_RE.match(line)
         if fence is None:
             if m:
-                fence = m.group(1)[0]
+                fence = m.group(1)
                 out.append("")
                 continue
             out.append(line)
         else:
             out.append("")
-            if m and m.group(1)[0] == fence:
+            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence):
                 fence = None
     return out
 
@@ -93,10 +95,10 @@ def _sentence_is_claim(sentence):
 
 
 def _paragraphs(lines):
-    """Yield (start_line, text) for each paragraph, with every list item
-    and table row as its own paragraph. Line numbers are 1-based."""
+    """Yield paragraphs as lists of (line_no, text) pieces, one piece per
+    source line, with every heading, list item and table row as its own
+    paragraph. Line numbers are 1-based."""
     buf = []
-    start = None
     for i, line in enumerate(lines, 1):
         stripped = line.strip()
         boundary = (
@@ -106,21 +108,36 @@ def _paragraphs(lines):
             or _BULLET_RE.match(line)
         )
         if boundary and buf:
-            yield start, " ".join(buf)
-            buf, start = [], None
+            yield buf
+            buf = []
         if not stripped:
             continue
         if _HEADING_RE.match(line) or _TABLE_ROW_RE.match(line):
-            yield i, stripped
+            yield [(i, stripped)]
             continue
-        if not buf:
-            start = i
-        buf.append(stripped)
+        buf.append((i, stripped))
     if buf:
-        yield start, " ".join(buf)
+        yield buf
 
 
-def extract(text):
+def _sentences_with_lines(pieces):
+    """Split a paragraph into sentences, each tagged with the source line it
+    starts on."""
+    text = " ".join(t for _, t in pieces)
+    starts = []
+    offset = 0
+    for line_no, piece in pieces:
+        starts.append((offset, line_no))
+        offset += len(piece) + 1
+    pos = 0
+    for sentence in _SENTENCE_SPLIT_RE.split(text):
+        idx = text.find(sentence, pos)
+        pos = idx + len(sentence)
+        line_no = next(l for o, l in reversed(starts) if o <= idx)
+        yield line_no, sentence.strip()
+
+
+def extract(text, all_sentences=False):
     """Return the claim list for a markdown document."""
     lines = _strip_comments_and_fences(text)
     claims = []
@@ -130,18 +147,18 @@ def extract(text):
         if anchor:
             claims.append({"id": f"C{len(claims) + 1}", "kind": kind, "anchor": anchor, "line": line})
 
-    for line_no, para in _paragraphs(lines):
+    for pieces in _paragraphs(lines):
+        line_no, para = pieces[0]
         heading = _HEADING_RE.match(para)
-        if heading:
+        if len(pieces) == 1 and heading:
             add("heading", heading.group(2), line_no)
             continue
-        if _TABLE_ROW_RE.match(para):
+        if len(pieces) == 1 and _TABLE_ROW_RE.match(para):
             if not _is_separator_row(para):
                 add("table-row", para, line_no)
             continue
-        body = _BULLET_RE.sub("", para, count=1)
-        for sentence in _SENTENCE_SPLIT_RE.split(body):
-            sentence = sentence.strip()
+        pieces = [(pieces[0][0], _BULLET_RE.sub("", pieces[0][1], count=1))] + pieces[1:]
+        for line_no, sentence in _sentences_with_lines(pieces):
             if not sentence:
                 continue
             bold = _BOLD_RE.fullmatch(sentence)
@@ -150,7 +167,7 @@ def extract(text):
                 continue
             for m in _BOLD_RE.finditer(sentence):
                 add("bold", m.group(1), line_no)
-            if _sentence_is_claim(sentence):
+            if all_sentences or _sentence_is_claim(sentence):
                 add("sentence", sentence, line_no)
     return claims
 
@@ -160,8 +177,18 @@ def normalize(text):
     return " ".join(text.replace("**", "").split())
 
 
+def visible_text(text):
+    """The target as a reader sees it: fenced code and HTML comments removed,
+    so a claim that survives only inside a code block or a comment is a loss."""
+    return "\n".join(_strip_comments_and_fences(text))
+
+
+def anchor_count(anchor, text):
+    return normalize(visible_text(text)).count(normalize(anchor))
+
+
 def anchor_present(anchor, text):
-    return normalize(anchor) in normalize(text)
+    return anchor_count(anchor, text) > 0
 
 
 _VERBS = ("DROP", "REWORDED", "MOVED", "TOOL", "KEEP")
@@ -197,6 +224,15 @@ def check(claims, target_text, dispositions, base_dir):
         if cid not in known:
             failures.append(f"{cid}: disposition names an ID that is not in the claim list")
 
+    # N frozen IDs sharing one anchor need N occurrences in the target, or
+    # one surviving copy would vouch for every deleted context.
+    needed = {}
+    for claim in claims:
+        if dispositions.get(claim["id"], ("", ""))[0] in ("", "KEEP"):
+            key = normalize(claim["anchor"])
+            needed[key] = needed.get(key, 0) + 1
+    available = {key: anchor_count(key, target_text) for key in needed}
+
     for claim in claims:
         cid, anchor = claim["id"], claim["anchor"]
         verb, rest = dispositions.get(cid, ("", ""))
@@ -230,37 +266,55 @@ def check(claims, target_text, dispositions, base_dir):
                 verdicts[cid] = "MOVED but not found at the named path"
                 failures.append(f"{cid}: {new_anchor!r} not found in {path_part.strip() or '(no path)'}")
         else:
-            if anchor_present(anchor, target_text):
+            key = normalize(anchor)
+            if available.get(key, 0) > 0:
+                available[key] -= 1
                 verdicts[cid] = "SURVIVED"
             else:
                 verdicts[cid] = "MISSING"
+                short = "fewer copies than frozen IDs" if needed.get(key, 0) > 1 else "not in the target"
                 failures.append(
-                    f"{cid} (line {claim['line']}): anchor not in the target and no disposition -- "
+                    f"{cid} (line {claim['line']}): anchor {short} and no disposition -- "
                     f"{anchor[:80]!r}"
                 )
     return verdicts, failures
 
 
+def _read(path):
+    try:
+        return Path(path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise SystemExit(f"error: cannot read {path}: {exc}")
+
+
+def _load_claims(path):
+    try:
+        claims = json.loads(_read(path))
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"error: {path} is not valid JSON: {exc}")
+    if not isinstance(claims, list) or not all(
+        isinstance(c, dict) and isinstance(c.get("id"), str) and isinstance(c.get("anchor"), str)
+        for c in claims
+    ):
+        raise SystemExit(f"error: {path} is not a claim list (a JSON array of objects with 'id' and 'anchor')")
+    ids = [c["id"] for c in claims]
+    if len(set(ids)) != len(ids):
+        raise SystemExit(f"error: {path} has duplicate IDs")
+    for c in claims:
+        c.setdefault("line", 0)
+    return claims
+
+
 def cmd_extract(args):
-    path = Path(args.file)
-    if not path.is_file():
-        print(f"error: {args.file} is not a file", file=sys.stderr)
-        return EXIT_USAGE
-    print(json.dumps(extract(path.read_text(encoding="utf-8")), indent=2, ensure_ascii=False))
+    print(json.dumps(extract(_read(args.file), all_sentences=args.all_sentences), indent=2, ensure_ascii=False))
     return EXIT_OK
 
 
 def cmd_check(args):
-    claims_path, target_path, disp_path = Path(args.claims), Path(args.file), Path(args.dispositions)
-    for p in (claims_path, target_path, disp_path):
-        if not p.is_file():
-            print(f"error: {p} is not a file", file=sys.stderr)
-            return EXIT_USAGE
-    claims = json.loads(claims_path.read_text(encoding="utf-8"))
-    dispositions, errors = parse_dispositions(disp_path.read_text(encoding="utf-8"))
-    verdicts, failures = check(
-        claims, target_path.read_text(encoding="utf-8"), dispositions, disp_path.resolve().parent
-    )
+    claims = _load_claims(args.claims)
+    target_text = _read(args.file)
+    dispositions, errors = parse_dispositions(_read(args.dispositions))
+    verdicts, failures = check(claims, target_text, dispositions, Path(args.dispositions).resolve().parent)
     failures = errors + failures
     if args.json:
         print(json.dumps({"claims": verdicts, "failures": failures, "ok": not failures}, indent=2, ensure_ascii=False))
@@ -281,11 +335,23 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_extract = sub.add_parser("extract", help="list a document's claim candidates as JSON with stable IDs")
+    p_extract = sub.add_parser(
+        "extract", help="list a document's claim candidates as JSON with stable IDs",
+        description="Print a JSON array of {id, kind, anchor, line} in document order. kind is one of "
+                    "heading, bold, table-row, sentence. Prune by hand, then save the file for `check`.",
+    )
     p_extract.add_argument("file", help="markdown document to extract claims from")
+    p_extract.add_argument("--all-sentences", action="store_true",
+                           help="take every sentence as a candidate, not only those with a negation, number or backtick; use for a full rewrite, then prune")
     p_extract.set_defaults(func=cmd_extract)
 
-    p_check = sub.add_parser("check", help="verify every frozen claim ID survived the rewrite or has a disposition")
+    p_check = sub.add_parser(
+        "check", help="verify every frozen claim ID survived the rewrite or has a disposition",
+        description="Exit 0 when every ID in the claim list is accounted for, 1 otherwise, 2 on unreadable input. "
+                    "Disposition lines: '<ID> DROP <reason>', '<ID> REWORDED <new anchor in the target>', "
+                    "'<ID> MOVED <path> :: <anchor in that file>', '<ID> TOOL <script or check that now carries it>', "
+                    "'<ID> KEEP'. An ID with no line must have its anchor in the target's visible text.",
+    )
     p_check.add_argument("claims", help="the JSON list `extract` printed before the rewrite")
     p_check.add_argument("file", help="the rewritten document")
     p_check.add_argument("--dispositions", required=True, help="text file of '<ID> <VERB> [rest]' lines; relative MOVED paths resolve against its directory")
@@ -293,7 +359,13 @@ def main():
     p_check.set_defaults(func=cmd_check)
 
     args = parser.parse_args()
-    return args.func(args)
+    try:
+        return args.func(args)
+    except SystemExit as exc:
+        if isinstance(exc.code, str):
+            print(exc.code, file=sys.stderr)
+            return EXIT_USAGE
+        raise
 
 
 if __name__ == "__main__":

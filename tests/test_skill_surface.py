@@ -619,12 +619,9 @@ class PackageClosureRegressionTests(unittest.TestCase):
 
     def test_no_plan_document_is_named(self):
         """Derived from the plan tree rather than hardcoded, so a pointer at
-        any generation's plan file fails, not just the one v5 removed.
-
-        v7: the plan tree is being deleted from this repo, and the pin has
-        nothing to derive from once it is gone -- a plan document that does
-        not exist cannot be cited by name. Skipped rather than removed so the
-        pin comes back on its own if a plan tree ever reappears."""
+        any generation's plan file fails, not just the one v5 removed. With no
+        plan tree there is nothing to derive from, so the pin skips and
+        returns on its own if one reappears."""
         plan_tree = REPO_ROOT / "docs" / "plan"
         if not plan_tree.is_dir():
             self.skipTest("docs/plan/ is gone; nothing to derive the pin from")
