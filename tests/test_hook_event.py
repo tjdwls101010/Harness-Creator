@@ -6,6 +6,7 @@
 stdlib unittest only, no pytest.
 """
 
+import re
 import subprocess
 import sys
 import unittest
@@ -32,18 +33,35 @@ class CoverageTests(unittest.TestCase):
     failure the file's own 'treat this list as authoritative' warning
     exists to prevent."""
 
-    def test_all_thirty_events_resolve(self):
+    def test_every_documented_event_resolves(self):
+        """The count is read from the live docs' own event list rather than
+        pinned here: v7 found the shipped list three short (`DirectoryAdded`,
+        `PreModelSwitch`, `PostModelSwitch`), which is the failure this class
+        describes, arriving through the file rather than through the tool."""
         names = he.event_names()
-        self.assertEqual(len(names), 30, names)
         text, expanded, tabled = he.load()
         for n in names:
             self.assertIsNotNone(he.render(n, text, expanded, tabled), n)
+        for n in ("DirectoryAdded", "PreModelSwitch", "PostModelSwitch"):
+            self.assertIn(n, names, f"{n} is documented and must be reachable")
 
-    def test_names_match_the_files_own_enumeration(self):
-        """The preamble list is the authority. If a section is added without
-        being listed there, or listed without being defined, this fails."""
+    def test_names_match_what_the_file_documents(self):
+        """The script owns lifecycle order; the file owns per-event data. So
+        the name set is exactly what the file defines -- a section or row --
+        with no prose enumeration in between to disagree with either."""
         text, expanded, tabled = he.load()
         self.assertEqual(set(he.event_names()), set(expanded) | set(tabled))
+
+    def test_the_file_carries_no_prose_enumeration(self):
+        """An enumeration in the file's preamble travelled into every
+        single-event lookup, which is the one thing this tool exists to
+        avoid. Order is the script's interface (`--list`), not prose."""
+        text = EVENTS_MD.read_text(encoding="utf-8")
+        head = text.split("\n## ")[0]
+        listed = set(re.findall(r"`(\w+)`", head)) & set(he.event_names())
+        self.assertLessEqual(
+            len(listed), 2, f"the preamble enumerates events: {sorted(listed)}"
+        )
 
     def test_the_two_shipped_event_lists_agree(self):
         """test_hook.py takes --event from harness_common.HOOK_EVENTS;
@@ -87,6 +105,31 @@ class OutputTests(unittest.TestCase):
         one = len(run("--event", "PreToolUse").stdout.split())
         self.assertLess(one, whole / 4, f"{one} words of {whole}")
 
+    def test_a_lookup_carries_no_other_events(self):
+        """`--event Stop` that also names twenty other events is not a
+        lookup, it is the file with extra steps."""
+        out = run("--event", "PreToolUse").stdout
+        for unrelated in ("TeammateIdle", "WorktreeRemove", "ElicitationResult",
+                          "PostModelSwitch", "DirectoryAdded"):
+            self.assertNotIn(unrelated, out, unrelated)
+
+    def test_plain_stdout_as_context_names_only_the_documented_events(self):
+        """Live docs (2026-09-03, code.claude.com/docs/en/hooks, "Exit code
+        0"): the exceptions where plain-text stdout becomes context are
+        `UserPromptSubmit`, `UserPromptExpansion`, `SessionStart` and
+        `PostModelSwitch`. `Setup` is not one of them -- its plain stdout
+        goes to the debug log, which this file's own `Setup` row says."""
+        out = run("--event", "SessionStart").stdout
+        sentence = next(
+            (l for l in out.splitlines() if "Plain stdout is added directly" in l), ""
+        )
+        self.assertTrue(sentence, "SessionStart no longer states the stdout channel")
+        self.assertIn("PostModelSwitch", sentence)
+        exceptions = sentence.split("plain stdout goes to the debug log")[0]
+        self.assertNotIn("besides `Setup`", exceptions)
+        self.assertIn("including `Setup`", exceptions,
+                      "Setup is the counterexample, not one of the exceptions")
+
     def test_expanded_and_tabled_events_both_render(self):
         self.assertIn("Trigger timing", run("--event", "PreToolUse").stdout)   # a section
         self.assertIn("Trigger timing", run("--event", "Setup").stdout)        # a table row
@@ -115,9 +158,16 @@ class OutputTests(unittest.TestCase):
         self.assertIn("PostToolBatch", r.stderr)
 
     def test_list_prints_one_per_line(self):
+        """The count is not pinned to a literal: v7 found the shipped list
+        three events short of the live docs, and a hard 30 here would have
+        had to be edited to accept the fix rather than catching its
+        absence. What is pinned is the shape -- one name per line, all of
+        them, no blanks."""
         r = run("--list")
         self.assertEqual(r.returncode, 0)
-        self.assertEqual(len(r.stdout.strip().split("\n")), 30)
+        lines = r.stdout.strip().split("\n")
+        self.assertEqual(lines, list(he.event_names()))
+        self.assertTrue(all(l.strip() and " " not in l for l in lines), lines)
 
     def test_requires_an_argument(self):
         self.assertNotEqual(run().returncode, 0)

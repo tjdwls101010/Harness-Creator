@@ -4,11 +4,10 @@
     hook_event.py --event PreToolUse
     hook_event.py --list
 
-Prints one event's section of references/hooks-events.md -- trigger timing,
-matcher, input fields, decision channel, typical use, version caveats --
-followed by the input fields every event shares. The --event choices are
-generated from that file, so this script's signature is the complete event
-list.
+Prints one event's entry -- trigger timing, matcher, key input fields,
+decision channel, version caveats -- followed by the input fields every
+event shares. --list prints every event name in lifecycle order. The
+--event choices are this script's complete event list.
 
 Python 3.10+, stdlib only.
 """
@@ -55,12 +54,15 @@ def _sections(text):
 
 def _preamble(text):
     """The shared input fields every event carries, which the per-event
-    rows deliberately omit. A single-event reader still needs them."""
+    rows deliberately omit. A single-event reader still needs them.
+
+    Matched on `session_id` alone: anything else in the head of the file is
+    something this lookup is not being asked for, and a preamble that grows
+    is a lookup that quietly becomes the file."""
     m = re.search(r"^(.*?)(?=^## )", text, re.M | re.S)
     if not m:
         return ""
-    keep = [p for p in m.group(1).split("\n\n")
-            if "session_id" in p or "common" in p.lower()]
+    keep = [p for p in m.group(1).split("\n\n") if "session_id" in p]
     return "\n\n".join(keep).strip()
 
 
@@ -72,22 +74,20 @@ def load(path=EVENTS_MD):
 
 
 def event_names(path=EVENTS_MD):
-    """In lifecycle order, not alphabetical.
+    """In lifecycle order, not alphabetical, from harness_common.
 
-    The file enumerates the events in the order they can fire, and that
-    order is itself information -- it is how a reader sees that Setup sits
-    outside normal startup, or that SessionEnd is last. The enumeration in
-    the preamble is the authority; anything defined further down but not
-    listed there is appended so a new event cannot go missing here."""
+    The file supplies which events are documented and what each one does;
+    the order they fire in is this script's own, so that ordering a lookup
+    never has to carry an enumeration of every other event. An event
+    documented in the file but missing from the order constant is still
+    reachable, appended rather than dropped -- a lookup that silently has
+    no answer is the failure this tool exists to prevent."""
     try:
         text, expanded, tabled = load(path)
     except OSError:
         return []
     defined = set(expanded) | set(tabled)
-    m = re.search(r"in lifecycle order:(.*?)(?:\.\s|\n\n)", text, re.S)
-    ordered = [n for n in re.findall(r"`(\w+)`", m.group(1))] if m else []
-    seen = set()
-    names = [n for n in ordered if n in defined and not (n in seen or seen.add(n))]
+    names = [n for n in hc.HOOK_EVENTS_IN_LIFECYCLE_ORDER if n in defined]
     names += sorted(defined - set(names))
     return names
 
