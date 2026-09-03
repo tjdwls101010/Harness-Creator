@@ -621,8 +621,14 @@ class PointerReaderTests(unittest.TestCase):
     CMR = SKILL_DIR / "references" / "claude-md-and-rules.md"
 
     def test_the_policy_names_the_client_as_what_already_announces_components(self):
+        """v7 (disposition C25) reworded the sentence this anchored: the ban
+        is now on the bare inventory rather than on naming a component at
+        all, because SKILL.md tells the builder to say why a hook exists,
+        which names one. The anchor moved to the clause that still carries
+        the reason -- the client is what announces existence, so a prose
+        registry buys nothing and drifts."""
         text = read(self.CMR)
-        self.assertIn("the client already does", text)
+        self.assertIn("the client already announces existence", text)
         self.assertIn("A pointer inherits its target's reader", text)
 
     def test_the_canonical_example_has_no_live_pointer_at_the_spec(self):
