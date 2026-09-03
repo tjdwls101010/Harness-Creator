@@ -1,6 +1,6 @@
 # Generating skills
 
-You are generating a SKILL.md (and possibly `references/` and `scripts/`) for someone else's project. Read this the moment a skill becomes a candidate in routing. The authoring doctrine it applies lives in SKILL.md; what's here is the part that only makes sense once the target is a skill — triggering, the listing budget, bundled scripts, and the traps specific to how Claude Code implements skills.
+You are generating a SKILL.md (and possibly `references/` and `scripts/`) for someone else's project. The authoring doctrine it applies lives in SKILL.md; what's here is the part that only makes sense once the target is a skill — triggering, the listing budget, bundled scripts, and the traps specific to how Claude Code implements skills.
 
 ## What "Conviction over compliance" looks like in a skill body
 
@@ -19,11 +19,11 @@ The rail bans one query shape. The principle explains the table's actual shape, 
 
 SKILL.md gives the rule — the seam that pays is one the model genuinely branches on. A skill is where that rule has a concrete staging to apply to: metadata (name + description) is in context every session; the SKILL.md body loads once the skill triggers; bundled `references/` and `scripts/` load only when a step actually reaches them. So the question for every piece of content is not "is this useful?" but "is this needed on *every* path through the skill?" Needed every time it triggers → the body. Needed only on some paths (a schema used at one step, a framework-specific variant, a deep worked example) → `references/`.
 
-The split axis is that branch first, volume second (SKILL.md: volume is a weaker reason, not a non-reason). A skill covering three cloud providers earns `references/{aws,gcp,azure}.md` because the model picks exactly one per invocation; a skill covering one procedure earns a second file only once its body has outgrown the guideline `validate_harness.py` warns past, and even then cutting something is the first move. Splitting wrong fails silently: nothing signals that the model routed to the wrong file or never learned a needed fragment existed, so it quietly does a worse job.
+The split axis is the branch first, volume second (SKILL.md: volume is a weaker reason, not a non-reason). A skill covering three cloud providers earns `references/{aws,gcp,azure}.md` because the model picks exactly one per invocation. Volume alone earns a split only where the split actually defers reading — a schema consulted at one step out of six, a variant most invocations skip — and the first move on a long body is still to cut, because a body over the guideline and a body that needs staging are different diagnoses with the same symptom. Splitting wrong fails silently: nothing signals that the model routed to the wrong file or never learned a needed fragment existed, so it quietly does a worse job.
 
 **A skill that will be packaged has to be self-contained, and the interview's Deployment question is when you learn that.** A plugin installs as its own directory: the repo it was written in does not come along, so a line sending the reader to a design doc elsewhere in that repo resolves for its author and for nobody else. This is where the split axis stops being only about attention — material a packaged skill genuinely needs belongs in its own `references/`, and material it merely cites belongs cited by public source rather than by local path. A project skill is under no such constraint; it lives in the repo it points into.
 
-When you generate a multi-file skill for someone else's project, ask specifically: on any given invocation, does the model actually choose a branch, or would it need all these files together anyway? If the answer is "together," that's evidence they should be one file, regardless of resulting length.
+When you generate a multi-file skill for someone else's project, ask specifically: on any given invocation, does the model actually choose a branch, or would it need all these files together anyway? If the answer is "together," they belong in one file — length is not the tiebreaker, because a file the model always reads in full costs the same whether it is one file or three, plus a routing decision and the chance of a silently missed fragment.
 
 ## description is the only trigger mechanism
 
@@ -33,7 +33,7 @@ Current models under-trigger: they skip a skill that would have helped rather th
 
 Equally important, and easy to skip under time pressure: describe the **near-misses** — requests that sound adjacent but should route elsewhere. A skill for "deploy to production" should note in its description that routine `git push` or local test runs are out of scope, if another skill or plain judgment already covers those; without that boundary language, an eagerly-tuned description starts stealing triggers from its neighbors, and the failure is just as silent as under-triggering because nothing tells you which skill actually ran. When you generate several skills for one project in the same session, read their descriptions against each other before finishing — that's the moment to catch two skills quietly competing for the same request.
 
-## Scripts must be parameterized, never frozen
+## A bundled script needs an interface the model can compose with
 
 A bundled script earns its place when the model can compose with it: a CLI that takes arguments (`validate.py --path <dir> --strict`) or importable helpers it assembles for the task at hand. The frozen script — no arguments, one hardcoded purpose, written for the exact case in front of you — is rewritten from scratch the instant the task shifts, so the bundle bought nothing and still costs a file. When the ask really is one-shot, that is a sign the content belongs inline as an instruction, not as a script; the exception is a fixed procedure the model gets wrong by hand (a checksum, a multi-step API dance), where a no-argument script is still cheaper than the mistake.
 
@@ -84,4 +84,4 @@ file-bug-report/
     └── file_issue.py           — CLI: file_issue.py --template crash --title "..." --body-file f.md
 ```
 
-SKILL.md stays short: trigger conditions, the one gotcha that matters here ("this tracker's 'priority' field is required at creation time and can't be changed after — ask up front"), which template to open, and where the script is. Each `references/template-*.md` holds one report type and nothing about the others, because a single invocation needs exactly one. The split follows the branch the model actually takes. With only one template, the right shape would be zero reference files and the template inlined — a routing decision that saves no reading is pure cost.
+SKILL.md stays short: trigger conditions, the one gotcha that matters here ("this tracker's 'priority' field is required at creation time and can't be changed after — ask up front"), which template to open, and where the script is. Each `references/template-*.md` holds one report type and nothing about the others, because a single invocation needs exactly one. The split follows the branch the model actually takes. With only one template there is no branch to route on, so inlining it is the cheaper shape: a routing decision that defers no reading is pure cost.
