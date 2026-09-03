@@ -172,16 +172,19 @@ One line per event, purpose-first, for picking the event; then `hook_event.py --
 | `SubagentStop` | Keep a subagent working past its natural stop, same shape as `Stop`. |
 | `TaskCreated` | Enforce naming/content rules on task creation, or roll it back. |
 | `TaskCompleted` | Gate task completion on a condition (tests passing, lint clean). |
-| `Stop` | Keep the main agent working past its natural stop — the validation-gate event. |
+| `Stop` | Keep the main agent working past its natural stop — the validation-gate event. Before generating one, check whether `/goal` already does the job: it keeps Claude working across turns until a stated condition is met, with no hook to write, loop-guard, or maintain. |
 | `StopFailure` | Log/alert on an API-error turn ending. No decision control at all. |
 | `TeammateIdle` | Gate an agent-team teammate going idle, same shape as `Stop`. |
 | `ConfigChange` | Audit or block a settings/skill file change mid-session (not `policy_settings`). |
 | `CwdChanged` | React to `cd` — reload env vars via `CLAUDE_ENV_FILE`, update `FileChanged` watch list. |
+| `DirectoryAdded` | Observe a directory added by `/add-dir` or the SDK — notification only, output discarded. |
 | `FileChanged` | React to a watched file changing on disk (direnv-style patterns). |
 | `WorktreeCreate` | Replace git-worktree creation with another VCS. Must return a path or creation fails. |
 | `WorktreeRemove` | Clean up after a non-git `WorktreeCreate`. |
 | `PreCompact` | Block compaction, or let it proceed. |
 | `PostCompact` | React after compaction completes — log the summary, refresh external state. |
+| `PreModelSwitch` | Block or allow a model switch before it applies; matches on the model switched *to*. |
+| `PostModelSwitch` | React after the model changed, including changes Claude Code makes itself. |
 | `Elicitation` | Answer an MCP server's mid-task input request programmatically, skipping the dialog. |
 | `ElicitationResult` | Observe or override the user's elicitation response before it reaches the MCP server. |
 | `SessionEnd` | Cleanup/logging on session end. Very short default timeout — see gotchas above. |

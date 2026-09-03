@@ -1,11 +1,10 @@
 # Hook events — full reference
 
-The data `hook_event.py --event <Event>` reads: per event, trigger timing, matcher support, input fields, decision channel, and version caveats. Pick the event with the router in `references/hooks.md`, which also carries the principles and gotchas that apply regardless of event.
+Per event: trigger timing, matcher support, key input fields, decision channel, version caveats. `hook_event.py --list` prints the event names in lifecycle order, and `--event <Event>` prints one entry. Pick the event with the router in `references/hooks.md`, which also carries the principles and gotchas that apply regardless of event.
 
-The 30 events, in lifecycle order: `SessionStart`, `Setup`, `InstructionsLoaded`, `UserPromptSubmit`, `UserPromptExpansion`, `MessageDisplay`, `PreToolUse`, `PermissionRequest`, `PermissionDenied`, `PostToolUse`, `PostToolUseFailure`, `PostToolBatch`, `Notification`, `SubagentStart`, `SubagentStop`, `TaskCreated`, `TaskCompleted`, `Stop`, `StopFailure`, `TeammateIdle`, `ConfigChange`, `CwdChanged`, `FileChanged`, `WorktreeCreate`, `WorktreeRemove`, `PreCompact`, `PostCompact`, `Elicitation`, `ElicitationResult`, `SessionEnd`. Treat this list as authoritative even if your own training or another document names a different number of events — several of these (`TaskCompleted`, `PostToolBatch`, `PermissionDenied`, `TeammateIdle`) postdate common training data, so author a requested event rather than refusing it as nonexistent.
+Several events here postdate common training data, so author a requested event rather than refusing it as nonexistent; if one is missing from this file, check the live docs rather than concluding it does not exist.
 
 Every event also receives the common input fields on top of what's listed per event below: `session_id`, `transcript_path`, `cwd`, `hook_event_name`, and where applicable `prompt_id` (v2.1.196+), `permission_mode`, `effort` (tool-context events only), plus `agent_id`/`agent_type` inside subagents. These are omitted from the per-event "key input fields" column below to keep it focused on what's actually distinctive about that event.
-
 ## The 8 high-traffic events, expanded
 
 ### SessionStart
@@ -16,7 +15,7 @@ Every event also receives the common input fields on top of what's listed per ev
 
 **Key input fields.** `source` (mirrors the matcher value), optional `model` (not guaranteed present — check before reading), optional `agent_type`, optional `session_title`.
 
-**Decision channel.** Context-only, no blocking. Plain stdout is added directly as context — the only events besides `Setup`/`UserPromptSubmit`/`UserPromptExpansion` where that's true. JSON output additionally supports `hookSpecificOutput.additionalContext`, `initialUserMessage` (first turn in `-p` mode), `sessionTitle` (startup/resume only), `watchPaths` (seeds the `FileChanged` watch list), and `reloadSkills` (re-scans skill/command directories after the hook completes, so a hook that installs a skill makes it available in the same session). Exit 2 shows stderr to the user only (as of v2.1.199 — earlier versions wrote it to the debug log only); Claude never sees it.
+**Decision channel.** Context-only, no blocking. Plain stdout is added directly as context — true only here and on `UserPromptSubmit`, `UserPromptExpansion` and `PostModelSwitch`; on every other event, including `Setup`, plain stdout goes to the debug log instead. JSON output additionally supports `hookSpecificOutput.additionalContext`, `initialUserMessage` (first turn in `-p` mode), `sessionTitle` (startup/resume only), `watchPaths` (seeds the `FileChanged` watch list), and `reloadSkills` (re-scans skill/command directories after the hook completes, so a hook that installs a skill makes it available in the same session). Exit 2 shows stderr to the user only (as of v2.1.199 — earlier versions wrote it to the debug log only); Claude never sees it.
 
 **Version caveats.** SessionStart exit-2 visibility to the transcript requires v2.1.199+.
 
@@ -65,7 +64,7 @@ Only `command` and `mcp_tool` hook types are supported on this event — `http`,
 
 **Trigger timing.** Fires after Claude has constructed a tool call's parameters, before the call executes. The main enforcement point — this is where a call can be stopped before anything happens.
 
-**Matcher.** Supported, filters on tool name: `Bash`, `Edit`, `Write`, `Read`, `Glob`, `Grep`, `Agent`, `WebFetch`, `WebSearch`, `AskUserQuestion`, `ExitPlanMode`, or any `mcp__<server>__<tool>` name.
+**Matcher.** Supported, and what it filters on is the `tool_name` the event carries — whatever the session's tool set calls it, built-in (`Bash`, `Edit`, `Write`, `Agent`, `Skill`, …) or `mcp__<server>__<tool>`. Match the name the tool actually reports rather than a list, which is why the matcher trap in `hooks.md` matters here.
 
 **Key input fields.** `tool_name`, `tool_input` (schema varies per tool — e.g. Bash: `command`/`description`/`timeout`/`run_in_background`; Edit: `file_path`/`old_string`/`new_string`/`replace_all`; Write: `file_path`/`content`), `tool_use_id`.
 
@@ -121,7 +120,7 @@ Redaction pattern to remember: `PreToolUse.updatedInput` for outbound (before th
 
 **Matcher.** Not supported — fires on every stop.
 
-**Key input fields.** `stop_hook_active` (`true` when Claude Code is already continuing because of an earlier `Stop`-hook block — **must check this to avoid an infinite loop**), `last_assistant_message` (Claude's final response text, so you don't have to parse the transcript file), `background_tasks` (array of in-flight shell/subagent/workflow/etc. tasks, v2.1.145+), `session_crons` (array of scheduled wakeups, v2.1.145+, distinguishes "actually done" from "paused waiting on background work").
+**Key input fields.** `stop_hook_active` (`true` when Claude Code is already continuing because of an earlier `Stop`-hook block, so a hook that can block reads it to know it is on a re-entry), `last_assistant_message` (Claude's final response text, so you don't have to parse the transcript file), `background_tasks` (array of in-flight shell/subagent/workflow/etc. tasks, v2.1.145+), `session_crons` (array of scheduled wakeups, v2.1.145+, distinguishes "actually done" from "paused waiting on background work").
 
 **Decision channel.** Top-level `decision: "block"` + required `reason` prevents stopping and feeds `reason` to Claude as its next instruction. `hookSpecificOutput.additionalContext` is the non-error variant — same effect (conversation continues) but labeled "Stop hook feedback" in the transcript rather than showing as a hook error. Both paths go through the same loop protection: the `stop_hook_active` field plus a built-in cap of **8 consecutive blocks** (`CLAUDE_CODE_STOP_HOOK_BLOCK_CAP` to override, `0` disables — don't rely on disabling it). Exit 2 = block, equivalent to `decision: "block"`.
 
@@ -189,7 +188,7 @@ Redaction pattern to remember: `PreToolUse.updatedInput` for outbound (before th
 
 ---
 
-## The remaining 22 events — dense reference
+## The remaining events — dense reference
 
 | Event | Trigger timing | Matcher | Key input fields | Decision channel | Version caveats |
 |---|---|---|---|---|---|
@@ -208,10 +207,13 @@ Redaction pattern to remember: `PreToolUse.updatedInput` for outbound (before th
 | `TeammateIdle` | An agent-team teammate is about to go idle after finishing its turn. | Not supported | `teammate_name`, `team_name` (deprecated) | Exit 2 keeps the teammate working with stderr as feedback. JSON `{"continue": false, "stopReason": "..."}` stops it entirely. | None specific. |
 | `ConfigChange` | A settings file, managed policy, or skill file changes during a session. | `user_settings`, `project_settings`, `local_settings`, `policy_settings`, `skills` | `source`, optional `file_path` | Top-level `decision: "block"` or exit 2 prevents the change from applying to the running session — **except** `policy_settings`, which can never be blocked (audit only, by design). | None specific. |
 | `CwdChanged` | The working directory changes (e.g. Claude runs `cd`). | Not supported | `old_cwd`, `new_cwd` | `watchPaths` replaces the dynamic `FileChanged` watch list. No blocking. | Has `CLAUDE_ENV_FILE`. |
+| `DirectoryAdded` | A working directory is added mid-session, by `/add-dir` or the SDK's `register_repo_root` control request. | `slash_command`, `register_repo_root` (`how_added`) | `how_added`, `directory_path` | None — notification only; output and exit code are both discarded. | None documented. |
 | `FileChanged` | A watched file changes on disk. | **Dual-purpose**: split on `\|` into literal filenames to watch (not a regex — `^\.env` would watch a file literally named `^\.env`), and the same value filters which hook groups run against the changed file's basename using normal matcher rules | `file_path`, `event` (`change`\|`add`\|`unlink`) | `watchPaths` updates the dynamic watch list. No blocking. | Has `CLAUDE_ENV_FILE`. Uses a narrower exact-match matcher set (letters/digits/`_`/`\|` only) than most events. |
 | `WorktreeCreate` | A worktree is being created (`--worktree` or subagent `isolation: "worktree"`). Replaces the default `git worktree` behavior entirely. | Not supported | `name` (slug identifier for the new worktree) | **Not** the usual allow/block model — the hook must return the absolute path to the created worktree. Command hooks print it on stdout (redirect everything else to stderr); HTTP hooks use `hookSpecificOutput.worktreePath`. **Any** nonzero exit (not just 2) or a missing path fails creation. | `.worktreeinclude` is not processed when this hook is configured — copy `.env` etc. yourself inside the hook. |
 | `WorktreeRemove` | A worktree is being removed (session exit or subagent finish). | Not supported | `worktree_path` | None — can't block. Failures logged in debug mode only. | None specific. |
 | `PostCompact` | After a compaction completes. | `manual`, `auto` (same as `PreCompact`) | `trigger`, `compact_summary` | None — can't affect the result, only react to it. | None specific. |
+| `PreModelSwitch` | Before a model switch you or a client requested is applied. | The canonical name of the model being switched *to* (`claude-opus-5`, `.*opus.*`), read from `to_model` — not the model being left | `from_model`, `to_model` (no `model` field — the event that is about models is the one that doesn't carry one) | `permissionDecision` `allow`/`deny` with `permissionDecisionReason`, plus `systemMessage`/`terminalSequence`. Exit 2 blocks the switch. | None documented. |
+| `PostModelSwitch` | After the session's model changes — including changes Claude Code makes itself, such as restoring the model on resume, so it fires without anyone asking for it. | Same as `PreModelSwitch`: the canonical name switched to | `from_model`, `to_model` | Cannot block; the switch already happened. Async, and one of the four events whose plain stdout becomes context. JSON `additionalContext`, `systemMessage`, `terminalSequence` are honored. | None documented. |
 | `SessionEnd` | The session terminates. | `clear`, `resume`, `logout`, `prompt_input_exit`, `bypass_permissions_disabled`, `other` (the `reason`) | `reason` | None — can't block termination. | **1.5-second budget shared across all `SessionEnd` hooks** — not a per-hook default, unlike every other event. Auto-raised to the highest per-hook `timeout` configured in settings (plugin-provided hooks don't raise it), up to 60s; override via `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS`. |
 | `Elicitation` | An MCP server requests user input mid-task (form or URL-based auth). | MCP server name | `mcp_server_name`, `message`, optional `mode` (`form`\|`url`), `url`, `elicitation_id`, `requested_schema` | `hookSpecificOutput.action` (`accept`\|`decline`\|`cancel`) + `content` (form values, `accept` only) answers programmatically, skipping the dialog. Exit 2 = deny. | None specific. |
 | `ElicitationResult` | After the user responds to an elicitation, before the response reaches the MCP server. | MCP server name, same values as `Elicitation` | `mcp_server_name`, `action`, `content`, `mode`, `elicitation_id` | `hookSpecificOutput.action`/`content` overrides the user's response. Exit 2 blocks the response (becomes `decline`). | None specific. |

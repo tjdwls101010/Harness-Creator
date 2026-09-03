@@ -124,8 +124,11 @@ class OutputTests(unittest.TestCase):
             (l for l in out.splitlines() if "Plain stdout is added directly" in l), ""
         )
         self.assertTrue(sentence, "SessionStart no longer states the stdout channel")
-        self.assertNotIn("`Setup`", sentence)
         self.assertIn("PostModelSwitch", sentence)
+        exceptions = sentence.split("plain stdout goes to the debug log")[0]
+        self.assertNotIn("besides `Setup`", exceptions)
+        self.assertIn("including `Setup`", exceptions,
+                      "Setup is the counterexample, not one of the exceptions")
 
     def test_expanded_and_tabled_events_both_render(self):
         self.assertIn("Trigger timing", run("--event", "PreToolUse").stdout)   # a section
@@ -155,9 +158,16 @@ class OutputTests(unittest.TestCase):
         self.assertIn("PostToolBatch", r.stderr)
 
     def test_list_prints_one_per_line(self):
+        """The count is not pinned to a literal: v7 found the shipped list
+        three events short of the live docs, and a hard 30 here would have
+        had to be edited to accept the fix rather than catching its
+        absence. What is pinned is the shape -- one name per line, all of
+        them, no blanks."""
         r = run("--list")
         self.assertEqual(r.returncode, 0)
-        self.assertEqual(len(r.stdout.strip().split("\n")), 30)
+        lines = r.stdout.strip().split("\n")
+        self.assertEqual(lines, list(he.event_names()))
+        self.assertTrue(all(l.strip() and " " not in l for l in lines), lines)
 
     def test_requires_an_argument(self):
         self.assertNotEqual(run().returncode, 0)

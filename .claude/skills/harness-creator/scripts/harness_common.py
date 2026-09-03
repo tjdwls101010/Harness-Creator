@@ -76,18 +76,22 @@ CANONICAL_TOOLS = frozenset({
 # literal tool name -- don't flag these as unknown tools.
 _MCP_TOOL_PREFIX = "mcp__"
 
-# All 30 hook events, verified against references/hooks-events.md (itself
-# verified against https://code.claude.com/docs/en/hooks).
-HOOK_EVENTS = frozenset({
+# Every hook event, in the order the events can fire. The order is part of
+# the answer -- it is how a reader sees that Setup sits outside normal
+# startup, or that SessionEnd is last -- so it lives here, in the interface
+# both CLIs read, rather than in a prose list that would ride along with
+# every single-event lookup.
+HOOK_EVENTS_IN_LIFECYCLE_ORDER = (
     "SessionStart", "Setup", "InstructionsLoaded", "UserPromptSubmit",
     "UserPromptExpansion", "MessageDisplay", "PreToolUse", "PermissionRequest",
     "PermissionDenied", "PostToolUse", "PostToolUseFailure", "PostToolBatch",
     "Notification", "SubagentStart", "SubagentStop", "TaskCreated",
     "TaskCompleted", "Stop", "StopFailure", "TeammateIdle", "ConfigChange",
-    "CwdChanged", "FileChanged", "WorktreeCreate", "WorktreeRemove",
-    "PreCompact", "PostCompact", "Elicitation", "ElicitationResult",
-    "SessionEnd",
-})
+    "CwdChanged", "DirectoryAdded", "FileChanged", "WorktreeCreate",
+    "WorktreeRemove", "PreCompact", "PostCompact", "PreModelSwitch",
+    "PostModelSwitch", "Elicitation", "ElicitationResult", "SessionEnd",
+)
+HOOK_EVENTS = frozenset(HOOK_EVENTS_IN_LIFECYCLE_ORDER)
 
 # Events that do NOT support a `matcher` field at all (from
 # references/hooks-events.md's per-event Matcher column). Every other event
