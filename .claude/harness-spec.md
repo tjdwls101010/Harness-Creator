@@ -6,7 +6,7 @@ This repo is its own first user. The spec below tracks the harness that ships fr
 
 Python 3.10+ (stdlib only, no third-party dependencies) plus authored markdown. The deliverable is a Claude Code skill distributed as a plugin, so everything under `.claude/skills/harness-creator/` ships to users and everything outside it does not. Tests are plain `unittest` files run directly (`for f in tests/test_*.py; do python3 "$f"; done`); there is no CI. Single maintainer.
 
-The binding design record is `docs/plan/` (v1, D1-D12) as revised by `docs/plan/v2/` (D13-D24) and by the implementation session's D25-D28 in `docs/plan/v2/00-overview.md`.
+The binding design record is this file's Design rationale. Each generation's working plan lives under `.claude/plans/` and is a record of how a pass was run, not a spec: decisions that outlive the pass are copied here, and a decision that exists only in a plan file has not been recorded.
 
 ## Goals
 
@@ -29,15 +29,15 @@ The binding design record is `docs/plan/` (v1, D1-D12) as revised by `docs/plan/
 | B8 | Interview protocol: modes, stages, question scripts, spec template | skill | — | retired |
 | B9 | Re-entry: extend, improve, and the full sync procedure | skill | — | retired |
 | B10 | Second-tier e2e validation and feedback routing | skill | `.claude/skills/harness-creator/references/e2e-testing.md` | validated |
-| B11 | Inventory an existing harness and detect spec-vs-disk drift | skill | `.claude/skills/harness-creator/scripts/audit_harness.py` | validated |
-| B12 | Deterministic lint + always-loaded budget report | skill | `.claude/skills/harness-creator/scripts/validate_harness.py` | validated |
+| B11 | Inventory an existing harness, detect spec-vs-disk drift, state the scope of what that detects, and print the spec template | skill | `.claude/skills/harness-creator/scripts/audit_harness.py` | validated |
+| B12 | Deterministic structural lint (incl. the coded shape checks `V01`–`V15`), always-loaded budget report; shape only, never a runtime verdict | skill | `.claude/skills/harness-creator/scripts/validate_harness.py` | validated |
 | B13 | Exercise a generated hook before it is called delivered | skill | `.claude/skills/harness-creator/scripts/test_hook.py` | validated |
 | B14 | Launch a headless session for an e2e scenario | skill | `.claude/skills/harness-creator/scripts/run_e2e.py` | validated |
 | B15 | Shared discovery, frontmatter parsing, import parsing | skill | `.claude/skills/harness-creator/scripts/harness_common.py` | validated |
 | B19 | Look up one hook event's schema instead of all thirty | skill | `.claude/skills/harness-creator/scripts/hook_event.py` | validated |
 | B16 | Repo conventions for working on this codebase | CLAUDE.md | `CLAUDE.md` | validated |
 | B17 | A pre-commit hook enforcing the no-hard-wrap rule | hook | — | declined |
-| B18 | A rule scoped to `docs/plan/**` | rule | — | declined |
+| B18 | A rule scoped to this repo's plan and design documents | rule | — | declined |
 
 ## Component specs
 
@@ -63,7 +63,7 @@ The one thing a binary store buys that a script cannot is enforcement: it makes 
 
 **Package closure warns rather than fails**, because a path that resolves here and not in the package is a leak *or* a correct sentence about the reader's project that collides with a path here — an adversarial pass built three correct plugins that collide, on `docs/architecture.md`, `.github/copilot-instructions.md` and `packages/web/CONTRIBUTING.md`. Nothing distinguishes them, so this repo runs `--strict` to enforce closure on itself. Keying it on `.gitignore` was tried and reverted: a plugin repo's `.gitignore` describes its own build products, the sentences describe the reader's.
 
-**The plan's literal leak patterns were rejected as shipped rules.** `docs/plan/`, `.tmp/` and `\bD[0-9]{1,2}\b` are facts about this repo; a user's skill pointing at its own `docs/plan/` is correct. They live in `tests/test_skill_surface.py` as regression pins instead, alongside the other repo-specific pins.
+**This repo's own leak patterns were rejected as shipped rules.** A plan directory, `.tmp/` and a `\bD[0-9]{1,2}\b` decision-id shape are facts about this repo; a user's skill pointing at its own plan directory is correct, so a check that flags the shape would be wrong for the reader it ships to. They live in `tests/test_skill_surface.py` as regression pins instead, derived from whatever plan tree exists rather than hardcoded, so the pin follows the directory when it moves and skips when there is none.
 
 **No CLAUDE.md pointer at this file.** The pointer policy forbids an inventory because a hand-maintained prose list drifts — and this file's Behavior inventory is one, with its own drift check. The pointer moved the drift one hop and put a working session on a maintenance document. A maintainer's way in is an HTML comment, which is stripped before injection.
 
@@ -83,9 +83,27 @@ An independent classification pass proposed 2,153 words; roughly two thirds were
 
 **B17 declined.** The no-hard-wrap rule is real and load-bearing (hard wraps break Edit's exact-string matching), but it is stated in `CLAUDE.md` and `SKILL.md`, and a violation is cosmetic and trivially reversible — it fails this skill's own hook-eligibility test. Revisit only if it recurs.
 
-**B18 declined.** A `paths:`-scoped rule for `docs/plan/**` would load only when those files are read, but the one thing worth saying there is already one line in `CLAUDE.md`, and splitting it out buys a routing decision with no saved reading.
+**B18 declined.** A `paths:`-scoped rule over this repo's plan and design documents would load only when those files are read, but the one thing worth saying there is already one line in `CLAUDE.md`, and splitting it out buys a routing decision with no saved reading.
 
 **No `.claude/settings.json`.** This repo ships no project permissions or hooks. Project allow rules are gated on workspace trust, so committing them here would mostly generate confusion on a fresh clone for no benefit at this size.
+
+**v7 — the interview protocol was a rail, and its knowledge was the product (D1).** `references/interview.md` carried two things: a protocol (four modes, five numbered stages, question scripts) and the knowledge only someone who has built harnesses brings. The protocol was three self-contradictions deep — "extend and improve run every stage" against "answered stages are skipped" against "improve barely uses five" — and it taught the model how to hold a conversation, which it already knows. The knowledge is now K1–K15 in `SKILL.md`, each a rule with the reason that lets it be re-derived, about 550 words. Two gaps the mode taxonomy had been hiding became rules of their own: the audit sees existence, not content, so a colleague's edit to a component body reads as zero drift (K3), and a return visit keeps every approved section its delta does not invalidate (K4). *Rejected:* dropping the knowledge along with the protocol, which leaves a general-purpose model with a routing table and no questions worth asking; keeping `interview.md` as a file, which splits a file every pass reads; and moving the protocol into `SKILL.md` too, about 1,150 words, which buys nothing and spends the budget on the half that was the rail.
+
+**The loop and the hard lines became one dependency-ordered paragraph (D2).** The numbered loop, the mode branches, "every time", "in this order" and an unconditional "propose a commit" were rails; what survives is that each step consumes what the one before it produced, which is a reason a model can apply to a step nobody enumerated. The three hard lines were the same invariant stated a third time. The reload rule now carries its reason — compaction re-attaches the skill body and summarizes a reference read away — and the commit line became "leave a reviewable handoff in the form the target project's git conventions expect", because this skill does not know the target repo's rules.
+
+**A component reference loads when routing makes it a candidate, not after the spec is approved (D3).** The two instructions in the shipped files disagreed: the loop said load after approval, three references said read before designing. Following both read `hooks.md` twice (5,370 words each time); following the loop alone approved a routing decision before reading the rules that decide it. Load timing now lives only in `SKILL.md` — a reference that also states it is a second copy that can drift, and each one did, stating a different half. *Rejected:* splitting the references so a cheaper subset loads first, which adds the risk of not reading the file you expected and buys nothing a load-time change does not.
+
+**No new CLI; `validate_harness.py` grew shape checks with stable codes (D7).** The interview surfaced fourteen prose rules a machine could check. A `test_permission.py` that predicted a permission verdict was designed and withdrawn: the verdict depends on trust, mode, protected paths and cwd, so it is undecidable from files alone, and a disclaimer next to a wrong verdict is not read. What a linter can do is catch *shapes* — a deny that shadows an allow into a dead letter, a bare `mcp__server` hook matcher that matches nothing, a `Stop` script that can block and never reads `stop_hook_active`. Each finding carries a stable code (`V01`–`V15`) so a fixture can assert exactly one, and each code has a documentation section, a positive fixture and a near-miss fixture that must stay silent. The fourteenth prose rule, a project-versus-personal workflow name collision, is `audit_harness.py`'s to report rather than a lint finding — it is a fact about two directories, not a shape inside a file — and carries no `V` code; the plan's `V16` label named a check that was never going to live in the linter. Two candidates were dropped for want of a documentation basis rather than for want of value: an allow rule on a protected path, and a general `${...}`-without-`args` check beyond the one narrow shape the docs describe.
+
+**"Already known" is measured, not asserted (D9).** `tools/probe.py` quizzes a bare, tool-less Claude on each reference gotcha in an empty directory, three times, and — only for candidates that answer 3/3 — runs the same realistic generation task with and without the reference to compare behaviour. A gotcha is deletable only if it passes both. The two-stage shape exists because a right answer to a direct question is not evidence of right behaviour under load, which is the failure a one-stage quiz would have caused: deleting the gotchas the model can recite and keeping the ones it cannot, when what matters is which ones it acts on. *Rejected:* trusting a single quiz, and treating a transcript as evidence of isolation — isolation is evidenced by the flags and the empty working directory, which the probe records in its own result JSON.
+
+**The character pin was withdrawn after measuring (D13, withdrawn 2026-09-02).** The plan carried a second size gate in characters, on the theory that 20,000 characters was a conservative stand-in for 5,000 tokens. Measured, the pre-rewrite body was 15,921 characters ≈ 5,250 tokens (`claude --safe-mode -p` usage envelope; half the body measured 7,960 characters ≈ 2,733 tokens, linear), a ratio of about 3.0 characters per token — so the old figure was not conservative at all. But the 5,000-token cap applies to what compaction *re-injects*, keeping the head and truncating the rest; a first invocation loads the whole body. 성진's decision: do not design around the post-compaction case, and let the body's quality set its size. No character pin was added; the word pin stayed as the only size guardrail and moved 2,650 → 2,850 with its reason written into the test that holds it.
+
+**"Structured interview" stays in the public description (D14).** The modes and stages are gone, but the structure that phrase names is the spec's dependency order and its approval gates (K7), and that is what remains. Removing the phrase would have cost the description its most searchable claim to fix a rail that no longer exists.
+
+**Development history moved out of the shipped files.** The five `--help` strings had accumulated when to run the script, whether to get consent, and what ships — project policy, which `SKILL.md`'s script table owns — plus dated notes about what an earlier version got wrong. A `--help` is read by a model deciding how to call a tool, not by a maintainer reading a changelog. What the scripts kept is what is valid, what they do, and what they print; the history is here.
+
+**Three mechanics the shipped files had wrong, corrected against live docs (2026-09-03).** All four frames are worthless if the facts are wrong, and these had survived every earlier audit because nothing re-read the source. (a) `Edit`/`Read` deny rules were described as governing "only the file tools"; they also cover the file commands Claude Code recognizes inside Bash (`cat`, `head`, `tail`, `sed`) and lose the path only to a subprocess it cannot read through — the sentence naming `sed -i` as the bypass was contradicted by its own example. (b) A `PreToolUse` hook's `if` filter was described as failing open on unparseable Bash; it does the opposite, running the hook regardless of the pattern when Claude Code cannot tell what will execute, so the reason to pair a deny rule is reach, not strength. (c) Workspace trust was described as one gate covering project hooks and a skill's `allowed-tools`; it is two — `permissions.allow` and `additionalDirectories` need *this* folder trusted, while settings hooks, `statusLine` and `autoMemoryDirectory` accept a parent's trust — and a skill's `allowed-tools` is never gated at all. The direction that matters is `claude -p`, which never shows the dialog: project hooks fire there while project allow rules are dropped, the reverse of what the file said. Also corrected: the shipped hook-event list was three short of the documented set (`DirectoryAdded`, `PreModelSwitch`, `PostModelSwitch`) while telling the model to treat it as authoritative, and plain-text stdout becomes context on four events, not on `Setup`.
 
 **Dev-only files stay outside the skill directory.** `tests/` and `docs/` are at the repo root because everything under `.claude/skills/harness-creator/` is distributed to plugin users.
 
@@ -100,6 +118,30 @@ python3 .claude/skills/harness-creator/scripts/audit_harness.py --path .
 ```
 
 The test suite doubles as the regression record for the v2 audit's bug list: `tests/test_skill_surface.py` pins the always-loaded budget, the guardrail facts that must survive future trimming, and the prose bugs (B2/B5/B7/B8/B10 in the v2 numbering); `tests/test_validate_harness.py` and `tests/test_audit_harness.py` cover the script bugs.
+
+### What a pass reads, measured (2026-09-04)
+
+Method: for each path a pass can take, the `wc -w` of every shipped file it reads, counting a file twice where the instructions made it be read twice. A one-event lookup is `hook_event.py --event <Event>` output rather than `hooks-events.md` whole.
+
+| Path through the skill | v0.5.0 | now |
+|---|---|---|
+| A. Design one hook, end to end (SKILL.md + interview.md + hooks.md, read twice because the loop and the file disagreed + one event) | 17,716 | 8,318 |
+| B. Generate one skill (SKILL.md + interview.md + skills.md) | 9,035 | 5,375 |
+| C. CLAUDE.md and rules only (SKILL.md + interview.md + claude-md-and-rules.md) | 9,308 | 5,269 |
+| D. A repair pass that adds no component (SKILL.md + interview.md) | 6,544 | 2,842 |
+| E. A pass that offers and runs e2e (SKILL.md + interview.md + e2e-testing.md) | 10,011 | 4,985 |
+
+Two thirds of every reduction is one change — `interview.md` is no longer read, because it no longer exists — and the rest is the density passes. Path A also stopped paying for `hooks.md` twice. One event's lookup went 432 → 329 words (`PreToolUse`) and 422 → 286 (`Stop`), because the prose enumeration of every event no longer rides along with each answer.
+
+These are word counts of files read, not context measurements: they ignore what a pass reads from the target project, which is usually larger and is not something this skill controls.
+
+### The gotcha probe was built and not run (2026-09-03)
+
+`tools/probe.py` and the frozen 70-question quiz (`tools/gotcha-quiz.jsonl`, answer keys taken from the pre-v7 references) exist and are tested against an observed fake CLI. The main run — 70 questions × 3, about 210 headless calls, plus a contrast arm per surviving candidate — was **not** run: it spends real money, the plan requires consent for that, and 성진's decision was to hold it and ship with **zero gotchas deleted on that basis**. Nothing in v7 removed a gotcha as "the model already knows it"; the reference cuts were restatement, argument and development history, each recorded with a disposition ID in its pull request. When the probe does run, deletion still requires both stages, and every deletion retires its `GuardrailTests` pin under the same disposition ID.
+
+### Interview dogfooding — procedure recorded, not yet run
+
+`AskUserQuestion` does not exist in headless or subagent contexts, so the interview cannot be checked by `run_e2e.py`; it needs a human in a fresh interactive session, which is 성진's to run. The three scenarios, against a copy of `tests/fixtures/good-harness`: (a) a mixed request — "add X, Y bothers me, drop Z" — fails if the pass asks which mode it is or names a stage number; (b) hand-edit a skill body, then ask for that skill to be improved — fails if it is overwritten unread (K3); (c) delete one spec row and ask to sync — fails if goals and inventory are reopened (K4), or if a file is regenerated without asking which side is right (K5). Record the observations here when it runs.
 
 ### Behavioural verification of the interface doctrine (2026-08-22)
 
@@ -130,3 +172,11 @@ Older passes are folded to one line each; the current generation stays in full. 
   - **Two headings in `agents.md` promised sections that had migrated into a table.** Fixed, with a check: moving a paragraph out is a diff a reviewer sees; the heading left behind is a diff nobody sees.
   - **`e2e-testing.md` contradicted itself** about whether headless permission handling was verified — a heading and two paragraphs, three positions. The boundary is now drawn once: the flag combination is settled, the reader's machine never is.
   - Verified by two adversarial `gpt-5.6-sol` passes. The first returned 23 findings against the plan and changed eight decisions, including two mis-citations of this repo's own history and one defect the audit had missed. The second returned 14 against the implementation, of which three were correctness bugs in this generation's own new code — a check firing on a documented pattern, a tool added to an Error list its cited source does not name, and a message contradicting the line it cites.
+- **2026-09-04 — v7.** Applied the four frames to the two surfaces v6 left alone: the interview and the tools' own text.
+  - **`interview.md` deleted (B8, B9 retired).** Its protocol was a rail carrying three self-contradictions; its knowledge became K1–K15 in `SKILL.md`, rule plus reason, and gained two rules the mode taxonomy had hidden (the audit sees existence not content; a return visit preserves approved sections). The operating loop and the three hard lines became one dependency-ordered paragraph. The always-loaded surface went 2,620 → 2,842 words on a pin raised to 2,850 with its reason in the test.
+  - **A component reference now loads when routing makes it a candidate.** The loop and three references had disagreed, which made a hook pass read `hooks.md` twice; load timing is stated once, in `SKILL.md`.
+  - **Ownership corrected in both directions.** When to run a script, whether it needs consent, and what ships came out of five `--help` strings into `SKILL.md`'s script table; prose that restated what a tool prints came out of the references. `audit_harness.py` stopped suggesting a mode, started printing the scope of what its drift check does *not* see, and grew `--template`.
+  - **Fourteen prose rules became coded checks (V01–V16)**, each with a documentation section, a positive fixture and a near-miss fixture, and a stable code in text and JSON. A `test_permission.py` that would have predicted a permission verdict was designed and withdrawn as undecidable from files alone.
+  - **Two dev-only tools, outside the shipped directory.** `tools/claims.py` audits a rewrite for claim loss against frozen IDs; `tools/probe.py` measures whether the model already knows a gotcha. The probe was built, tested and — by 성진's decision — not run, so **no gotcha was deleted as already-known** in this generation.
+  - **Six mechanics corrections against live docs**, listed above: permission path rules and Bash, the `if` filter's direction, workspace trust's two strengths and `claude -p`, three missing hook events, plain stdout on four events, and the subagent question path. Each was in a file that had passed every earlier audit, because nothing had re-read the source.
+  - Every pull request carried a codex adversarial review under the four frames with a disposition line per finding, plus a frozen-ID claim audit. Six of the six reference passes needed rework after review; two of the six reviews found a factual error in something the pass had just written. Released as `v0.6.0`.

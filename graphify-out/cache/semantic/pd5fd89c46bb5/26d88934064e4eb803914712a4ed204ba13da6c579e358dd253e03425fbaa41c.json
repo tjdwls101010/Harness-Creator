@@ -1,0 +1,1 @@
+{"nodes": [{"id": "tests_fixtures_harness_in_dot_claude__claude_agents_sub_reviewer_nested_reviewer", "label": "Nested reviewer agent", "file_type": "document", "source_file": "tests/fixtures/harness-in-dot-claude/.claude/agents/sub/reviewer.md", "source_location": null, "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}

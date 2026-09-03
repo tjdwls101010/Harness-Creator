@@ -867,5 +867,64 @@ class NoExternalToolNamesTests(unittest.TestCase):
             self.assertIsNone(pattern.search(read(path)), path.name)
 
 
+class SpecRecordTests(unittest.TestCase):
+    """The spec is where a decision is recorded permanently, and the two
+    things that rot out of it first are the alternatives that were weighed
+    and the evidence from a run nobody will repeat.
+
+    A rationale entry that states only what was chosen reads, one
+    generation later, as the only thing anyone thought of -- which is how a
+    settled decision gets reopened and re-decided from scratch. And a
+    verification record is the one part of this file that cannot be
+    reconstructed: the sessions cost money and are gone."""
+
+    SPEC = REPO_ROOT / ".claude" / "harness-spec.md"
+
+    def _rationale(self):
+        text = read(self.SPEC)
+        return text.split("## Design rationale")[1].split("\n## ")[0]
+
+    def test_the_three_v7_decisions_name_what_they_rejected(self):
+        """D1 (delete the interview protocol), D7 (no new CLI, shape checks
+        only) and D9 (measure what the model knows) each turned on an
+        alternative that was live enough to need refusing."""
+        rationale = self._rationale()
+        for decision, anchor in (
+            ("D1 interview protocol", "keeping `interview.md` as a file"),
+            ("D7 no new CLI", "withdrawn"),
+            ("D9 probe", "treating a transcript as evidence of isolation"),
+        ):
+            self.assertIn(anchor, rationale, f"{decision} lost its rejected alternative")
+        self.assertGreaterEqual(
+            rationale.count("Rejected:"), 2,
+            "the rationale states no rejected alternatives in the marked form",
+        )
+
+    def test_the_2026_08_22_verification_record_survives(self):
+        """Three headless runs, $5.30, watched once. Nothing regenerates
+        this, and the interface doctrine rests on it."""
+        text = read(self.SPEC)
+        for anchor in (
+            "Behavioural verification of the interface doctrine (2026-08-22)",
+            "PASS, 3/3",
+            "$5.30",
+            "closes v1's risk R3",
+        ):
+            self.assertIn(anchor, text, anchor)
+
+    def test_the_spec_does_not_depend_on_a_deleted_plan_tree(self):
+        """`docs/plan/` is being removed. A spec that cites it as the
+        binding record points at nothing; the binding record is this
+        file."""
+        self.assertNotIn("docs/plan", read(self.SPEC))
+
+    def test_the_probe_result_is_recorded_as_run_or_not_run(self):
+        """The one way this file can lie by omission: a tool built to
+        justify deletions, with no statement of whether it ever ran."""
+        text = read(self.SPEC)
+        self.assertIn("probe", text.lower())
+        self.assertRegex(text, r"not run|was \*\*not\*\* run|미실행")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
