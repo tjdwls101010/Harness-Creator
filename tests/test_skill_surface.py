@@ -350,8 +350,15 @@ class GuardrailTests(unittest.TestCase):
         "workflows.md": [
             "meta",                # must be a pure literal, read before execution
             "Date.now()",          # outright rejection, not a warning
-            "acceptEdits",         # every workflow agent runs in this mode
+            "permission rules",    # the agents get no prompt, so allow first
         ],
+        # Retired in v7: "acceptEdits", which anchored "every workflow agent
+        # runs in acceptEdits mode, unconditionally". The live docs say the
+        # agents use your permission rules and take their mode from the
+        # ordinary subagent rules. A guardrail can pin a false fact as
+        # firmly as a true one, which is the failure mode to watch for here:
+        # what makes an anchor worth keeping is that the mechanism is real
+        # and silent, and only the second half was ever checked.
         "e2e-testing.md": [
             "AskUserQuestion",     # the interview can never be e2e-tested
         ],
@@ -806,13 +813,22 @@ class OrchestrationChoiceTests(unittest.TestCase):
         self.assertIn("cannot be set per-teammate at spawn", text)
         self.assertIn("changed afterward", text)
 
-    def test_plugin_workflow_distribution_is_stated_as_undocumented(self):
-        """docs/plan/research/research-dynamic-workflows.md:55 ("NOT documented
-        as able to ship workflows") and :115, which files the same item under
-        OPEN QUESTIONS as "unconfirmed". Absence of documentation is not proof
-        of impossibility, and this test exists to keep the weaker claim."""
+    def test_plugin_workflow_distribution_is_stated_correctly(self):
+        """This pin held the *weaker* claim on purpose -- v6 wrote "no
+        documented way for a plugin to ship a workflow" rather than "plugins
+        cannot", so that the product adding it would make the sentence stale
+        instead of false. v7 read the live docs and found it documented: a
+        plugin ships a workflow from a `workflows/` directory at its root, or
+        wherever its manifest points, and it runs as `/<plugin>:<name>`.
+
+        So the anchor is retired deliberately, which is the review signal the
+        class docstring asks for, and the caution it encoded is worth keeping
+        in words: absence of documentation was never evidence, and the reason
+        the weaker phrasing was right is exactly why this test could be
+        updated by reading rather than by argument."""
         text = read(self.AGENTS)
-        self.assertIn("no documented way for a plugin to ship a workflow", text)
+        self.assertIn("A plugin ships one from a `workflows/` directory", text)
+        self.assertNotIn("no documented way for a plugin to ship a workflow", text)
         self.assertNotIn("plugins cannot ship", text)
 
     def test_workflows_md_points_at_the_four_way_choice(self):

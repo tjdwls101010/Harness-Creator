@@ -31,7 +31,7 @@ One trap on the pre-written-role idea: **a subagent definition's `skills:` and `
 ### Distribution decides part of this before the interview does
 
 - **A plugin's subagents lose `hooks`, `mcpServers`, and `permissionMode`.** Those three fields are ignored when an agent loads from a plugin, for security reasons. An agent whose safety story rests on its own frontmatter hook has no safety story the moment it ships that way.
-- **There is no documented way for a plugin to ship a workflow.** The documented load paths are `.claude/workflows/` (project, walked up to the repo root) and `~/.claude/workflows/`, and the plugin component list has no workflows entry. Whether that is deliberate is unconfirmed, so hold it in that shape rather than as "plugins cannot" — the claim as written goes stale if the product adds it, where the stronger claim would have been false all along.
+- **A workflow can be packaged.** A plugin ships one from a `workflows/` directory at its root, or wherever its manifest's `workflows` field points, and it runs namespaced as `/<plugin>:<name>`. Outside a plugin the load paths are `.claude/workflows/` (project, walked up to the repo root) and `~/.claude/workflows/`, and the project copy wins a name collision.
 
 Both push one way: a harness that depends on those fields, or on a workflow, is distributed as a repo `.claude/` tree rather than as a plugin. Ask whether the harness must travel (SKILL.md's K11) before routing a role, so this is a design input rather than a discovery.
 
