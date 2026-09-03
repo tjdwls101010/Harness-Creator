@@ -1,6 +1,6 @@
 # Agents and the other three ways to run work in parallel
 
-This is the authoring guide for `.claude/agents/*.md` — custom subagents. Read it the moment "several of these at once" or a distinct role becomes a candidate in routing, and re-check every generated agent definition against it before declaring the component done. It opens one level up, on the choice between four surfaces, because three of the four produce no agent file at all and an interview answer rarely names which one it means.
+This is the authoring guide for `.claude/agents/*.md` — custom subagents. It opens one level up, on the choice between four surfaces, because three of the four produce no agent file at all and an interview answer rarely names which one it means; then the eligibility test, the frontmatter fields that take a judgment call, and the gotchas to re-check a generated definition against.
 
 ## Four surfaces, one question: who decides what runs next
 
@@ -44,7 +44,7 @@ An agent is justified only when one of two things is true:
 
 If neither condition holds, the right answer is no agent at all — just do the work in the main conversation, or write it as a skill that runs inline.
 
-Agent count is itself a cost: each addition is one more role the orchestrating Claude weighs when routing, one more `description` competing for the same attention, one more definition that can rot out of sync with the codebase. The known antipattern is a meta-harness that makes "Agent Teams, 4-5 agents" the default architecture for every project, a travel-planning harness getting the same five-agent shape as an incident postmortem. Generate a role only for a concrete, demonstrated need — a recurring task, a volume-of-output problem, a tool restriction.
+Agent count is itself a cost: each addition is one more role the orchestrating Claude weighs when routing, one more `description` competing for the same attention, one more definition that can rot out of sync with the codebase. The known antipattern is a meta-harness that makes "Agent Teams, 4-5 agents" the default architecture for every project, a travel-planning harness getting the same five-agent shape as an incident postmortem. Generate a role only for a concrete, demonstrated need — one of the two conditions above, shown in something the interview actually described: a recurring task whose output the main thread throws away, a tool restriction that is part of the point, a system prompt the main conversation shouldn't carry.
 
 The question that separates the two: would this task's exploration output (file contents, search results, log lines, diff context) be useless to the main conversation once a verdict is reached? Then isolate. Would the main conversation benefit from seeing the intermediate steps, because the user might redirect mid-task or the next step depends on the details? Then keep it inline; an agent adds a round-trip and a lossy summary. A security reviewer that reads a diff and fifty lines of context per finding and returns five sentences is the first; "rename this function and update its ten call sites" is the second.
 
@@ -58,13 +58,13 @@ Write generated agent bodies as if briefing someone who has never used Claude Co
 
 The two most commonly auto-invoked built-in subagents — Explore (fast read-only search) and Plan (research during plan mode) — skip the CLAUDE.md hierarchy and the parent session's git status entirely, by design, to keep exploration fast and cheap. This is not configurable per-agent; there's no frontmatter field that changes it. Every other built-in and every custom subagent you generate *does* load both. So if a harness rule genuinely needs to reach a delegated task — "ignore everything under `vendor/`," "never touch files in `legacy/`" — and that delegation happens to go through Explore or Plan, the rule in your generated CLAUDE.md simply never arrives. The main conversation sees Explore's or Plan's results with full CLAUDE.md context of its own, so most rules don't need to reach the subagent itself; the gap only matters for a rule the *subagent's own behavior* must obey while it's running, not a rule about how to interpret what it finds.
 
-When a rule must reach a delegated task, three fixes are known, and picking one per case is a judgment call, not a lookup:
+The principle that decides the fix: the rule has to be in the subagent's startup context before its first action, and the surface you put it on determines how durably and how widely it holds. Three surfaces do that, weakest and most local first:
 
 1. **Restate the rule directly in the delegation prompt text** — an instruction in the main harness surface telling Claude "when delegating searches to Explore, always tell it to skip `vendor/`" bakes the restatement into the ask itself. Cheapest fix, no new files, but only as durable as the phrasing of each delegation — easy to forget on an ad hoc request.
 2. **Replace the built-in with a custom agent of the same name.** A project or user-scoped agent file named `Explore` overrides the built-in of the same name, and a custom agent — unlike the true built-in — does load CLAUDE.md and git status like any other custom subagent, and its body can additionally restate the critical rule outright. Use this when the rule needs to hold on *every* Explore-shaped delegation in the project, not just ones the main conversation remembers to caveat.
 3. **Inject it via a `SubagentStart` hook's `additionalContext`.** A project-level hook matched on the agent type name fires when the subagent begins and can add context to its startup state programmatically, which reaches even the true built-ins (since the hook operates at the session level, not inside the agent definition). Use this when the rule is closer to "operational fact the subagent should know" than "constraint on the main conversation's phrasing," or when you want it enforced by configuration rather than by remembering to phrase things right in the moment.
 
-Pick (1) for a one-off or low-stakes case, (2) when you're generating a project that leans on Explore/Plan heavily and the rule is load-bearing, and (3) when you want the fix to live in `settings.json` rather than in prompt discipline or an agent file — e.g., because the same `additionalContext` should also reach other subagent types uniformly.
+So the choice follows from how wide and how durable the rule has to be: per-ask phrasing for a one-off, an agent file when every delegation of that shape must obey it, a hook when the rule should also reach agent types you didn't enumerate — including the true built-ins, which no agent file can reach.
 
 ## Gotcha: agent-scoped hooks and the `Stop`→`SubagentStop` conversion
 
@@ -74,11 +74,11 @@ Hooks declared inside an agent's own frontmatter (as opposed to `settings.json`)
 
 ## Gotcha: identity is `name`, not the filename, and duplicates fail silently
 
-An agent's identifier — what Claude matches on for delegation, `@`-mention, and `Agent(name)` permission rules — is its frontmatter `name`, never the filename; `reviewer.md` with `name: code-reviewer` resolves by the frontmatter value alone. Two files in the same scope declaring the same `name` load as one, silently, and a human skimming filenames will not notice; `validate_harness.py` rejects the collision.
+An agent's identifier — what Claude matches on for delegation, `@`-mention, and `Agent(name)` permission rules — is its frontmatter `name`, never the filename; `reviewer.md` with `name: code-reviewer` resolves by the frontmatter value alone. So keep `name` unique across the whole tree, not just per directory: two files in one `.claude/agents/` tree with the same `name` leave only one loaded, and which one is filesystem read order rather than a documented precedence — there is no rule you can reason from, and a human skimming filenames sees two agents. (Across *nested* project directories it is documented: the definition closest to the working directory wins.)
 
 ## Gotcha: AskUserQuestion does not exist inside a subagent
 
-`AskUserQuestion` is tied to the main conversation's UI and session state and is unavailable to any subagent regardless of what `tools:` lists — the tool has nowhere to render a prompt from inside an isolated agent (`validate_harness.py` rejects it in an agent's `tools`, V06). So this skill's own interview is never delegated to a subagent, and no generated agent may assume it can ask the user anything: a role described as "asks clarifying questions before proceeding" stays in the main conversation, or is redesigned to work from a fully specified brief with no follow-up mid-task.
+`AskUserQuestion` is stripped from every subagent before `tools:` is even consulted — it renders in the main conversation's UI, which an isolated agent has no access to. What an agent loses is *interactive* input mid-task, not the ability to raise a question: it can end its turn returning the question, and the main conversation answers and delegates again. So design the boundary rather than the agent's manners — resolve the ambiguity before delegating, or make "here is what I could not decide and why" a legitimate result of the role. A role written as "asks clarifying questions before proceeding" is the one shape that cannot work: it plans to block mid-task on an answer that can only arrive by starting the task over.
 
 ## Frontmatter fields in practice
 
