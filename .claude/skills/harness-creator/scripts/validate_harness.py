@@ -880,8 +880,8 @@ def check_agents(root, findings):
                 add(
                     findings, "E", loc,
                     f"'tools' lists {t}, which a subagent keeps only while its permission mode is 'plan' -- "
-                    f"this one declares '{fm.data.get('permissionMode')}', so the tool is removed and the "
-                    "agent has no way to end plan mode; drop it, or set permissionMode: plan",
+                    f"this one declares '{fm.data.get('permissionMode')}', so the tool is removed and listing "
+                    "it buys nothing; drop it, or set permissionMode: plan if this role is meant to plan",
                     code="V06",
                 )
         if fm.data.get("memory") and tool_list is not None:
