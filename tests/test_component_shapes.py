@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Shape checks V06-V14 in validate_harness.py (agents, workflows, rules,
-CLAUDE.local.md) and V16 in audit_harness.py (workflow name collision).
+CLAUDE.local.md), plus the workflow name collision -- which audit_harness.py
+reports without a code, because it is a fact about two directories rather
+than a shape inside a file. The plan called it V16; no such finding exists.
 
     python3 -m unittest discover -s tests -p "test_component_shapes.py" -q
 
@@ -280,9 +282,9 @@ class LiveDocAgreementTests(unittest.TestCase):
         `if` set never runs." The old message hedged both ways in one
         sentence -- "can never match" and then "always fires (or never
         does)" -- which is the shape of a check whose author was unsure."""
-        root = REPO_ROOT / "tests" / "fixtures" / "hook-permission-shapes"
+        root = REPO_ROOT / "tests" / "fixtures" / "bad-harness"
         findings, _ = vh.run(root, strict=False)
-        msgs = [m for _, _, m in findings if "'if' field" in m]
+        msgs = [m for _, _, m in findings if "'if' is evaluated" in m]
         self.assertTrue(msgs, "no 'if'-on-non-tool-event finding in the fixture")
         for m in msgs:
             self.assertIn("never runs", m)

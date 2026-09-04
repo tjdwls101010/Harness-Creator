@@ -89,4 +89,4 @@ Five Python 3.10+ CLIs, stdlib only, in `scripts/`. Invoke them as `${CLAUDE_SKI
 | `test_hook.py` | After generating or wiring any hook, before calling it delivered |
 | `run_e2e.py` | Only with the user's consent, during validation: it spends real tokens. Isolate anything that writes; the first run on a new machine is itself the confirmation that its auth works |
 
-`validate_harness.py` cannot grade a `description` for trigger quality or sibling overlap; re-read every description you generate against references/skills.md, a lone one included. Every pointer this skill or its output writes must resolve to a real file: the check catches the ones written with a `references/` or `scripts/` prefix, a bare filename is invisible to it, so it is a floor, not a substitute for looking.
+Whether a `description` triggers on the requests it should, and whether it steals a sibling's, are judgments no check makes for you: re-read every description you generate against references/skills.md, a lone one included. The same goes for a pointer — exit 0 means the shapes a linter can see are right, not that a path resolves for the reader who ends up with it.

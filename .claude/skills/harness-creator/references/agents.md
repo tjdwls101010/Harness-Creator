@@ -37,12 +37,12 @@ Both push one way: a harness that depends on those fields, or on a workflow, is 
 
 ## The eligibility test: don't generate an agent by default
 
-An agent is justified only when one of two things is true:
+What justifies an agent is a boundary the main conversation cannot hold for free — of context, of capability, or of what persists. Two of those come up constantly:
 
 - **Context isolation is actually valuable**: the work is read-heavy (research, code review, QA sweeps, log triage) and only the conclusion needs to survive back in the main thread, not the search trail that produced it.
 - **The task genuinely needs a distinct tool restriction or a distinct system prompt** that the main conversation shouldn't carry by default (a read-only database analyst, a reviewer that must never Edit).
 
-If neither condition holds, the right answer is no agent at all — just do the work in the main conversation, or write it as a skill that runs inline.
+A third exists and is rarer: a role that has to remember across sessions, which is what a subagent's own `memory` field buys and which nothing in the main conversation provides. What does *not* justify one is a boundary you could draw with a sentence — if the work would go the same way inline, the right answer is no agent at all: do it in the main conversation, or write it as a skill that runs there.
 
 Agent count is itself a cost: each addition is one more role the orchestrating Claude weighs when routing, one more `description` competing for the same attention, one more definition that can rot out of sync with the codebase. The known antipattern is a meta-harness that makes "Agent Teams, 4-5 agents" the default architecture for every project, a travel-planning harness getting the same five-agent shape as an incident postmortem. Generate a role only for a concrete, demonstrated need — one of the two conditions above, shown in something the interview actually described: a recurring task whose output the main thread throws away, a tool restriction that is part of the point, a system prompt the main conversation shouldn't carry.
 
@@ -58,7 +58,7 @@ Write generated agent bodies as if briefing someone who has never used Claude Co
 
 The two most commonly auto-invoked built-in subagents — Explore (fast read-only search) and Plan (research during plan mode) — skip the CLAUDE.md hierarchy and the parent session's git status entirely, by design, to keep exploration fast and cheap. This is not configurable per-agent; there's no frontmatter field that changes it. Every other built-in and every custom subagent you generate *does* load both. So if a harness rule genuinely needs to reach a delegated task — "ignore everything under `vendor/`," "never touch files in `legacy/`" — and that delegation happens to go through Explore or Plan, the rule in your generated CLAUDE.md simply never arrives. The main conversation sees Explore's or Plan's results with full CLAUDE.md context of its own, so most rules don't need to reach the subagent itself; the gap only matters for a rule the *subagent's own behavior* must obey while it's running, not a rule about how to interpret what it finds.
 
-The principle that decides the fix: the rule has to be in the subagent's startup context before its first action, and the surface you put it on determines how durably and how widely it holds. Three surfaces do that, weakest and most local first:
+The principle that decides the fix: the rule has to be in the subagent's startup context before its first action, and the surface you put it on determines how durably and how widely it holds. Anything that reaches that context qualifies; these three are the ones a harness can ship, weakest and most local first:
 
 1. **Restate the rule directly in the delegation prompt text** — an instruction in the main harness surface telling Claude "when delegating searches to Explore, always tell it to skip `vendor/`" bakes the restatement into the ask itself. Cheapest fix, no new files, but only as durable as the phrasing of each delegation — easy to forget on an ad hoc request.
 2. **Replace the built-in with a custom agent of the same name.** A project or user-scoped agent file named `Explore` overrides the built-in of the same name, and a custom agent — unlike the true built-in — does load CLAUDE.md and git status like any other custom subagent, and its body can additionally restate the critical rule outright. Use this when the rule needs to hold on *every* Explore-shaped delegation in the project, not just ones the main conversation remembers to caveat.
