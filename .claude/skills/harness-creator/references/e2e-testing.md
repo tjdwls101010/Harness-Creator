@@ -8,7 +8,7 @@ This is the second, deeper tier of harness validation. Read it once the user has
 
 The scenarios differ for every project, so a fixed workflow file would be too narrow for the next project or too generic to check anything real. Compose the workflow when you need it, from the spec's Validation section, and throw the composition away afterward; only the results are recorded, in the spec.
 
-Three phases, every time: **Run** — one agent per scenario, running `run_e2e.py` via Bash, scenarios pipelined independently so a slow one doesn't block a fast one. **Grade** — one agent per transcript, every verdict citing transcript evidence. **Report** — pass/fail across scenarios plus a concrete repair target per failure. Run and Grade stay separate stages because grading needs the whole transcript and summary already on disk, while the next scenario's run shouldn't wait on the previous one's grading.
+Three phases, because each needs something the one before it produced: **Run** — one agent per scenario, running `run_e2e.py` via Bash, scenarios pipelined independently so a slow one doesn't block a fast one. **Grade** — one agent per transcript, every verdict citing transcript evidence. **Report** — pass/fail across scenarios plus a concrete repair target per failure. Run and Grade stay separate stages because grading needs the whole transcript and summary already on disk, while the next scenario's run shouldn't wait on the previous one's grading. A single-scenario check can collapse Grade and Report into one agent — what cannot collapse is Run into Grade, since a grader that also ran the scenario is grading its own work from memory rather than from the transcript.
 
 ### Annotated skeleton
 

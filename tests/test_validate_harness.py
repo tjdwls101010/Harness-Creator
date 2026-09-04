@@ -300,7 +300,12 @@ class BadHarnessTests(unittest.TestCase):
         self._assert_warning_contains("PreToolUse", "UNANCHORED regex")
 
     def test_if_on_non_tool_event_is_warning(self):
-        self._assert_warning_contains("UserPromptSubmit", "no tool_input")
+        """v7 moved the anchor off "no tool_input", which described why the
+        docs' rule holds rather than what it is. The rule is definite --
+        `if` is evaluated only on tool events, so elsewhere the handler
+        never runs -- and the old message reached the opposite reading in
+        its own second clause."""
+        self._assert_warning_contains("UserPromptSubmit", "never runs")
 
     def test_broad_allow_is_warning(self):
         self._assert_warning_contains("permissions.allow", "broad allow rule")

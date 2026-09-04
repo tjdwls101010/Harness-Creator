@@ -1,0 +1,1 @@
+{"nodes": [{"id": "tests_fixtures_bad_harness__claude_agents_reviewer_a_duplicate_reviewer_a", "label": "dup-reviewer Agent A Fixture", "file_type": "document", "source_file": "tests/fixtures/bad-harness/.claude/agents/reviewer-a.md", "source_location": "frontmatter", "source_url": null, "captured_at": null, "author": null, "contributor": null}], "edges": [], "hyperedges": []}

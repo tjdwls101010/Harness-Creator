@@ -192,10 +192,10 @@ def _check_hooks_block(root, rel, hooks, findings, base_dir=None, once_honored=F
                 if "if" in hook and event not in hc.TOOL_CONTEXT_EVENTS:
                     add(
                         findings, "W", loc,
-                        f"'if' field is set but '{event}' carries no tool_input to "
-                        "filter on -- this condition can never match and the hook "
-                        "always fires (or never does, depending on your 'if' logic's "
-                        "default), silently",
+                        f"'if' is evaluated only on tool events, so on '{event}' this "
+                        "handler never runs -- silently, and the rest of the group still "
+                        "does. Drop the 'if' and filter inside the script, or move the "
+                        "handler to a tool event",
                     )
 
             if event == "PreToolUse" and matcher:
@@ -558,7 +558,12 @@ def check_skills(root, findings):
             when_to_use = fm.data.get("when_to_use") or ""
             combined = description + when_to_use
             if not description:
-                add(findings, "W", loc, "no 'description' -- this skill can never auto-trigger")
+                add(
+                    findings, "W", loc,
+                    "no 'description' -- the first paragraph of the body is used instead, "
+                    "so this skill triggers on prose written to be read rather than to be "
+                    "matched, and nothing reports which prompts it missed",
+                )
             elif len(combined) > MAX_DESCRIPTION_CHARS:
                 add(
                     findings, "W", loc,
@@ -807,7 +812,18 @@ def _check_cli_self_description(path, loc, findings):
 
 # Tools tied to the main conversation's UI or session state; a subagent
 # cannot use them even when its `tools` field lists them.
-_UI_BOUND_TOOLS = frozenset({"AskUserQuestion", "EnterPlanMode", "ScheduleWakeup", "WaitForMcpServers"})
+# Tools stripped from every subagent even when `tools` names them. `Agent` is
+# also removed, at the spawn-depth limit, which no file states -- so it is not
+# here. `ExitPlanMode` is removed outside plan mode, which a file *can* state:
+# see _PLAN_ONLY_TOOLS.
+_UI_BOUND_TOOLS = frozenset({
+    "AskUserQuestion", "EndConversation", "EnterPlanMode", "ScheduleWakeup",
+    "TaskOutput", "WaitForMcpServers", "Workflow",
+})
+# Available only while the subagent's permission mode is `plan`. Judged only
+# when the frontmatter names a different mode; an absent `permissionMode` is
+# inherited at runtime and settles nothing.
+_PLAN_ONLY_TOOLS = frozenset({"ExitPlanMode"})
 
 
 def check_agents(root, findings):
@@ -858,6 +874,14 @@ def check_agents(root, findings):
                     f"'tools' lists {t}, which depends on the main conversation's UI or session state and is "
                     "not available to a subagent even when listed -- an agent whose job needs it has to stay in "
                     "the main conversation or work from a brief handed to it up front",
+                    code="V06",
+                )
+            elif t in _PLAN_ONLY_TOOLS and fm.data.get("permissionMode") not in (None, "plan"):
+                add(
+                    findings, "E", loc,
+                    f"'tools' lists {t}, which a subagent keeps only while its permission mode is 'plan' -- "
+                    f"this one declares '{fm.data.get('permissionMode')}', so the tool is removed and listing "
+                    "it buys nothing; drop it, or set permissionMode: plan if this role is meant to plan",
                     code="V06",
                 )
         if fm.data.get("memory") and tool_list is not None:

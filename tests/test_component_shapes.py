@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Shape checks V06-V14 in validate_harness.py (agents, workflows, rules,
-CLAUDE.local.md) and V16 in audit_harness.py (workflow name collision).
+CLAUDE.local.md), plus the workflow name collision -- which audit_harness.py
+reports without a code, because it is a fact about two directories rather
+than a shape inside a file. The plan called it V16; no such finding exists.
 
     python3 -m unittest discover -s tests -p "test_component_shapes.py" -q
 
@@ -18,6 +20,7 @@ import json
 import os
 import shutil
 import subprocess
+import inspect
 import sys
 import tempfile
 import unittest
@@ -252,6 +255,93 @@ class NearMissTests(unittest.TestCase):
         findings, code = vh.run(NEAR_MISSES[0], strict=True)
         self.assertEqual(findings, [])
         self.assertEqual(code, vh.hc.EXIT_OK)
+
+
+class LiveDocAgreementTests(unittest.TestCase):
+    """Gate B, 2026-09-04. Three checks and one message had drifted from the
+    documentation they were derived from. Each assertion below names the
+    section it was read against, because the failure mode is not a bug in
+    the code -- the code does what it was written to do -- but a product
+    that moved underneath a check nobody re-read."""
+
+    def test_v06_covers_every_unconditionally_removed_tool(self):
+        """code.claude.com/docs/en/sub-agents#available-tools (2026-09-04)
+        lists nine tools stripped from every subagent even when `tools`
+        names them. V06 knew four. The two conditional ones (`Agent` at the
+        depth limit, `ExitPlanMode` outside plan mode) are deliberately not
+        here: a check that cannot see the condition would fire on a correct
+        file."""
+        for tool in ("AskUserQuestion", "EndConversation", "EnterPlanMode",
+                     "ScheduleWakeup", "TaskOutput", "WaitForMcpServers", "Workflow"):
+            self.assertIn(tool, vh._UI_BOUND_TOOLS, tool)
+        for conditional in ("Agent", "ExitPlanMode"):
+            self.assertNotIn(conditional, vh._UI_BOUND_TOOLS, conditional)
+
+    def test_exit_plan_mode_is_judged_only_when_the_file_settles_the_condition(self):
+        """`ExitPlanMode` survives the filter only in a subagent whose
+        `permissionMode` is `plan`. When the frontmatter states a different
+        mode, the file settles that -- and a check that stays silent there
+        is not being conservative, it is declining a case it can see. When
+        the field is absent the mode is inherited at runtime, so silence is
+        the only honest answer."""
+        import tempfile, textwrap, os
+        def findings_for(frontmatter):
+            with tempfile.TemporaryDirectory() as d:
+                root = Path(d)
+                (root / ".claude" / "agents").mkdir(parents=True)
+                (root / ".claude" / "agents" / "a.md").write_text(
+                    textwrap.dedent(frontmatter), encoding="utf-8")
+                return [m for _, _, m in vh.run(root, strict=False)[0]]
+        stated = findings_for("""\
+            ---
+            name: planner
+            description: Plans a change. Use when the user asks for a plan.
+            permissionMode: acceptEdits
+            tools: Read, ExitPlanMode
+            ---
+            Body.
+            """)
+        self.assertTrue(any("ExitPlanMode" in m for m in stated), stated)
+        inherited = findings_for("""\
+            ---
+            name: planner
+            description: Plans a change. Use when the user asks for a plan.
+            tools: Read, ExitPlanMode
+            ---
+            Body.
+            """)
+        self.assertFalse(any("ExitPlanMode" in m for m in inherited), inherited)
+        in_plan = findings_for("""\
+            ---
+            name: planner
+            description: Plans a change. Use when the user asks for a plan.
+            permissionMode: plan
+            tools: Read, ExitPlanMode
+            ---
+            Body.
+            """)
+        self.assertFalse(any("ExitPlanMode" in m for m in in_plan), in_plan)
+
+    def test_the_if_on_a_non_tool_event_is_reported_as_definite(self):
+        """docs/en/hooks#hook-handler-fields: "On other events, a hook with
+        `if` set never runs." The old message hedged both ways in one
+        sentence -- "can never match" and then "always fires (or never
+        does)" -- which is the shape of a check whose author was unsure."""
+        root = REPO_ROOT / "tests" / "fixtures" / "bad-harness"
+        findings, _ = vh.run(root, strict=False)
+        msgs = [m for _, _, m in findings if "'if' is evaluated" in m]
+        self.assertTrue(msgs, "no 'if'-on-non-tool-event finding in the fixture")
+        for m in msgs:
+            self.assertIn("never runs", m)
+            self.assertNotIn("always fires", m)
+
+    def test_a_skill_without_a_description_is_not_called_untriggerable(self):
+        """docs/en/skills#frontmatter-reference: "If omitted, uses the first
+        paragraph of markdown content." So the skill still triggers -- on
+        prose written for a human reader, which is worse than a bad
+        description and invisible, but not never."""
+        src = inspect.getsource(vh)
+        self.assertNotIn("can never auto-trigger", src)
 
 
 if __name__ == "__main__":

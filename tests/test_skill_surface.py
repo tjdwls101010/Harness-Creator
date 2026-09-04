@@ -350,8 +350,15 @@ class GuardrailTests(unittest.TestCase):
         "workflows.md": [
             "meta",                # must be a pure literal, read before execution
             "Date.now()",          # outright rejection, not a warning
-            "acceptEdits",         # every workflow agent runs in this mode
+            "permission rules",    # the agents get no prompt, so allow first
         ],
+        # Retired in v7: "acceptEdits", which anchored "every workflow agent
+        # runs in acceptEdits mode, unconditionally". The live docs say the
+        # agents use your permission rules and take their mode from the
+        # ordinary subagent rules. A guardrail can pin a false fact as
+        # firmly as a true one, which is the failure mode to watch for here:
+        # what makes an anchor worth keeping is that the mechanism is real
+        # and silent, and only the second half was ever checked.
         "e2e-testing.md": [
             "AskUserQuestion",     # the interview can never be e2e-tested
         ],
@@ -806,13 +813,22 @@ class OrchestrationChoiceTests(unittest.TestCase):
         self.assertIn("cannot be set per-teammate at spawn", text)
         self.assertIn("changed afterward", text)
 
-    def test_plugin_workflow_distribution_is_stated_as_undocumented(self):
-        """docs/plan/research/research-dynamic-workflows.md:55 ("NOT documented
-        as able to ship workflows") and :115, which files the same item under
-        OPEN QUESTIONS as "unconfirmed". Absence of documentation is not proof
-        of impossibility, and this test exists to keep the weaker claim."""
+    def test_plugin_workflow_distribution_is_stated_correctly(self):
+        """This pin held the *weaker* claim on purpose -- v6 wrote "no
+        documented way for a plugin to ship a workflow" rather than "plugins
+        cannot", so that the product adding it would make the sentence stale
+        instead of false. v7 read the live docs and found it documented: a
+        plugin ships a workflow from a `workflows/` directory at its root, or
+        wherever its manifest points, and it runs as `/<plugin>:<name>`.
+
+        So the anchor is retired deliberately, which is the review signal the
+        class docstring asks for, and the caution it encoded is worth keeping
+        in words: absence of documentation was never evidence, and the reason
+        the weaker phrasing was right is exactly why this test could be
+        updated by reading rather than by argument."""
         text = read(self.AGENTS)
-        self.assertIn("no documented way for a plugin to ship a workflow", text)
+        self.assertIn("A plugin ships one from a `workflows/` directory", text)
+        self.assertNotIn("no documented way for a plugin to ship a workflow", text)
         self.assertNotIn("plugins cannot ship", text)
 
     def test_workflows_md_points_at_the_four_way_choice(self):
@@ -865,6 +881,65 @@ class NoExternalToolNamesTests(unittest.TestCase):
         pattern = re.compile(r"doctor|checkup", re.IGNORECASE)
         for path in [SKILL_MD] + REFERENCES:
             self.assertIsNone(pattern.search(read(path)), path.name)
+
+
+class SpecRecordTests(unittest.TestCase):
+    """The spec is where a decision is recorded permanently, and the two
+    things that rot out of it first are the alternatives that were weighed
+    and the evidence from a run nobody will repeat.
+
+    A rationale entry that states only what was chosen reads, one
+    generation later, as the only thing anyone thought of -- which is how a
+    settled decision gets reopened and re-decided from scratch. And a
+    verification record is the one part of this file that cannot be
+    reconstructed: the sessions cost money and are gone."""
+
+    SPEC = REPO_ROOT / ".claude" / "harness-spec.md"
+
+    def _rationale(self):
+        text = read(self.SPEC)
+        return text.split("## Design rationale")[1].split("\n## ")[0]
+
+    def test_the_three_v7_decisions_name_what_they_rejected(self):
+        """D1 (delete the interview protocol), D7 (no new CLI, shape checks
+        only) and D9 (measure what the model knows) each turned on an
+        alternative that was live enough to need refusing."""
+        rationale = self._rationale()
+        for decision, anchor in (
+            ("D1 interview protocol", "keeping `interview.md` as a file"),
+            ("D7 no new CLI", "withdrawn"),
+            ("D9 probe", "treating a transcript as evidence of isolation"),
+        ):
+            self.assertIn(anchor, rationale, f"{decision} lost its rejected alternative")
+        self.assertGreaterEqual(
+            rationale.count("Rejected:"), 2,
+            "the rationale states no rejected alternatives in the marked form",
+        )
+
+    def test_the_2026_08_22_verification_record_survives(self):
+        """Three headless runs, $5.30, watched once. Nothing regenerates
+        this, and the interface doctrine rests on it."""
+        text = read(self.SPEC)
+        for anchor in (
+            "Behavioural verification of the interface doctrine (2026-08-22)",
+            "PASS, 3/3",
+            "$5.30",
+            "closes v1's risk R3",
+        ):
+            self.assertIn(anchor, text, anchor)
+
+    def test_the_spec_does_not_depend_on_a_deleted_plan_tree(self):
+        """`docs/plan/` is being removed. A spec that cites it as the
+        binding record points at nothing; the binding record is this
+        file."""
+        self.assertNotIn("docs/plan", read(self.SPEC))
+
+    def test_the_probe_result_is_recorded_as_run_or_not_run(self):
+        """The one way this file can lie by omission: a tool built to
+        justify deletions, with no statement of whether it ever ran."""
+        text = read(self.SPEC)
+        self.assertIn("probe", text.lower())
+        self.assertRegex(text, r"not run|was \*\*not\*\* run|미실행")
 
 
 if __name__ == "__main__":
