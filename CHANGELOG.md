@@ -2,6 +2,43 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] — 2026-09-04
+
+Self-application, second half. 0.5.0 asked whether the skill obeys its own four doctrines and fixed the prose. It never looked at the two surfaces where the answer was most obviously no: the interview, which was a numbered protocol with four mode names and three self-contradictions, and the tools' own text, which had accumulated project policy nobody could act on from a `--help`. Both are gone. Then the adversarial gate asked a question none of the earlier releases had asked at all — *are the facts still true?* — and the answer was no, nine times, in files that had passed every previous audit.
+
+### Removed
+
+- **`references/interview.md`**, and with it the new/extend/improve/sync taxonomy and the I1–I5 stages. The protocol taught a capable model how to hold a conversation, and its three modes disagreed with each other about whether a stage could be skipped. What was worth keeping — the questions only someone who has built a harness knows to ask — is now **K1–K15 in `SKILL.md`**, each a rule with the reason that lets it be re-derived for a case nobody enumerated. Deleting the taxonomy also exposed two gaps it had been hiding: the audit sees *existence*, not content, so a colleague's edit to a component body reads as zero drift (K3), and a return visit keeps every approved section its delta does not invalidate (K4).
+- **Policy from all five `--help` strings.** When to run a script, whether it needs the user's consent, what ships to a plugin user — none of that is answerable from a tool's own signature, and a `--help` is read by a model deciding how to call something, not by a maintainer. It lives in `SKILL.md`'s script table now. The scripts kept what they alone can own: what is valid, what they do, what they print.
+
+### Added
+
+- **Coded shape checks `V01`–`V15` in `validate_harness.py`**, each with a documentation section behind it, a positive fixture, and a near-miss fixture that must stay silent. They catch shapes: a deny rule that shadows an allow into a dead letter, a bare `mcp__server` hook matcher that matches nothing, a `Stop` script that can block and never reads `stop_hook_active`, an agent listing a tool no subagent receives. A `test_permission.py` that would have *predicted* a permission verdict was designed and withdrawn — trust, mode, protected paths and cwd make the verdict undecidable from files alone, and a disclaimer beside a wrong verdict is not read.
+- **`audit_harness.py --template`**, printing the spec skeleton from the same constants its drift parser reads, so the two cannot disagree. The audit also stopped suggesting a mode and started printing the scope of what its drift check does *not* see — the thing a user is most likely to assume it covers.
+- **Three hook events that were missing**: `DirectoryAdded`, `PreModelSwitch`, `PostModelSwitch`. The file listing thirty told the model to treat its list as authoritative, which turned an omission into an instruction to refuse a real event.
+- Two development-only tools outside the shipped directory: `tools/claims.py`, which audits a rewrite against frozen claim IDs, and `tools/probe.py`, which measures whether a model already knows a gotcha before anyone deletes it as obvious.
+
+### Fixed
+
+Nine claims about Claude Code mechanics, each verified against the live documentation rather than the repository's own snapshot:
+
+- **`Edit`/`Read` deny rules are not limited to the file tools.** They also cover the file commands Claude Code recognizes inside Bash — `cat`, `head`, `tail`, `sed` — and lose the path only to a subprocess it cannot read through. The old sentence named `sed -i` as the thing that bypasses them, contradicting itself in its own example.
+- **A `PreToolUse` hook's `if` filter over-fires; it does not fail open.** When Claude Code cannot tell what a Bash input will run, it spawns the hook regardless of the pattern. So the reason to pair a permission rule with a hook is *reach*, not strength — a hook blocks hard on every call it receives, in every mode including `bypassPermissions`.
+- **Workspace trust is two gates, not one.** `permissions.allow` and `additionalDirectories` need *this* folder trusted; settings hooks, `statusLine` and `autoMemoryDirectory` accept a parent's; a skill's `allowed-tools` is never gated at all. The direction that matters is `claude -p`, which never shows the dialog: project hooks fire there while project allow rules are dropped — the reverse of what the file said, and the CI case it claimed to be about.
+- **Exit 2 and a JSON decision are not exclusive channels.** Valid JSON is parsed at any exit code; exit 2 overrides the allow/block outcome and nothing else.
+- **An omitted skill `description` does not disable triggering** — Claude Code falls back to the body's first paragraph, so the skill triggers on prose written to be read rather than matched. And compaction re-attaches invoked skill bodies within a 5,000-token per-skill, 25,000-token combined budget, newest first; it does not drop unused skills from the listing.
+- **A workflow's agents do not run in `acceptEdits` unconditionally** — they use the user's permission rules and resolve their mode like any subagent. The gotcha worth keeping is that an agent permission prompt is the only thing that can pause a run, which is how an unattended one ends up waiting.
+- **A plugin can ship a workflow**, from a `workflows/` directory at its root, running as `/<plugin>:<name>`.
+- Stale matcher values in three events (`SessionStart`'s `fork`, four `Notification` types, `StopFailure`'s `account_on_hold`), and `Setup` wrongly listed among the events whose plain stdout becomes context.
+
+### Known limitations
+
+- **The interview dogfooding remains unrun, for the fifth release.** `AskUserQuestion` does not exist in headless or subagent contexts, so no automated test reaches the interview. What is new is that the three scenarios are now written down in the spec with their failure conditions, so the run is a procedure rather than an intention.
+- **No gotcha was deleted as "already known."** The probe that would justify such a deletion was built and tested; its main run costs real money and was deliberately held. Every reference cut in this release was restatement, argument or development history, each recorded with a disposition ID.
+- **A correction pass needs as much review as the work it corrects.** Four adversarial rounds ran on this release: the first found nine wrong facts, and the second and third found five *new* errors introduced by the fixes for them — an inverted claim, an unsupported absolute, an arithmetic contradiction, a check that abandoned a case it could see. Budget for that.
+- **`claims.py` is a floor, not a proof**, unchanged from 0.5.0: it anchors strings, so a claim that keeps its words and loses its point passes. That is what the per-pull-request adversarial review is for, and it caught exactly that class of miss six times.
+- Carried forward: installing the plugin from a local directory path copies gitignored files into the plugin cache (harmless; GitHub-source installs are unaffected).
+
 ## [0.5.0] — 2026-08-24
 
 Self-application. Four releases built one doctrine each — principle over rail, interface over document, write for the user rather than the developer, density. None of them ever asked whether the skill obeys all four itself. This one asks, across the whole surface at once, and the answer was no in five places. The doctrine was stated four times and the copies had already drifted apart from the code. Prose restated things a tool schema and a check message deliver on every use. Two headings announced sections that had moved. A document contradicted itself about whether its own central claim was verified. And the one thing a harness author most needs to decide — which of the four ways to run work in parallel — was not in the skill at all.
