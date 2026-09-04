@@ -277,6 +277,51 @@ class LiveDocAgreementTests(unittest.TestCase):
         for conditional in ("Agent", "ExitPlanMode"):
             self.assertNotIn(conditional, vh._UI_BOUND_TOOLS, conditional)
 
+    def test_exit_plan_mode_is_judged_only_when_the_file_settles_the_condition(self):
+        """`ExitPlanMode` survives the filter only in a subagent whose
+        `permissionMode` is `plan`. When the frontmatter states a different
+        mode, the file settles that -- and a check that stays silent there
+        is not being conservative, it is declining a case it can see. When
+        the field is absent the mode is inherited at runtime, so silence is
+        the only honest answer."""
+        import tempfile, textwrap, os
+        def findings_for(frontmatter):
+            with tempfile.TemporaryDirectory() as d:
+                root = Path(d)
+                (root / ".claude" / "agents").mkdir(parents=True)
+                (root / ".claude" / "agents" / "a.md").write_text(
+                    textwrap.dedent(frontmatter), encoding="utf-8")
+                return [m for _, _, m in vh.run(root, strict=False)[0]]
+        stated = findings_for("""\
+            ---
+            name: planner
+            description: Plans a change. Use when the user asks for a plan.
+            permissionMode: acceptEdits
+            tools: Read, ExitPlanMode
+            ---
+            Body.
+            """)
+        self.assertTrue(any("ExitPlanMode" in m for m in stated), stated)
+        inherited = findings_for("""\
+            ---
+            name: planner
+            description: Plans a change. Use when the user asks for a plan.
+            tools: Read, ExitPlanMode
+            ---
+            Body.
+            """)
+        self.assertFalse(any("ExitPlanMode" in m for m in inherited), inherited)
+        in_plan = findings_for("""\
+            ---
+            name: planner
+            description: Plans a change. Use when the user asks for a plan.
+            permissionMode: plan
+            tools: Read, ExitPlanMode
+            ---
+            Body.
+            """)
+        self.assertFalse(any("ExitPlanMode" in m for m in in_plan), in_plan)
+
     def test_the_if_on_a_non_tool_event_is_reported_as_definite(self):
         """docs/en/hooks#hook-handler-fields: "On other events, a hook with
         `if` set never runs." The old message hedged both ways in one

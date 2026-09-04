@@ -812,14 +812,18 @@ def _check_cli_self_description(path, loc, findings):
 
 # Tools tied to the main conversation's UI or session state; a subagent
 # cannot use them even when its `tools` field lists them.
-# Tools stripped from every subagent even when `tools` names them. `Agent`
-# and `ExitPlanMode` are also removed, but conditionally -- at the spawn-depth
-# limit and outside plan mode -- and neither condition is visible in the file,
-# so listing them here would fire on a correct definition.
+# Tools stripped from every subagent even when `tools` names them. `Agent` is
+# also removed, at the spawn-depth limit, which no file states -- so it is not
+# here. `ExitPlanMode` is removed outside plan mode, which a file *can* state:
+# see _PLAN_ONLY_TOOLS.
 _UI_BOUND_TOOLS = frozenset({
     "AskUserQuestion", "EndConversation", "EnterPlanMode", "ScheduleWakeup",
     "TaskOutput", "WaitForMcpServers", "Workflow",
 })
+# Available only while the subagent's permission mode is `plan`. Judged only
+# when the frontmatter names a different mode; an absent `permissionMode` is
+# inherited at runtime and settles nothing.
+_PLAN_ONLY_TOOLS = frozenset({"ExitPlanMode"})
 
 
 def check_agents(root, findings):
@@ -870,6 +874,14 @@ def check_agents(root, findings):
                     f"'tools' lists {t}, which depends on the main conversation's UI or session state and is "
                     "not available to a subagent even when listed -- an agent whose job needs it has to stay in "
                     "the main conversation or work from a brief handed to it up front",
+                    code="V06",
+                )
+            elif t in _PLAN_ONLY_TOOLS and fm.data.get("permissionMode") not in (None, "plan"):
+                add(
+                    findings, "E", loc,
+                    f"'tools' lists {t}, which a subagent keeps only while its permission mode is 'plan' -- "
+                    f"this one declares '{fm.data.get('permissionMode')}', so the tool is removed and the "
+                    "agent has no way to end plan mode; drop it, or set permissionMode: plan",
                     code="V06",
                 )
         if fm.data.get("memory") and tool_list is not None:
