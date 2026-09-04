@@ -89,4 +89,4 @@ Five Python 3.10+ CLIs, stdlib only, in `scripts/`. Invoke them as `${CLAUDE_SKI
 | `test_hook.py` | After generating or wiring any hook, before calling it delivered |
 | `run_e2e.py` | Only with the user's consent, during validation: it spends real tokens. Isolate anything that writes; the first run on a new machine is itself the confirmation that its auth works |
 
-Whether a `description` triggers on the requests it should, and whether it steals a sibling's, are judgments no check makes for you: re-read every one you generate against references/skills.md, a lone one included. Same for a pointer: what a check can confirm is never that the file is there for the reader who ends up with it, so look.
+Whether a `description` triggers on the requests it should, and whether it steals a sibling's, are judgments no check makes for you: re-read every one you generate against references/skills.md, a lone one included. Same for a pointer: a target that exists in the working tree may still be absent from the artifact the eventual reader receives, so inspect that distribution boundary yourself.
