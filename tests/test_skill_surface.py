@@ -33,8 +33,8 @@ def read(path):
 class PassOrderTests(unittest.TestCase):
     """The pass is one paragraph of dependency order, each step consuming the
     one before it. Two orderings inside it are load-bearing: the wrap-up's
-    re-validation has to come after the spec and CLAUDE.md edits it checks
-    (v2 ran it first and committed an unvalidated state), and the handoff
+    re-validation has to come after the CLAUDE.md edits it checks (v2 ran it
+    first and committed an unvalidated state), and the handoff
     comes last, stated as a principle that defers to the target project's
     git conventions rather than as an unconditional commit."""
 
@@ -44,10 +44,8 @@ class PassOrderTests(unittest.TestCase):
         self.wrap = self.para.split("Wrap up")[1]
 
     def test_validation_runs_after_the_edits_it_checks(self):
-        change_history = self.wrap.index("Change history")
         pointers = self.wrap.index("update CLAUDE.md's pointers")
         validate = self.wrap.index("validate_harness.py")
-        self.assertLess(change_history, validate)
         self.assertLess(pointers, validate)
 
     def test_the_handoff_is_last_and_defers_to_the_project(self):
@@ -199,7 +197,7 @@ class AlwaysLoadedBudgetTests(unittest.TestCase):
     again only with the same kind of reason written down; the ceiling below
     is the one that must not move."""
 
-    WORD_BUDGET = 2850          # self-imposed; see docstring
+    WORD_BUDGET = 2950          # self-imposed; see docstring
 
     def test_skill_md_within_budget(self):
         """The 5,000-token figure is the compaction re-injection cap, not a
@@ -213,7 +211,27 @@ class AlwaysLoadedBudgetTests(unittest.TestCase):
         of that, and the adversarial review then asked for reasons the four
         frames demand (why the diagnostic order, why the pair, what e2e
         costs) -- reasons cost words. What remained over the old pin was
-        knowledge and reasons, not argument."""
+        knowledge and reasons, not argument.
+
+        v8 raised it 2,850 -> 2,950, and audited the draft twice before
+        doing it. Retiring the spec file moved three things no other file
+        holds into this one: K16, the record contract (100 words); K7's
+        "settle what would show it working before it is built", which the
+        deleted template carried as "the scenarios that count as proof"; and
+        K16's supersession clause, which that template carried as "rewrite
+        the entry instead of stacking" and which had to be restated for a
+        history that cannot be rewritten.
+
+        The first audit cut 68 words; an adversarial review then showed more
+        was available and named it, and the second cut took the rest -- the
+        loop announcing what K7 states, "each with the reason that lets you
+        re-derive it" restating the philosophy section, a tautological
+        removal clause, and K16 repeating K6 and K10. Measured after both:
+        2,848 -> 2,942 by this test's own counting. What remains over the
+        old pin is the three additions above; the review's own compression
+        experiment reached 2,845, but it was compressing a draft that did
+        not yet carry them."""
+
         words = len(read(SKILL_MD).split())
         self.assertLess(words, self.WORD_BUDGET, f"SKILL.md is {words} words")
 
@@ -266,11 +284,11 @@ class HarnessEngineerKnowledgeTests(unittest.TestCase):
     K = {
         "K1": ("ask only what is left open", "spends the user's attention twice"),
         "K2": ("what is now unnecessary", "nothing on disk records what was used"),
-        "K3": ("Read a file before overwriting it", "reads as zero drift"),
+        # K3 absorbed retired K5: both halves of that rule are pinned here.
+        "K3": ("ask which side is right before regenerating", "silently reverting a colleague's work is far worse"),
         "K4": ("keep every approved section the delta does not invalidate", "adds no evidence"),
-        "K5": ("Ask which side is right before regenerating a file", "silently reverting a colleague's work is far worse"),
-        "K6": ("`declined` row", "the next pass re-proposes it"),
-        "K7": ("approve each section before the next depends on it", "mixing them makes both harder to judge"),
+        "K6": ("what would reopen it", "the next pass re-proposes it"),
+        "K7": ("approving each piece before the next depends on it", "mixing them makes both harder to judge"),
         "K8": ("surface every enforced-versus-advisory call", "the one judgment with a real cost when it is wrong"),
         "K9": ("look for an interface that makes the wrong move unavailable", "a hook fires after Claude has already decided"),
         "K10": ("`permissions.allow` entries get their own question", "removes a checkpoint the user has today"),
@@ -279,6 +297,7 @@ class HarnessEngineerKnowledgeTests(unittest.TestCase):
         "K13": ("converge with AskUserQuestion", "what lets the user judge"),
         "K14": ("Offer e2e only after stating its cost and getting consent", "spends real tokens"),
         "K15": ("never ablate a hook or a permission rule", "too expensive to observe even once"),
+        "K16": ("which earlier decision each one supersedes", "a squash keeps one commit and discards the branch's bodies"),
     }
 
     def _items(self):
@@ -290,8 +309,15 @@ class HarnessEngineerKnowledgeTests(unittest.TestCase):
                 items[m.group(1)] = m.group(2)
         return items
 
-    def test_all_fifteen_are_present_as_their_own_items(self):
-        self.assertEqual(sorted(self._items(), key=lambda k: int(k[1:])), [f"K{i}" for i in range(1, 16)])
+    def test_every_item_is_present_and_a_retired_number_is_not_reused(self):
+        """`K5` is retired: when the spec file went, "the spec is usually the
+        one behind" became a case of K3's read-before-overwriting, and the
+        knowledge moved there rather than being deleted. The number is not
+        reused, and the others do not shift down, because references cite
+        them by number -- e2e-testing.md points at K14 and agents.md at K11,
+        and renumbering would silently repoint both."""
+        expected = [f"K{i}" for i in range(1, 17) if i != 5]
+        self.assertEqual(sorted(self._items(), key=lambda k: int(k[1:])), expected)
 
     def test_each_item_carries_its_rule_and_its_reason(self):
         items = self._items()
@@ -299,6 +325,29 @@ class HarnessEngineerKnowledgeTests(unittest.TestCase):
             self.assertIn(rule, items[k], f"{k} lost its rule")
             self.assertIn(reason, items[k], f"{k} lost its reason")
             self.assertIn("—", items[k], f"{k} has no reason clause")
+        self.assertIn("Read a file before overwriting it", items["K3"],
+                      "K3 lost the half that was its own before K5 merged in")
+
+    def test_the_relocated_obligations_are_each_pinned(self):
+        """One surviving phrase does not show that a rule survived a move.
+        Each clause below was a separate instruction before the spec went,
+        and an adversarial review removed all four in memory while the pin
+        above stayed green -- so they are pinned as the distinct obligations
+        they are, not as evidence of one another."""
+        items = self._items()
+        for k, clause, lost in (
+            ("K3", "say in the handoff how it was settled",
+             "the settlement stops being recorded anywhere"),
+            ("K6", "fold near-duplicate candidates",
+             "two names for one idea both get built"),
+            ("K6", "`disable-model-invocation`",
+             "a limited component reads as a removed one and gets deleted"),
+            ("K7", "Settle what observation would show a piece working before it is built",
+             "the session that builds it invents the standard it then grades against"),
+            ("K16", "no commit to ride on",
+             "a decision that changed nothing on disk leaves no trace at all"),
+        ):
+            self.assertIn(clause, items[k], f"{k}: {lost}")
 
 
 class GuardrailTests(unittest.TestCase):
@@ -590,7 +639,7 @@ class SubtractionTests(unittest.TestCase):
         self.assertIn("fix", header.lower())
         repair = section.split("Repair runs the table backwards")[1]
         self.assertIn("never a deletion", repair)
-        self.assertIn("`retired`", repair)
+        self.assertIn("K6 keeps it apart from removal", repair)
         self.assertRegex(repair, r"harness grew[^.]*K15")
 
 
@@ -636,13 +685,20 @@ class PointerReaderTests(unittest.TestCase):
         registry buys nothing and drifts."""
         text = read(self.CMR)
         self.assertIn("the client already announces existence", text)
-        self.assertIn("A pointer inherits its target's reader", text)
+        # The pointer principle itself is stated once, in SKILL.md, and
+        # test_a_pointer_inherits_its_targets_reader pins it there. What this
+        # file has to keep is that a pointer does not evade the ban.
+        self.assertIn("moves who pays, not whether", text)
 
-    def test_the_canonical_example_has_no_live_pointer_at_the_spec(self):
-        """An HTML comment is allowed and is the point: block comments are
-        stripped before injection, so a maintainer's way in costs the
-        session nothing."""
+    def test_the_canonical_example_carries_no_component_registry(self):
+        """The example is what a reader copies, so a registry line here
+        would ship the very thing the section bans. Checking only for one
+        filename made this vacuous: an adversarial review pasted an ordinary
+        component list into the example and it stayed green."""
         block = read(self.CMR).split("```markdown")[1].split("```")[0]
+        live = "\n".join(l for l in block.splitlines() if not l.strip().startswith("<!--"))
+        for registry in ("Harness components:", "Components:", "Skills:", "Agents:", "Hooks:"):
+            self.assertNotIn(registry, live, f"the example ships a registry: {registry}")
         for line in block.splitlines():
             if "harness-spec.md" in line:
                 self.assertTrue(
@@ -881,6 +937,81 @@ class NoExternalToolNamesTests(unittest.TestCase):
         pattern = re.compile(r"doctor|checkup", re.IGNORECASE)
         for path in [SKILL_MD] + REFERENCES:
             self.assertIsNone(pattern.search(read(path)), path.name)
+
+
+class NoSpecVocabularyTests(unittest.TestCase):
+    """The spec file is retired. What ships must not still ask for it.
+
+    A grep for the filename is not enough: most of the dependency was
+    phrased without it -- "the spec's Validation section", "copied verbatim
+    from the spec", "the record is this repo's spec" -- so a clean filename
+    search is compatible with shipped instructions requiring a file no pass
+    will ever write. An adversarial review found the third of those still
+    shipping while an earlier version of this test passed.
+
+    The pattern is bounded by the cases below rather than by intuition,
+    because both directions cost: a miss ships a dead instruction, and a
+    false positive would forbid the references from discussing rationale at
+    all, which they still have to do."""
+
+    RETIRED = re.compile(
+        r"harness[-_]spec"
+        r"|\bspecs?\b(?![-_ ]?(?:ify|ific))"
+        r"|Behavior inventory"
+        r"|Design rationale section"
+        r"|inventory row"
+        r"|spec drift",
+        re.IGNORECASE,
+    )
+
+    MUST_MATCH = (
+        "the spec's Validation section",
+        "copied verbatim from the spec",
+        "the record is this repo's spec",
+        "before it goes in the spec",
+        "read your spec before generation",
+        "one row per behaviour in the Behavior inventory",
+        "`.claude/harness-spec.md`",
+    )
+    MUST_NOT_MATCH = (
+        "Explain the design rationale for this hook.",
+        "state the rationale in the handoff",
+        "the scenarios that count as proof",
+        "a specific tool, not a general one",
+        "graphify-out/ holds the generated graph",
+        "Validation is what run_e2e.py does",
+    )
+
+    def test_the_pattern_catches_what_it_claims_to(self):
+        for phrase in self.MUST_MATCH:
+            self.assertRegex(phrase, self.RETIRED, f"would ship undetected: {phrase!r}")
+
+    def test_the_pattern_leaves_legitimate_prose_alone(self):
+        for phrase in self.MUST_NOT_MATCH:
+            self.assertIsNone(self.RETIRED.search(phrase), f"false positive: {phrase!r}")
+
+    def _shipped_text_surfaces(self):
+        """Every surface a reader of the installed package meets: the skill
+        body, its references, and the scripts' own docstrings, which are
+        what `--help` prints."""
+        for path in [SKILL_MD] + REFERENCES:
+            yield path.name, read(path)
+        for script in sorted((SKILL_DIR / "scripts").glob("*.py")):
+            doc = ast.get_docstring(ast.parse(read(script))) or ""
+            yield f"{script.name} docstring", doc
+
+    def test_no_shipped_surface_asks_for_a_spec(self):
+        surfaces = list(self._shipped_text_surfaces())
+        # An empty or silently-shrunk scan passes this check while proving
+        # nothing, which is the failure this whole class exists to avoid.
+        self.assertGreaterEqual(len(surfaces), 1 + len(REFERENCES) + 5, surfaces)
+        self.assertTrue(all(text.strip() for _, text in surfaces), surfaces)
+        offenders = []
+        for name, text in surfaces:
+            for i, line in enumerate(text.splitlines(), 1):
+                if self.RETIRED.search(line):
+                    offenders.append(f"{name}:{i}: {line.strip()[:90]}")
+        self.assertEqual(offenders, [], "\n".join(offenders))
 
 
 class SpecRecordTests(unittest.TestCase):

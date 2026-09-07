@@ -6,13 +6,13 @@
 Checks the shape of what is on disk: settings.json hooks and permission
 rules, skill frontmatter and pointers, bundled-script CLI self-description,
 agent frontmatter, workflow meta and syntax, rule globs, CLAUDE.md length
-and @imports, harness-spec.md inventory rows, and package closure for
+and @imports, and package closure for
 plugin-shipped skills. Prints the always-loaded budget for the project scope.
 
 What it cannot see: behaviour. It does not know whether a hook ran, whether
 a description triggers on the prompts it should, or whether prose is
 followed -- only that the structure is well-formed. Findings that carry a
-code (V01, ...) are the checks a fixture pins by code.
+code (V02, ...) are the checks a fixture pins by code.
 
 Exit codes: 0 = no errors (warnings still possible unless --strict),
 1 = at least one error (or, under --strict, at least one warning),
@@ -76,9 +76,17 @@ _DOC_PATH_RE = re.compile(r"(?<![\w./\-])([\w.\-]+(?:/[\w.*\-]+)+\.(?:md|txt|rst
 
 # Files the target project owns. A skill that builds harnesses names these
 # constantly and is not pointing into its own package when it does.
+# `harness-spec.md` stays: no pass writes one now, but audit still searches
+# the path so a project set up by an earlier version keeps its history.
 _HARNESS_NAMESPACE = frozenset(
     {"CLAUDE.md", "CLAUDE.local.md", "AGENTS.md", "MEMORY.md", "SKILL.md", "harness-spec.md"}
 )
+
+
+# `V01` is retired and is not reissued. A code is an interface a reader looks
+# up, and renumbering would make an identifier already quoted in a report mean
+# something else; a gap costs nothing but tidiness.
+_RETIRED_FINDING_CODES = ("V01",)
 
 
 def add(findings, level, location, message, code=None):
@@ -1380,76 +1388,6 @@ def _check_inventory_listing(loc, lines, known_names, findings):
             run = []
 
 
-def check_harness_spec(root, findings):
-    spec = root / ".claude" / "harness-spec.md"
-    has_any_component = (
-        list(hc.iter_skill_dirs(root)) or list(hc.iter_agent_files(root))
-        or list(hc.iter_workflow_files(root)) or list(hc.iter_rule_files(root))
-        or hc.settings_paths(root)
-    )
-    if not spec.is_file():
-        if has_any_component:
-            add(
-                findings, "W", ".claude/harness-spec.md",
-                "missing -- a generated harness should carry a spec as its "
-                "source of truth; without one audit_harness.py has nothing to "
-                "compare against and reports no drift in either direction",
-            )
-        return
-
-    text = hc.read_text(spec)
-    backticked = set(re.findall(r"`([\w./\-]+)`", text))
-    actual = set()
-    for d in hc.iter_skill_dirs(root):
-        actual.add(f".claude/skills/{d.name}/")
-    for f in hc.iter_agent_files(root):
-        actual.add(f".claude/agents/{f.relative_to(root / '.claude' / 'agents')}")
-    for f in hc.iter_workflow_files(root):
-        actual.add(f".claude/workflows/{f.name}")
-
-    # Two distinct findings: the convention is a backticked repo-relative
-    # path (the template says so), so a bare name is a nudge, not a defect,
-    # and only a component absent from the spec entirely is real drift.
-    _check_inventory_statuses(text, findings)
-    for component in sorted(actual):
-        bare = Path(component.rstrip("/")).name
-        stem = Path(component.rstrip("/")).stem
-        if any(component.rstrip("/") in ref for ref in backticked):
-            continue
-        if bare in text or stem in text or component in text:
-            add(
-                findings, "W", ".claude/harness-spec.md",
-                f"{component} is referred to by bare name -- write it as a backticked "
-                "repo-relative path so the spec reads the same way both scripts and a "
-                "human resolve it",
-            )
-        else:
-            add(
-                findings, "W", ".claude/harness-spec.md",
-                f"component exists on disk but isn't mentioned in the spec: {component}",
-            )
-
-
-def _check_inventory_statuses(spec_text, findings):
-    """V01. A status outside the template's vocabulary is a row the drift
-    check cannot read: `done` claims nothing and `Validated` (capitalised)
-    is compared lowercase by the audit but not by anything else, so the row
-    silently stops asserting that its file exists."""
-    for row in hc.iter_inventory_rows(spec_text):
-        if len(row) < len(hc.INVENTORY_COLUMNS):
-            continue
-        status = row[-1].strip().strip("`")
-        if status in hc.SPEC_STATUSES or status.startswith("<"):
-            continue
-        add(
-            findings, "E", ".claude/harness-spec.md",
-            f"row {row[0]} has status '{status}', which is not one of "
-            f"{'/'.join(hc.SPEC_STATUSES)} -- the drift check reads only those, so this row "
-            "neither claims nor disclaims a file (status is case-sensitive; write it lowercase)",
-            code="V01",
-        )
-
-
 # Over this, the report adds a warning. It is the documented per-file
 # CLAUDE.md guideline applied to the whole always-loaded set, since that set
 # is what the session actually pays for. Stated with its exception, because a
@@ -1543,7 +1481,6 @@ def run(root, strict):
     check_workflows(root, findings)
     check_rules(root, findings)
     check_claude_md(root, findings)
-    check_harness_spec(root, findings)
 
     report = always_loaded_report(root)
     if report["total_lines"] > ALWAYS_LOADED_LINE_BUDGET:

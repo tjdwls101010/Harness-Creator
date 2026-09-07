@@ -105,9 +105,9 @@ Harness Creator begins with a read-only audit. It identifies the current harness
 - `new` for a project without a harness;
 - `extend` for adding a new behavior;
 - `improve` for fixing an existing behavior;
-- `sync` for reconciling the persisted spec with files on disk.
+- `sync` for reconciling what a past pass decided with the files on disk.
 
-The interview then asks only for decisions the repository cannot answer on its own. Before generation, you approve the resulting spec.
+The interview then asks only for decisions the repository cannot answer on its own. Before generation, you approve the resulting design.
 
 Follow the full guided path in [Create your first harness](docs/wiki/tutorials/first-harness.md).
 
@@ -136,27 +136,26 @@ A harness can use any subset of seven layers:
 | Hooks and permissions | Deterministic checks, blocks, and tool boundaries |
 | `.claude/agents/*.md` | Context-isolated roles for focused work |
 | `.claude/workflows/*.js` | Repeatable orchestration with a fixed execution shape |
-| `.claude/harness-spec.md` | The persisted inventory, rationale, status, and change history |
 
 > **Complete does not mean every layer. It means every identified need has a deliberate home, and no layer is generated without a reason.**
 
-A small project may need only `CLAUDE.md`, a skill, and a spec. A hard security boundary may justify a hook or permission rule. A workflow or subagent is generated only when the interview identifies a case that benefits from it.
+A small project may need only `CLAUDE.md` and a skill. A hard security boundary may justify a hook or permission rule. A workflow or subagent is generated only when the interview identifies a case that benefits from it.
 
-See the [Harness reference](docs/wiki/reference/harness.md) for the exact responsibilities, spec contract, and tradeoffs of each layer.
+See the [Harness reference](docs/wiki/reference/harness.md) for the exact responsibilities and tradeoffs of each layer.
 
 ## 5. How it works
 
 The operating loop is:
 
-1. **Audit** — inspect existing Claude Code files, detect drift, and suggest a re-entry mode.
+1. **Audit** — inspect existing Claude Code files and the commits that changed them.
 2. **Interview** — establish goals, inventory needs, resolve component details, and define validation evidence.
 3. **Route** — assign each approved need to the least costly layer with enough authority.
-4. **Generate** — create only the approved components and update `.claude/harness-spec.md`.
+4. **Generate** — create only the approved components.
 5. **Validate** — run deterministic structural checks, then offer optional behavioral end-to-end scenarios.
 
-Each interview stage ends in an approval gate. Simple requests compress the conversation, but generation still waits for explicit approval of the spec.
+Each interview stage ends in an approval gate. Simple requests compress the conversation, but generation still waits for explicit approval of the design.
 
-The persisted spec matters because files show what exists, while the spec also records why a need was routed to one layer instead of another.
+Files show what exists; they never show why a need was routed to one layer instead of another. That goes in the commit and pull request the pass hands off, which is also where the next pass looks for it.
 
 Read [Interview and re-entry reference](docs/wiki/reference/interview-and-reentry.md) for the state model and [Layer routing](docs/wiki/explanation/layer-routing.md) for the decision framework.
 
@@ -172,7 +171,7 @@ Structural validation is deterministic and runs locally:
 python3 .claude/skills/harness-creator/scripts/validate_harness.py --path .
 ```
 
-It checks harness shape: frontmatter, paths, references, hooks, permissions, rules, agents, workflows, imports, spec drift, and the always-loaded instruction budget. A clean result means the files satisfy those structural contracts.
+It checks harness shape: frontmatter, paths, references, hooks, permissions, rules, agents, workflows, imports, and the always-loaded instruction budget. A clean result means the files satisfy those structural contracts.
 
 It does **not** prove that Claude will behave correctly in every task.
 
@@ -191,7 +190,7 @@ The tool reproduces matcher evaluation, runs the selected hook with realistic in
 
 ### 6.3. Optional behavioral end-to-end validation
 
-With your consent, `run_e2e.py` can launch a real headless Claude Code session against an isolated project copy and record a transcript for grading against the approved spec.
+With your consent, `run_e2e.py` can launch a real headless Claude Code session against an isolated project copy and record a transcript for grading against the behavior you approved.
 
 This path can consume model tokens and may execute generated behavior, so it is separate from the default structural gate. See [Behavioral E2E validation](docs/wiki/how-to/validate-a-harness.md#4-behavioral-e2e-validation) before using it.
 

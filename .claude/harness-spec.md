@@ -29,8 +29,8 @@ The binding design record is this file's Design rationale. Each generation's wor
 | B8 | Interview protocol: modes, stages, question scripts, spec template | skill | — | retired |
 | B9 | Re-entry: extend, improve, and the full sync procedure | skill | — | retired |
 | B10 | Second-tier e2e validation and feedback routing | skill | `.claude/skills/harness-creator/references/e2e-testing.md` | validated |
-| B11 | Inventory an existing harness, detect spec-vs-disk drift, state the scope of what that detects, and print the spec template | skill | `.claude/skills/harness-creator/scripts/audit_harness.py` | validated |
-| B12 | Deterministic structural lint (incl. the coded shape checks `V01`–`V15`), always-loaded budget report; shape only, never a runtime verdict | skill | `.claude/skills/harness-creator/scripts/validate_harness.py` | validated |
+| B11 | Inventory an existing harness, find the commits that changed it, and state the scope of what that sees | skill | `.claude/skills/harness-creator/scripts/audit_harness.py` | validated |
+| B12 | Deterministic structural lint (incl. the coded shape checks `V02`–`V15`), always-loaded budget report; shape only, never a runtime verdict | skill | `.claude/skills/harness-creator/scripts/validate_harness.py` | validated |
 | B13 | Exercise a generated hook before it is called delivered | skill | `.claude/skills/harness-creator/scripts/test_hook.py` | validated |
 | B14 | Launch a headless session for an e2e scenario | skill | `.claude/skills/harness-creator/scripts/run_e2e.py` | validated |
 | B15 | Shared discovery, frontmatter parsing, import parsing | skill | `.claude/skills/harness-creator/scripts/harness_common.py` | validated |
@@ -159,7 +159,7 @@ Interview behavior itself cannot be validated this way — `AskUserQuestion` doe
 
 ## Change history
 
-Older passes are folded to one line each; the current generation stays in full. `audit_harness.py --template` carries the rule.
+Older passes are folded to one line each; the current generation stays in full.
 
 - **2026-08-03 — improve (v2).** Context-engineering revision across eight workstreams: fixed twelve defects, added auto memory and the personal/team scope axis, six silent-failure mechanics, and the always-loaded budget report, and gated `interview.md` behind a real mode branch — always-loaded went 4,833 → 2,411 words. Created this spec.
 - **2026-08-04 — improve (v3).** Extended the "don't write what the model knows" filter to cover justification, naming the five shapes that go; added the parameter space as a teaching surface, references-need-not-be-prose, and a check's failure message as an interface; added `hook_event.py`. Raised the word budget 2,500 → 2,650. Released as `v0.3.0`.
