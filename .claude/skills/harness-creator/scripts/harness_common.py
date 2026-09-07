@@ -402,7 +402,7 @@ def resolve_import(target, containing_file):
     return (containing_dir / p), False
 
 
-def plugin_skills_roots(root):
+def declared_plugin_skills_roots(root):
     """Skills roots a plugin manifest declares, or its default.
 
     A plugin ships its skills from `./skills` unless plugin.json's `skills`
@@ -421,10 +421,19 @@ def plugin_skills_roots(root):
         if isinstance(entry, str) and not Path(entry).is_absolute():
             # normpath, not resolve: callers take relative_to(root), and on
             # macOS resolve() rewrites /var to /private/var and breaks it.
-            candidate = Path(os.path.normpath(Path(root) / entry))
-            if candidate.is_dir():
-                roots.append(candidate)
+            roots.append(Path(os.path.normpath(Path(root) / entry)))
     return roots
+
+
+def plugin_skills_roots(root):
+    """The declared roots that are directories right now.
+
+    Split from the declaration because the two callers need different
+    things: inventorying the disk wants what is there, and searching history
+    wants what the manifest names -- deleting the last skill under a root
+    removes the directory, and a search that skipped it would lose the
+    commit that did the deleting."""
+    return [r for r in declared_plugin_skills_roots(root) if r.is_dir()]
 
 
 def iter_skill_dirs(root):
