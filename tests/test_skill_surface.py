@@ -33,8 +33,8 @@ def read(path):
 class PassOrderTests(unittest.TestCase):
     """The pass is one paragraph of dependency order, each step consuming the
     one before it. Two orderings inside it are load-bearing: the wrap-up's
-    re-validation has to come after the spec and CLAUDE.md edits it checks
-    (v2 ran it first and committed an unvalidated state), and the handoff
+    re-validation has to come after the CLAUDE.md edits it checks (v2 ran it
+    first and committed an unvalidated state), and the handoff
     comes last, stated as a principle that defers to the target project's
     git conventions rather than as an unconditional commit."""
 
@@ -44,10 +44,8 @@ class PassOrderTests(unittest.TestCase):
         self.wrap = self.para.split("Wrap up")[1]
 
     def test_validation_runs_after_the_edits_it_checks(self):
-        change_history = self.wrap.index("Change history")
         pointers = self.wrap.index("update CLAUDE.md's pointers")
         validate = self.wrap.index("validate_harness.py")
-        self.assertLess(change_history, validate)
         self.assertLess(pointers, validate)
 
     def test_the_handoff_is_last_and_defers_to_the_project(self):
@@ -199,7 +197,7 @@ class AlwaysLoadedBudgetTests(unittest.TestCase):
     again only with the same kind of reason written down; the ceiling below
     is the one that must not move."""
 
-    WORD_BUDGET = 2850          # self-imposed; see docstring
+    WORD_BUDGET = 2950          # self-imposed; see docstring
 
     def test_skill_md_within_budget(self):
         """The 5,000-token figure is the compaction re-injection cap, not a
@@ -213,7 +211,18 @@ class AlwaysLoadedBudgetTests(unittest.TestCase):
         of that, and the adversarial review then asked for reasons the four
         frames demand (why the diagnostic order, why the pair, what e2e
         costs) -- reasons cost words. What remained over the old pin was
-        knowledge and reasons, not argument."""
+        knowledge and reasons, not argument.
+
+        v8 raised it 2,850 -> 2,950, and audited the draft first as this
+        skill's own rule requires. Retiring the spec file moved its one
+        irreplaceable job -- the record of what was decided and rejected --
+        into K16, at 85 words. The audit that preceded the raise found 68
+        words of whole-clause deletion: the pass loop and K7 were both
+        stating dependency-ordered approval, K16's first draft spelled out
+        the negative case its positive already implied, and K3 and K6 each
+        carried a clause restating the one before it. What remained over the
+        old pin is the contract itself, which no file records now that the
+        spec is gone."""
         words = len(read(SKILL_MD).split())
         self.assertLess(words, self.WORD_BUDGET, f"SKILL.md is {words} words")
 
@@ -266,11 +275,11 @@ class HarnessEngineerKnowledgeTests(unittest.TestCase):
     K = {
         "K1": ("ask only what is left open", "spends the user's attention twice"),
         "K2": ("what is now unnecessary", "nothing on disk records what was used"),
-        "K3": ("Read a file before overwriting it", "reads as zero drift"),
+        # K3 absorbed retired K5: both halves of that rule are pinned here.
+        "K3": ("ask which side is right before regenerating", "silently reverting a colleague's work is far worse"),
         "K4": ("keep every approved section the delta does not invalidate", "adds no evidence"),
-        "K5": ("Ask which side is right before regenerating a file", "silently reverting a colleague's work is far worse"),
-        "K6": ("`declined` row", "the next pass re-proposes it"),
-        "K7": ("approve each section before the next depends on it", "mixing them makes both harder to judge"),
+        "K6": ("what would reopen it", "the next pass re-proposes it"),
+        "K7": ("approving each piece before the next depends on it", "mixing them makes both harder to judge"),
         "K8": ("surface every enforced-versus-advisory call", "the one judgment with a real cost when it is wrong"),
         "K9": ("look for an interface that makes the wrong move unavailable", "a hook fires after Claude has already decided"),
         "K10": ("`permissions.allow` entries get their own question", "removes a checkpoint the user has today"),
@@ -279,6 +288,7 @@ class HarnessEngineerKnowledgeTests(unittest.TestCase):
         "K13": ("converge with AskUserQuestion", "what lets the user judge"),
         "K14": ("Offer e2e only after stating its cost and getting consent", "spends real tokens"),
         "K15": ("never ablate a hook or a permission rule", "too expensive to observe even once"),
+        "K16": ("decided *not* to build", "a squashed history and an offline clone keep one and not the other"),
     }
 
     def _items(self):
@@ -290,8 +300,15 @@ class HarnessEngineerKnowledgeTests(unittest.TestCase):
                 items[m.group(1)] = m.group(2)
         return items
 
-    def test_all_fifteen_are_present_as_their_own_items(self):
-        self.assertEqual(sorted(self._items(), key=lambda k: int(k[1:])), [f"K{i}" for i in range(1, 16)])
+    def test_every_item_is_present_and_a_retired_number_is_not_reused(self):
+        """`K5` is retired: when the spec file went, "the spec is usually the
+        one behind" became a case of K3's read-before-overwriting, and the
+        knowledge moved there rather than being deleted. The number is not
+        reused, and the others do not shift down, because references cite
+        them by number -- e2e-testing.md points at K14 and agents.md at K11,
+        and renumbering would silently repoint both."""
+        expected = [f"K{i}" for i in range(1, 17) if i != 5]
+        self.assertEqual(sorted(self._items(), key=lambda k: int(k[1:])), expected)
 
     def test_each_item_carries_its_rule_and_its_reason(self):
         items = self._items()
@@ -299,6 +316,8 @@ class HarnessEngineerKnowledgeTests(unittest.TestCase):
             self.assertIn(rule, items[k], f"{k} lost its rule")
             self.assertIn(reason, items[k], f"{k} lost its reason")
             self.assertIn("—", items[k], f"{k} has no reason clause")
+        self.assertIn("Read a file before overwriting it", items["K3"],
+                      "K3 lost the half that was its own before K5 merged in")
 
 
 class GuardrailTests(unittest.TestCase):
@@ -590,7 +609,7 @@ class SubtractionTests(unittest.TestCase):
         self.assertIn("fix", header.lower())
         repair = section.split("Repair runs the table backwards")[1]
         self.assertIn("never a deletion", repair)
-        self.assertIn("`retired`", repair)
+        self.assertIn("only removal is a removal", repair)
         self.assertRegex(repair, r"harness grew[^.]*K15")
 
 
@@ -636,12 +655,14 @@ class PointerReaderTests(unittest.TestCase):
         registry buys nothing and drifts."""
         text = read(self.CMR)
         self.assertIn("the client already announces existence", text)
-        self.assertIn("A pointer inherits its target's reader", text)
+        # The pointer principle itself is stated once, in SKILL.md, and
+        # test_a_pointer_inherits_its_targets_reader pins it there. What this
+        # file has to keep is that a pointer does not evade the ban.
+        self.assertIn("moves who pays, not whether", text)
 
-    def test_the_canonical_example_has_no_live_pointer_at_the_spec(self):
-        """An HTML comment is allowed and is the point: block comments are
-        stripped before injection, so a maintainer's way in costs the
-        session nothing."""
+    def test_the_canonical_example_carries_no_inventory(self):
+        """The example is what a reader copies, so a registry line here
+        would ship the very thing the section bans."""
         block = read(self.CMR).split("```markdown")[1].split("```")[0]
         for line in block.splitlines():
             if "harness-spec.md" in line:
@@ -881,6 +902,40 @@ class NoExternalToolNamesTests(unittest.TestCase):
         pattern = re.compile(r"doctor|checkup", re.IGNORECASE)
         for path in [SKILL_MD] + REFERENCES:
             self.assertIsNone(pattern.search(read(path)), path.name)
+
+
+class NoSpecVocabularyTests(unittest.TestCase):
+    """The spec file is retired. What ships must not still ask for it.
+
+    A grep for the filename is not enough: most of the dependency is phrased
+    without it -- "the spec's Validation section", "copied verbatim from the
+    spec", "before it goes in the spec" -- so a clean filename search is
+    compatible with shipped instructions that still require a file no pass
+    will ever write.
+
+    General words stay out of the pattern. `Validation` alone is legitimate
+    prose about validating a hook, and the references still have to discuss
+    rationale and evidence; what is retired is the vocabulary that names the
+    retired document's structure."""
+
+    RETIRED = re.compile(
+        r"harness[-_]spec"
+        r"|\bthe spec\b"
+        r"|\bspec's\b"
+        r"|Behavior inventory"
+        r"|Design rationale"
+        r"|inventory row"
+        r"|spec drift",
+        re.IGNORECASE,
+    )
+
+    def test_no_shipped_file_asks_for_a_spec(self):
+        offenders = []
+        for path in [SKILL_MD] + REFERENCES:
+            for i, line in enumerate(read(path).splitlines(), 1):
+                if self.RETIRED.search(line):
+                    offenders.append(f"{path.name}:{i}: {line.strip()[:90]}")
+        self.assertEqual(offenders, [], "\n".join(offenders))
 
 
 class SpecRecordTests(unittest.TestCase):

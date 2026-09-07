@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
-"""Inventory a project's harness and compare it with its harness-spec.md.
+"""Inventory a project's harness and the commits that shaped it.
 
     python audit_harness.py --path <target-repo> [--json]
-    python audit_harness.py --template
 
 Inventories CLAUDE.md files, rules, skills, agents, workflows and
-settings.json, then reports drift in both directions: inventory rows whose
-status claims a file that is not on disk, and components on disk the spec
-never mentions. Also lists user-scope files that can collide with this
+settings.json. Also lists user-scope files that can collide with this
 project's harness, and the lint counts from validate_harness.py.
 
 Then lists the commits that changed a harness component -- hash, date,
@@ -20,11 +17,7 @@ such, because its oldest entry lists files inherited rather than added.
 Read a listed commit's reasons with `git show`.
 
 Existence only. It does not compare contents: an edited CLAUDE.md, or a
-rewritten skill body at the path the spec names, reads as in sync.
-
---template prints the harness-spec.md skeleton this script's parser reads,
-with the inventory columns and status vocabulary it recognises, so a spec
-started from it round-trips with zero drift.
+rewritten skill body at a path it already knows, reads as unchanged.
 
 Exit code is always 0 (an audit is a report, not a pass/fail check) unless
 the arguments are invalid.
@@ -77,9 +70,8 @@ def inventory_skills(root):
     out = []
     for d in hc.iter_skill_dirs(root):
         skill_md = d / "SKILL.md"
-        # 'path' is the skill DIRECTORY, not SKILL.md itself -- the spec
-        # template names skills by directory, and drift detection below
-        # depends on this field staying the directory path.
+        # 'path' is the skill DIRECTORY, not SKILL.md itself: a skill is
+        # addressed by its directory everywhere else in this report.
         entry = {"name": d.name, "path": str(d.relative_to(root))}
         if not skill_md.is_file():
             entry["error"] = "no SKILL.md"
@@ -149,81 +141,6 @@ def inventory_settings(root):
             "permissions_ask": len(permissions.get("ask", [])),
         }
     return out
-
-
-def check_spec_drift(root, inventory):
-    spec_path = root / ".claude" / "harness-spec.md"
-    if not spec_path.is_file():
-        return {"spec_exists": False, "in_spec_not_on_disk": [], "on_disk_not_in_spec": []}
-
-    spec_text = hc.read_text(spec_path)
-    on_disk = set()
-    for s in inventory["skills"]:
-        on_disk.add(s["path"])
-    for a in inventory["agents"]:
-        on_disk.add(a["path"])
-    for w in inventory["workflows"]:
-        on_disk.add(w["path"])
-    for r in inventory["rules"]:
-        on_disk.add(r["path"])
-
-    # Lenient membership: a spec may reference a skill's directory with or
-    # without a trailing slash, or reference the containing directory of a
-    # rule/agent/workflow file rather than the exact filename -- so check
-    # both the exact path and its directory-name/file-stem against the
-    # spec text rather than demanding an exact substring match.
-    on_disk_not_in_spec = [
-        p for p in sorted(on_disk)
-        if p not in spec_text and p.rstrip("/") not in spec_text
-        and Path(p).name not in spec_text and Path(p).stem not in spec_text
-    ]
-    return {
-        "spec_exists": True,
-        "on_disk_not_in_spec": on_disk_not_in_spec,
-        "in_spec_not_on_disk": _spec_rows_without_files(root, spec_text, on_disk),
-    }
-
-
-def _spec_rows_without_files(root, spec_text, on_disk):
-    """Rows in the Behavior inventory whose status claims a file exists,
-    where no such file is on disk. `generated` with no matching file means
-    generation was interrupted, or something deleted the component out from
-    under the spec; `validated` means it existed and passed, then vanished."""
-    missing = []
-    disk_names = {Path(p.rstrip("/")).name for p in on_disk}
-    disk_stems = {Path(p.rstrip("/")).stem for p in on_disk}
-
-    for row in hc.iter_inventory_rows(spec_text):
-        if len(row) < 5:
-            continue
-        component, status = row[3], row[4].strip("`")
-        if status not in hc.STATUSES_CLAIMING_A_FILE:
-            continue
-        # The spec convention is a backticked repo-relative path, but accept
-        # a bare name too rather than reporting a false "missing" against a
-        # spec written before that convention was documented.
-        name = component.strip().strip("`").rstrip("/")
-        if not name or name.startswith("<"):
-            continue
-        # The claim under test is "the spec says this exists and it doesn't",
-        # so a path that is simply present on disk settles it -- regardless of
-        # whether it is one of the component-level paths this script
-        # inventories. A spec may legitimately name a file *inside* a
-        # component (a skill's SKILL.md, one of its references) at a finer
-        # granularity than the inventory's unit, and reporting those as
-        # missing would fire on a correct harness.
-        if (Path(root) / name).exists():
-            continue
-        stem = Path(name).stem
-        if name in on_disk or Path(name).name in disk_names or stem in disk_stems:
-            continue
-        missing.append({"id": row[0].strip(), "component": name, "status": status})
-    return missing
-
-
-# Kept for callers that imported the private name; the parser lives in
-# harness_common so validate_harness.py reads the same rows.
-_iter_inventory_rows = hc.iter_inventory_rows
 
 
 def user_config_root(env=None):
@@ -515,15 +432,14 @@ def harness_history(root):
 # because a clean report otherwise reads as "nothing changed".
 SCOPE = {
     "detects": [
-        "component files present on disk (skills, agents, workflows, rules) that the spec never mentions",
-        f"inventory rows at status {'/'.join(sorted(hc.STATUSES_CLAIMING_A_FILE))} whose component path is not on disk",
+        "component files present on disk: skills, agents, workflows, rules, hooks and settings",
         "user-scope files that can collide with this project's harness",
         "commits that changed a harness component, with the paths that matched",
     ],
     "does_not_detect": [
         "edits to CLAUDE.md or any instruction file (inventoried, not diffed)",
-        "edits inside a component's body -- a rewritten skill at the path the spec names is in sync",
-        "whether any hook, rule or skill behaves as the spec describes",
+        "edits inside a component's body -- a rewritten skill at a known path reads as unchanged",
+        "whether any hook, rule or skill behaves the way it is meant to",
         "a decision that did not change any file -- a candidate declined, or an "
         "interview that ended before it generated, leaves no commit to find",
         "reasons kept only in a pull request rather than in the commit body, which "
@@ -544,51 +460,16 @@ def run(root):
         "settings": inventory_settings(root),
     }
     user_root, user_root_source = user_config_root()
-    drift = check_spec_drift(root, inventory)
     conflicts = check_user_scope_conflicts(root, inventory, user_root)
     hygiene = hygiene_signals(root)
     history = harness_history(root)
     return {
-        "inventory": inventory, "spec_drift": drift,
+        "inventory": inventory,
         "harness_history": history,
         "user_scope_conflicts": conflicts, "hygiene": hygiene,
         "scope": SCOPE,
         "user_config_root": str(user_root), "user_config_root_source": user_root_source,
     }
-
-
-def spec_template():
-    """The harness-spec.md skeleton, from the same constants the parsers read.
-    Example rows sit inside HTML comments so the parser ignores them and a
-    fresh copy round-trips with zero drift."""
-    header = "| " + " | ".join(hc.INVENTORY_COLUMNS) + " |"
-    separator = "|" + "|".join("-" * (len(c) + 2) for c in hc.INVENTORY_COLUMNS) + "|"
-    statuses = ", ".join(f"`{s}`" for s in hc.SPEC_STATUSES)
-    claiming = " and ".join(f"`{s}`" for s in sorted(hc.STATUSES_CLAIMING_A_FILE))
-    guidance = {
-        "Context": "Language(s), build system, test runner, team size, and how much Claude Code vocabulary the user brought.",
-        "Goals": "What this harness should change about how Claude behaves here, in the user's own words where they are sharper than a paraphrase.",
-        "Behavior inventory": (
-            f"One row per behaviour, piece of knowledge, or constraint. `component` is a backticked repo-relative path. `status` is one of {statuses}: "
-            "`proposed` (surfaced, not yet approved) -> `approved` (locked as intent, nothing generated) -> `generated` (a file exists on disk) -> "
-            "`validated` (lint passed, and e2e too if it was run); `declined` (deliberately not built) and `retired` (deliberately removed) are terminal. "
-            f"Only {claiming} assert that the file exists, and the drift check reads exactly those two, so a `generated` row with no file means an interrupted "
-            "generation and a `validated` one means something removed it. Keep `declined` and `retired` rows: they are what stops the next pass re-proposing the same idea."
-        ),
-        "Component specs": "Per component, what generation needs and the spec uniquely knows: hooks need event/matcher/action/failure policy; skills need where their reference material comes from and any bundled scripts. Do not copy a skill's description here -- it lives in the frontmatter and the copy is the half that drifts.",
-        "Design rationale": "Each routing decision and the alternatives rejected, and stop there. A rejected alternative is the expensive thing to lose; the sentences defending a choice are not. When a later pass supersedes a decision, rewrite the entry to its outcome instead of stacking.",
-        "Validation": "The scenarios that count as proof, and the result of the most recent run.",
-        "Change history": "Date and what changed, one entry per pass. Keep in full what a re-entering pass can still act on and any entry recording someone else's edit; fold everything older to one line each.",
-    }
-    lines = ["# Harness Spec — <project>", ""]
-    for section in hc.SPEC_SECTIONS:
-        lines += [f"## {section}", "", f"<!-- {guidance[section]} -->", ""]
-        if section == hc.INVENTORY_HEADING:
-            lines += [header, separator,
-                      "<!-- | B1 | Must pass tests before commit | hook | `.claude/hooks/pre-commit-test.sh` | proposed | -->", ""]
-        elif section == "Change history":
-            lines += ["<!-- - YYYY-MM-DD: what changed. -->", ""]
-    return "\n".join(lines)
 
 
 def print_markdown(result):
@@ -624,21 +505,6 @@ def print_markdown(result):
         else:
             print(f"  - {name}: hooks on {s['hook_events']}, permissions allow={s['permissions_allow']} deny={s['permissions_deny']} ask={s['permissions_ask']}")
 
-    print("\n## harness-spec.md drift\n")
-    drift = result["spec_drift"]
-    if not drift["spec_exists"]:
-        print("- No harness-spec.md found at .claude/harness-spec.md. `--template` prints the skeleton to start one from.")
-    else:
-        if drift["in_spec_not_on_disk"]:
-            print("- Spec claims these components exist, but they are not on disk:")
-            for row in drift["in_spec_not_on_disk"]:
-                print(f"  - {row['component']} (row {row['id']}, status: {row['status']})")
-        if drift["on_disk_not_in_spec"]:
-            print("- Components on disk but not mentioned in the spec:")
-            for p in drift["on_disk_not_in_spec"]:
-                print(f"  - {p}")
-        if not drift["in_spec_not_on_disk"] and not drift["on_disk_not_in_spec"]:
-            print("- No drift detected in either direction.")
     print("- Scope: existence only. Detects: " + "; ".join(result["scope"]["detects"]) + ".")
     print("  Does not detect: " + "; ".join(result["scope"]["does_not_detect"]) + ".")
 
@@ -684,17 +550,9 @@ def print_markdown(result):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    what = parser.add_mutually_exclusive_group(required=True)
-    what.add_argument("--path", help="path to the target repo root to audit")
-    what.add_argument("--template", action="store_true", help="print the harness-spec.md skeleton this script's parser reads, and exit")
-    parser.add_argument("--json", action="store_true", help="machine-readable JSON output (with --path only)")
+    parser.add_argument("--path", required=True, help="path to the target repo root to audit")
+    parser.add_argument("--json", action="store_true", help="machine-readable JSON output")
     args = parser.parse_args()
-
-    if args.template:
-        if args.json:
-            parser.error("--template prints markdown; --json applies to --path")
-        print(spec_template())
-        return hc.EXIT_OK
 
     root = Path(args.path).resolve()
     if not root.is_dir():

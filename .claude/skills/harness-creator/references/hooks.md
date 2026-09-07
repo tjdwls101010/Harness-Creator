@@ -141,7 +141,7 @@ When a session enters auto mode, Claude Code suspends broad allow rules that gra
 
 A repository cannot grant itself auto mode. Since v2.1.142, Claude Code **ignores `permissions.defaultMode: "auto"`** when it appears in `.claude/settings.json` or `.claude/settings.local.json`; the session starts in `default` with no error and no warning. Only `~/.claude/settings.json` (or managed settings) can set it.
 
-This matters here more than most gotchas because project `settings.json` is a file this skill generates. If the interview lands on "I don't want to be prompted constantly," writing `defaultMode: "auto"` into the project settings produces a harness that appears configured and behaves exactly as if it weren't. Route that request to the user's own settings and say so in the spec's Design rationale; `acceptEdits` and `plan` are honored in project settings and are the values worth generating there.
+This matters here more than most gotchas because project `settings.json` is a file this skill generates. If the interview lands on "I don't want to be prompted constantly," writing `defaultMode: "auto"` into the project settings produces a harness that appears configured and behaves exactly as if it weren't. Route that request to the user's own settings and say so in the handoff; `acceptEdits` and `plan` are honored in project settings and are the values worth generating there.
 
 ### Compound commands need every sub-command matched, and a trailing wildcard enforces a word boundary
 

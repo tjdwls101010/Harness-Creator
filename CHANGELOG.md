@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+The harness spec file is retired. A generated harness no longer carries `.claude/harness-spec.md`, and the record of what was decided moves to the commits and pull requests of the project it is generated into.
+
+### Removed
+
+- **`.claude/harness-spec.md` as a generated artifact**, with the drift check, the `--template` printer, the inventory parser, the status vocabulary and the `V01` lint that guarded it. The file's problem was never that nobody read it — it was edited every generation — but that nothing shipped to keep it honest: the drift check saw existence only, always exited 0, and was not in CI, so a spec could be silently wrong and pass. It was, in three places, at the moment of writing. A record that can be silently wrong is worse than none for a skill whose value is that its gotchas are true; git is often incomplete but never wrong about what changed.
+- **`K5`**, whose knowledge — the record may be behind, settle the disagreement before regenerating, say how it was settled — merged into `K3`. The number is not reused, and `V01` is not reissued: both are identifiers a reader looks up, and renumbering would make an existing report mean something else.
+
+### Added
+
+- **`K16`, the handoff contract.** What goes in the commit body is what the diff cannot recover: the decisions that change the next pass's judgement, what would reopen them, what was decided *not* to build, and any checkpoint the user approved away. Not a template — the shape belongs to the target repository, whose pull-request template gets filled rather than replaced. When a decision changes nothing on disk there is no diff to attach it to, so the pass says so and asks where it should go.
+- **`audit_harness.py` now reports the commits that changed the harness** — hash, date, subject, and which component paths matched — so a re-entering pass finds prior decisions through a tool rather than an instruction to run git. Work done *with* a harness edits the project and never meets the path filter. It distinguishes no repository, git that would not run, no commits, and no matching commit, and says when a clone is shallow. `.claude/harness-spec.md` stays on the searched paths: no pass writes one now, but for a project set up by an earlier version that file holds every decision it ever made.
+
 ## [0.6.0] — 2026-09-04
 
 Self-application, second half. 0.5.0 asked whether the skill obeys its own four doctrines and fixed the prose. It never looked at the two surfaces where the answer was most obviously no: the interview, which was a numbered protocol with four mode names and three self-contradictions, and the tools' own text, which had accumulated project policy nobody could act on from a `--help`. Both are gone. Then the adversarial gate asked a question none of the earlier releases had asked at all — *are the facts still true?* — and the answer was no, nine times, in files that had passed every previous audit.

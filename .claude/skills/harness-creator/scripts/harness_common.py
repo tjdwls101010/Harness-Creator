@@ -2,8 +2,7 @@
 
 Not a CLI itself -- imported by validate_harness.py, audit_harness.py, and
 test_hook.py. One conservative frontmatter parser, one fact table (tool
-names, hook events, matcher support) and one spec-template vocabulary live
-here so every script agrees on what is valid instead of each one
+names, hook events, matcher support) live here so every script agrees on what is valid instead of each one
 re-implementing, and silently disagreeing on, the same parsing and facts.
 """
 
@@ -15,48 +14,6 @@ from pathlib import Path
 EXIT_OK = 0
 EXIT_LINT_FAILED = 1
 EXIT_USAGE_ERROR = 2
-
-# The harness-spec.md template, shared by the printer (audit --template) and
-# the parsers (audit drift, validate V01) so headings, columns and the status
-# vocabulary cannot drift apart.
-SPEC_SECTIONS = (
-    "Context", "Goals", "Behavior inventory", "Component specs",
-    "Design rationale", "Validation", "Change history",
-)
-INVENTORY_HEADING = "Behavior inventory"
-INVENTORY_COLUMNS = ("id", "behavior/knowledge/constraint", "layer", "component", "status")
-SPEC_STATUSES = ("proposed", "approved", "generated", "validated", "declined", "retired")
-# Only these two assert that a file exists on disk; the others are intent or
-# terminal, so a row at any of them is never drift.
-STATUSES_CLAIMING_A_FILE = frozenset({"generated", "validated"})
-
-
-_HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
-# A cell may contain an escaped pipe (`\|`); splitting on a bare pipe would
-# shift every column after it.
-_CELL_SPLIT_RE = re.compile(r"(?<!\\)\|")
-
-
-def iter_inventory_rows(spec_text):
-    """Yield the data rows of the Behavior inventory table as lists of cell
-    strings, skipping the header and separator rows and anything inside an
-    HTML comment (wherever the comment starts or ends). Ends at the next
-    heading of any level."""
-    masked = _HTML_COMMENT_RE.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), spec_text)
-    in_section = False
-    for line in masked.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("#"):
-            in_section = stripped.lstrip("#").strip().lower() == INVENTORY_HEADING.lower()
-            continue
-        if not in_section or not stripped.startswith("|"):
-            continue
-        cells = [c.strip() for c in _CELL_SPLIT_RE.split(stripped.strip("|"))]
-        if not cells or set("".join(cells)) <= set("-: "):
-            continue
-        if cells[0].lower() == INVENTORY_COLUMNS[0]:
-            continue
-        yield cells
 
 # Verified against the Claude Code tools reference:
 # https://code.claude.com/docs/en/tools-reference
@@ -543,7 +500,7 @@ def settings_paths(root):
 
 class Finding(tuple):
     """A lint finding. Unpacks as (level, location, message); `code` is an
-    optional stable identifier (V01, ...) so a fixture can assert exactly
+    optional stable identifier (V02, ...) so a fixture can assert exactly
     which check fired and a reader can look one up. Equality and direct JSON
     serialisation are those of the 3-tuple and ignore `code`; use
     `findings_to_json` to carry it."""

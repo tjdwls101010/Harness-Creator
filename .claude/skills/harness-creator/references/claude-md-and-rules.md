@@ -20,7 +20,7 @@ What is banned is the bare inventory: a list of component names with no conditio
 
 Naming a component is fine, and sometimes necessary, when the line changes what the session does: a condition for reaching a capability, what a block will cost, why an enforcement exists. "`.claude/hooks/no-raw-sql.sh` blocks an edit that adds raw SQL" earns its line — a hook speaks only when it fires, so without that line the first refusal is a surprise. The test is not whether a name appears but whether removing the line would change a session: a condition, a cost or a reason survives it, a registry entry does not.
 
-Don't redirect that job to `.claude/harness-spec.md` either. A pointer inherits its target's reader, and the spec's reader is a maintainer: it carries design rationale and an inventory hand-maintained enough to need its own drift check. A working session sent there pays for all of that to answer a question it never had. A maintainer who wants the way in gets it from an HTML comment, which costs nothing (see the loading semantics below).
+Nor does a pointer settle it: sending the session to a document that carries the same list moves who pays, not whether (SKILL.md). A maintainer who wants a way in gets it from an HTML comment, which the session never loads (see the loading semantics below).
 
 ## Content eligibility test
 
@@ -81,8 +81,6 @@ What survives the rules above states only what the code can't tell you:
 
 ```markdown
 # Project
-
-<!-- Harness inventory and design rationale: .claude/harness-spec.md -->
 
 ## Build & test
 - `npm run dev` starts both API (port 3001) and frontend (port 5173).

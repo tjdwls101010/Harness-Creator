@@ -373,46 +373,43 @@ class BadHarnessTests(unittest.TestCase):
         that writes it looks configured and behaves as if it weren't."""
         self._assert_warning_contains("settings.json", "defaultMode")
 
-    def test_missing_harness_spec_is_warning(self):
-        self._assert_warning_contains("harness-spec.md", "missing")
-
 
 class FindingCodeTests(unittest.TestCase):
     """Checks added from v7 on carry a stable code so a fixture can assert
     exactly which check fired, and a reader can look one up."""
 
     def setUp(self):
-        self.root = REPO_ROOT / "tests" / "fixtures" / "spec-bad-status"
+        self.root = REPO_ROOT / "tests" / "fixtures" / "hook-permission-shapes"
         self.findings, self.exit_code = vh.run(self.root, strict=False)
 
     def _codes(self, findings=None):
         return [getattr(f, "code", None) for f in (findings if findings is not None else self.findings)]
 
-    def test_v01_fires_on_a_status_outside_the_vocabulary(self):
-        v01 = [f for f in self.findings if getattr(f, "code", None) == "V01"]
-        self.assertEqual(len(v01), 2, self.findings)
-        levels = {f[0] for f in v01}
-        self.assertEqual(levels, {"E"})
-        messages = " ".join(f[2] for f in v01)
-        self.assertIn("done", messages)
-        self.assertIn("Validated", messages)          # case matters: the drift check compares lowercase, the template does not
-        for status in vh.hc.SPEC_STATUSES:
-            self.assertIn(status, messages)
-        self.assertEqual(self.exit_code, vh.hc.EXIT_LINT_FAILED)
-
-    def test_v01_is_silent_on_the_canonical_fixture_and_this_repo(self):
-        for root in (REPO_ROOT / "tests" / "fixtures" / "good-harness", REPO_ROOT):
+    def test_a_retired_code_is_not_reissued(self):
+        """A code is an identifier a reader looks up, and reports quoting
+        `V01` outlive the check it named. Reusing the number would make
+        those reports say something the tool never found."""
+        for root in (REPO_ROOT / "tests" / "fixtures" / "good-harness", REPO_ROOT, self.root):
             findings, _ = vh.run(root, strict=False)
-            self.assertNotIn("V01", self._codes(findings), root)
+            for retired in vh._RETIRED_FINDING_CODES:
+                self.assertNotIn(retired, self._codes(findings), root)
+
+    def test_the_fixture_still_fires_a_coded_check(self):
+        """The tests below assert how a code travels, not which one. They
+        stop asserting anything the moment the fixture stops firing one."""
+        self.assertTrue([c for c in self._codes() if c])
+        self.assertEqual(self.exit_code, vh.hc.EXIT_LINT_FAILED)
 
     def test_codes_reach_text_and_json(self):
         proc = subprocess.run([sys.executable, str(SCRIPTS_DIR / "validate_harness.py"), "--path", str(self.root), "--json"],
                               capture_output=True, text=True)
         report = json.loads(proc.stdout)
-        self.assertIn("V01", {f.get("code") for f in report["findings"]})
+        expected = {c for c in self._codes() if c}
+        self.assertTrue(expected.issubset({f.get("code") for f in report["findings"]}))
         text = subprocess.run([sys.executable, str(SCRIPTS_DIR / "validate_harness.py"), "--path", str(self.root)],
                               capture_output=True, text=True).stdout
-        self.assertIn("V01", text)
+        for code in expected:
+            self.assertIn(code, text)
 
     def test_legacy_findings_unpack_as_three_tuples(self):
         for f in self.findings:
@@ -421,10 +418,10 @@ class FindingCodeTests(unittest.TestCase):
 
     def test_findings_survive_copy_and_pickle_with_their_code(self):
         import copy, pickle
-        f = vh.hc.Finding("E", "x", "y", code="V01")
+        f = vh.hc.Finding("E", "x", "y", code="V02")
         for clone in (copy.copy(f), copy.deepcopy(f), pickle.loads(pickle.dumps(f))):
             self.assertEqual(tuple(clone), ("E", "x", "y"))
-            self.assertEqual(clone.code, "V01")
+            self.assertEqual(clone.code, "V02")
         self.assertEqual(f, ("E", "x", "y"))  # equality is the tuple's; code rides alongside
 
 
@@ -473,12 +470,6 @@ class ConsequenceClauseTests(unittest.TestCase):
         and silently never fires -- the failure has no runtime signal at all."""
         m = self._message_containing("unmatched")
         self.assertIn("never fire", m)
-
-    def test_missing_spec_says_drift_detection_goes_quiet(self):
-        """check_spec_drift returns empty lists in both directions when there
-        is no spec, so the absence disables the check rather than failing it."""
-        m = self._message_containing("a generated harness should carry a spec")
-        self.assertIn("no drift in either direction", m)
 
     def test_skill_body_length_says_the_cost_recurs(self):
         """The documented reason for the 500-line guideline is that a skill's
@@ -787,40 +778,6 @@ class HeuristicFalsePositiveTests(unittest.TestCase):
         # matching read, not at launch. Shipping the wrong reason repeats B5.
         message = self._glob("**")[0][2]
         self.assertIn("first matching file read", message)
-
-
-class SpecMentionConventionTests(unittest.TestCase):
-    """B9. The lint required a backticked repo-relative path before a
-    component counted as 'mentioned', while the audit accepted a bare stem --
-    so the same repo could get opposite verdicts, and a spec written with bare
-    names drew a false 'isn't mentioned in the spec' on a correct harness."""
-
-    def setUp(self):
-        self.root = REPO_ROOT / "tests" / "fixtures" / "spec-bare-name-skill"
-        self.findings, _ = vh.run(self.root, strict=False)
-        self.messages = [f[2] for f in self.findings]
-
-    def test_bare_name_is_not_reported_as_missing(self):
-        for message in self.messages:
-            self.assertNotIn("isn't mentioned in the spec", message)
-
-    def test_bare_name_draws_a_convention_nudge_instead(self):
-        self.assertTrue(any("bare name" in m for m in self.messages), self.messages)
-
-    def test_both_scripts_agree_the_component_is_accounted_for(self):
-        import audit_harness as ah
-        drift = ah.check_spec_drift(self.root, ah.run(self.root)["inventory"])
-        self.assertEqual(drift["in_spec_not_on_disk"], [])
-        self.assertEqual(drift["on_disk_not_in_spec"], [])
-
-    def test_a_genuinely_absent_component_is_still_reported(self):
-        findings = []
-        vh.check_harness_spec(REPO_ROOT / "tests" / "fixtures" / "good-harness", findings)
-        # good-harness's spec names every component, so nothing should be
-        # reported as missing there either -- the control for this check.
-        self.assertEqual(
-            [f for f in findings if "isn't mentioned in the spec" in f[2]], []
-        )
 
 
 class WorkflowSyntaxProbeTests(unittest.TestCase):
