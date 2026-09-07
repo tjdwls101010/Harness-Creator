@@ -213,16 +213,25 @@ class AlwaysLoadedBudgetTests(unittest.TestCase):
         costs) -- reasons cost words. What remained over the old pin was
         knowledge and reasons, not argument.
 
-        v8 raised it 2,850 -> 2,950, and audited the draft first as this
-        skill's own rule requires. Retiring the spec file moved its one
-        irreplaceable job -- the record of what was decided and rejected --
-        into K16, at 85 words. The audit that preceded the raise found 68
-        words of whole-clause deletion: the pass loop and K7 were both
-        stating dependency-ordered approval, K16's first draft spelled out
-        the negative case its positive already implied, and K3 and K6 each
-        carried a clause restating the one before it. What remained over the
-        old pin is the contract itself, which no file records now that the
-        spec is gone."""
+        v8 raised it 2,850 -> 2,950, and audited the draft twice before
+        doing it. Retiring the spec file moved three things no other file
+        holds into this one: K16, the record contract (100 words); K7's
+        "settle what would show it working before it is built", which the
+        deleted template carried as "the scenarios that count as proof"; and
+        K16's supersession clause, which that template carried as "rewrite
+        the entry instead of stacking" and which had to be restated for a
+        history that cannot be rewritten.
+
+        The first audit cut 68 words; an adversarial review then showed more
+        was available and named it, and the second cut took the rest -- the
+        loop announcing what K7 states, "each with the reason that lets you
+        re-derive it" restating the philosophy section, a tautological
+        removal clause, and K16 repeating K6 and K10. Measured after both:
+        2,848 -> 2,942 by this test's own counting. What remains over the
+        old pin is the three additions above; the review's own compression
+        experiment reached 2,845, but it was compressing a draft that did
+        not yet carry them."""
+
         words = len(read(SKILL_MD).split())
         self.assertLess(words, self.WORD_BUDGET, f"SKILL.md is {words} words")
 
@@ -288,7 +297,7 @@ class HarnessEngineerKnowledgeTests(unittest.TestCase):
         "K13": ("converge with AskUserQuestion", "what lets the user judge"),
         "K14": ("Offer e2e only after stating its cost and getting consent", "spends real tokens"),
         "K15": ("never ablate a hook or a permission rule", "too expensive to observe even once"),
-        "K16": ("decided *not* to build", "a squashed history and an offline clone keep one and not the other"),
+        "K16": ("which earlier decision each one supersedes", "a squash keeps one commit and discards the branch's bodies"),
     }
 
     def _items(self):
@@ -318,6 +327,27 @@ class HarnessEngineerKnowledgeTests(unittest.TestCase):
             self.assertIn("—", items[k], f"{k} has no reason clause")
         self.assertIn("Read a file before overwriting it", items["K3"],
                       "K3 lost the half that was its own before K5 merged in")
+
+    def test_the_relocated_obligations_are_each_pinned(self):
+        """One surviving phrase does not show that a rule survived a move.
+        Each clause below was a separate instruction before the spec went,
+        and an adversarial review removed all four in memory while the pin
+        above stayed green -- so they are pinned as the distinct obligations
+        they are, not as evidence of one another."""
+        items = self._items()
+        for k, clause, lost in (
+            ("K3", "say in the handoff how it was settled",
+             "the settlement stops being recorded anywhere"),
+            ("K6", "fold near-duplicate candidates",
+             "two names for one idea both get built"),
+            ("K6", "`disable-model-invocation`",
+             "a limited component reads as a removed one and gets deleted"),
+            ("K7", "Settle what observation would show a piece working before it is built",
+             "the session that builds it invents the standard it then grades against"),
+            ("K16", "no commit to ride on",
+             "a decision that changed nothing on disk leaves no trace at all"),
+        ):
+            self.assertIn(clause, items[k], f"{k}: {lost}")
 
 
 class GuardrailTests(unittest.TestCase):
@@ -609,7 +639,7 @@ class SubtractionTests(unittest.TestCase):
         self.assertIn("fix", header.lower())
         repair = section.split("Repair runs the table backwards")[1]
         self.assertIn("never a deletion", repair)
-        self.assertIn("only removal is a removal", repair)
+        self.assertIn("K6 keeps it apart from removal", repair)
         self.assertRegex(repair, r"harness grew[^.]*K15")
 
 
@@ -660,10 +690,15 @@ class PointerReaderTests(unittest.TestCase):
         # file has to keep is that a pointer does not evade the ban.
         self.assertIn("moves who pays, not whether", text)
 
-    def test_the_canonical_example_carries_no_inventory(self):
+    def test_the_canonical_example_carries_no_component_registry(self):
         """The example is what a reader copies, so a registry line here
-        would ship the very thing the section bans."""
+        would ship the very thing the section bans. Checking only for one
+        filename made this vacuous: an adversarial review pasted an ordinary
+        component list into the example and it stayed green."""
         block = read(self.CMR).split("```markdown")[1].split("```")[0]
+        live = "\n".join(l for l in block.splitlines() if not l.strip().startswith("<!--"))
+        for registry in ("Harness components:", "Components:", "Skills:", "Agents:", "Hooks:"):
+            self.assertNotIn(registry, live, f"the example ships a registry: {registry}")
         for line in block.splitlines():
             if "harness-spec.md" in line:
                 self.assertTrue(
@@ -907,34 +942,75 @@ class NoExternalToolNamesTests(unittest.TestCase):
 class NoSpecVocabularyTests(unittest.TestCase):
     """The spec file is retired. What ships must not still ask for it.
 
-    A grep for the filename is not enough: most of the dependency is phrased
-    without it -- "the spec's Validation section", "copied verbatim from the
-    spec", "before it goes in the spec" -- so a clean filename search is
-    compatible with shipped instructions that still require a file no pass
-    will ever write.
+    A grep for the filename is not enough: most of the dependency was
+    phrased without it -- "the spec's Validation section", "copied verbatim
+    from the spec", "the record is this repo's spec" -- so a clean filename
+    search is compatible with shipped instructions requiring a file no pass
+    will ever write. An adversarial review found the third of those still
+    shipping while an earlier version of this test passed.
 
-    General words stay out of the pattern. `Validation` alone is legitimate
-    prose about validating a hook, and the references still have to discuss
-    rationale and evidence; what is retired is the vocabulary that names the
-    retired document's structure."""
+    The pattern is bounded by the cases below rather than by intuition,
+    because both directions cost: a miss ships a dead instruction, and a
+    false positive would forbid the references from discussing rationale at
+    all, which they still have to do."""
 
     RETIRED = re.compile(
         r"harness[-_]spec"
-        r"|\bthe spec\b"
-        r"|\bspec's\b"
+        r"|\bspecs?\b(?![-_ ]?(?:ify|ific))"
         r"|Behavior inventory"
-        r"|Design rationale"
+        r"|Design rationale section"
         r"|inventory row"
         r"|spec drift",
         re.IGNORECASE,
     )
 
-    def test_no_shipped_file_asks_for_a_spec(self):
-        offenders = []
+    MUST_MATCH = (
+        "the spec's Validation section",
+        "copied verbatim from the spec",
+        "the record is this repo's spec",
+        "before it goes in the spec",
+        "read your spec before generation",
+        "one row per behaviour in the Behavior inventory",
+        "`.claude/harness-spec.md`",
+    )
+    MUST_NOT_MATCH = (
+        "Explain the design rationale for this hook.",
+        "state the rationale in the handoff",
+        "the scenarios that count as proof",
+        "a specific tool, not a general one",
+        "graphify-out/ holds the generated graph",
+        "Validation is what run_e2e.py does",
+    )
+
+    def test_the_pattern_catches_what_it_claims_to(self):
+        for phrase in self.MUST_MATCH:
+            self.assertRegex(phrase, self.RETIRED, f"would ship undetected: {phrase!r}")
+
+    def test_the_pattern_leaves_legitimate_prose_alone(self):
+        for phrase in self.MUST_NOT_MATCH:
+            self.assertIsNone(self.RETIRED.search(phrase), f"false positive: {phrase!r}")
+
+    def _shipped_text_surfaces(self):
+        """Every surface a reader of the installed package meets: the skill
+        body, its references, and the scripts' own docstrings, which are
+        what `--help` prints."""
         for path in [SKILL_MD] + REFERENCES:
-            for i, line in enumerate(read(path).splitlines(), 1):
+            yield path.name, read(path)
+        for script in sorted((SKILL_DIR / "scripts").glob("*.py")):
+            doc = ast.get_docstring(ast.parse(read(script))) or ""
+            yield f"{script.name} docstring", doc
+
+    def test_no_shipped_surface_asks_for_a_spec(self):
+        surfaces = list(self._shipped_text_surfaces())
+        # An empty or silently-shrunk scan passes this check while proving
+        # nothing, which is the failure this whole class exists to avoid.
+        self.assertGreaterEqual(len(surfaces), 1 + len(REFERENCES) + 5, surfaces)
+        self.assertTrue(all(text.strip() for _, text in surfaces), surfaces)
+        offenders = []
+        for name, text in surfaces:
+            for i, line in enumerate(text.splitlines(), 1):
                 if self.RETIRED.search(line):
-                    offenders.append(f"{path.name}:{i}: {line.strip()[:90]}")
+                    offenders.append(f"{name}:{i}: {line.strip()[:90]}")
         self.assertEqual(offenders, [], "\n".join(offenders))
 
 

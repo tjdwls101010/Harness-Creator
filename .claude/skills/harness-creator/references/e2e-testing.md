@@ -6,7 +6,7 @@ This is the second, deeper tier of harness validation. Read it once the user has
 
 ## Shape: a workflow composed on the spot, not a file you ship
 
-The scenarios differ for every project, so a fixed workflow file would be too narrow for the next project or too generic to check anything real. Compose the workflow when you need it, from the behaviours the user approved, and throw the composition away afterward; only the results are kept, in the handoff.
+The scenarios differ for every project, so a fixed workflow file would be too narrow for the next project or too generic to check anything real. Compose the workflow when you need it, from the scenarios settled during approval (K7 puts them before generation, so this step composes them rather than inventing them), and throw the composition away afterward. The scenario, its expectation and the latest result are kept in the handoff; the composition is not.
 
 Three phases, because each needs something the one before it produced: **Run** — one agent per scenario, running `run_e2e.py` via Bash, scenarios pipelined independently so a slow one doesn't block a fast one. **Grade** — one agent per transcript, every verdict citing transcript evidence. **Report** — pass/fail across scenarios plus a concrete repair target per failure. Run and Grade stay separate stages because grading needs the whole transcript and summary already on disk, while the next scenario's run shouldn't wait on the previous one's grading. A single-scenario check can collapse Grade and Report into one agent — what cannot collapse is Run into Grade, since a grader that also ran the scenario is grading its own work from memory rather than from the transcript.
 
@@ -113,7 +113,7 @@ After a repair, re-run the scenarios that failed and any whose surface the repai
 
 ## Headless permission handling: the mechanism is settled, the machine never is
 
-The flag combination that lets a headless scenario run to completion is settled (`--isolate` with skip-permissions, confirmed against real sessions; the record is this repo's spec). What it does not settle is the box you are on, because **auth is per-machine**: the credentials a spawned `claude` needs are the ones where it spawns, and a child spawned via Bash can fail with "Not logged in" even when the calling session is logged in.
+The flag combination that lets a headless scenario run to completion is settled (`--isolate` with skip-permissions, confirmed against real sessions). What it does not settle is the box you are on, because **auth is per-machine**: the credentials a spawned `claude` needs are the ones where it spawns, and a child spawned via Bash can fail with "Not logged in" even when the calling session is logged in.
 
 **`--isolate` is opt-in**, so choosing it is a decision you make per run: without it the headless session runs in the user's actual working tree, and a scenario that writes, writes there. Attach it for anything that isn't purely read-only, use `--permission-mode` when a scenario needs to run under a specific mode rather than with permissions skipped, and say which you picked when you propose the run. The isolated copy is where an artifact-quality scenario's files are, so keep it for those and delete it once graded — nothing else collects it.
 
