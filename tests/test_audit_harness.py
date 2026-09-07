@@ -5,6 +5,7 @@
 """
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -351,6 +352,215 @@ class InventoryTableParsingTests(unittest.TestCase):
 
     def test_no_inventory_section_yields_nothing(self):
         self.assertEqual(list(ah._iter_inventory_rows("# Spec\nno table here\n")), [])
+
+
+class HarnessHistoryTests(unittest.TestCase):
+    """The record of why a harness looks the way it does now lives in the
+    commits that changed it. A pass that cannot find those commits is in the
+    same position as one with no record at all, so the audit reports them
+    rather than instructing the reader to run git."""
+
+    def test_a_directory_that_is_not_a_repo_says_so(self):
+        """Three outcomes have to stay apart: no repository, a repository
+        with no matching commit, and a repository never searched. Collapsing
+        them turns "nothing was recorded" into "nothing was decided"."""
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
+        history = ah.run(tmp)["harness_history"]
+        self.assertEqual(history["status"], "not_a_repository")
+        self.assertEqual(history["commits"], [])
+
+    def _repo(self):
+        """A throwaway repository. Real git, because the three things that
+        actually broke here -- pathspecs resolved against the wrong root,
+        history simplification dropping branch commits, and a target whose
+        repository lives further up -- are all git's behaviour, and a fake
+        runner reproduces whatever the author already believed."""
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
+        self._git(tmp, "init", "-q", "-b", "main")
+        self._git(tmp, "config", "user.email", "t@example.com")
+        self._git(tmp, "config", "user.name", "t")
+        # Hermetic against the developer's own global excludes. This machine's
+        # ~/.config/git/ignore drops `**/.claude/plans/`, which would make the
+        # exclusion test below pass for a reason the shipped code has nothing
+        # to do with -- and fail on a machine without that line.
+        self._git(tmp, "config", "core.excludesFile", os.devnull)
+        return tmp
+
+    @staticmethod
+    def _git(cwd, *args):
+        return subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True, check=True)
+
+    def _commit(self, repo, subject, files):
+        for rel, body in files.items():
+            path = repo / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(body)
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-q", "-m", subject)
+
+    def test_a_commit_that_changed_a_component_is_found(self):
+        repo = self._repo()
+        self._commit(repo, "add the review skill", {".claude/skills/review/SKILL.md": "x\n"})
+        history = ah.run(repo)["harness_history"]
+        self.assertEqual(history["status"], "searched")
+        self.assertEqual([c["subject"] for c in history["commits"]], ["add the review skill"])
+
+    def test_a_commit_that_only_used_the_harness_is_not_found(self):
+        """The distinction the whole report rests on. Work done *with* a
+        harness edits the project; work done *on* one edits the harness. A
+        path filter does not rank the two -- it never meets the first."""
+        repo = self._repo()
+        self._commit(repo, "add the review skill", {".claude/skills/review/SKILL.md": "x\n"})
+        self._commit(repo, "implement checkout", {"src/checkout.py": "pass\n"})
+        self._commit(repo, "write a plan", {".claude/plans/some-plan.md": "plan\n"})
+        subjects = [c["subject"] for c in ah.run(repo)["harness_history"]["commits"]]
+        self.assertEqual(subjects, ["add the review skill"])
+
+    def test_an_empty_repository_and_a_repository_with_no_match_read_differently(self):
+        """"No harness commit exists" and "this project has no history at
+        all" lead a pass to different next moves: one says the decision was
+        never recorded, the other that there is nowhere to record it."""
+        empty = self._repo()
+        self.assertEqual(ah.run(empty)["harness_history"]["status"], "no_history")
+
+        unrelated = self._repo()
+        self._commit(unrelated, "implement checkout", {"src/checkout.py": "pass\n"})
+        history = ah.run(unrelated)["harness_history"]
+        self.assertEqual(history["status"], "no_match")
+        self.assertEqual(history["commits"], [])
+
+    def test_a_target_inside_a_monorepo_searches_its_own_subtree_only(self):
+        """Measured: a pathspec that matches from one directory matches
+        nothing from another, because git resolves it against its own working
+        directory. The failure is silent -- an empty report reads exactly
+        like a project whose harness nobody has touched."""
+        repo = self._repo()
+        self._commit(repo, "app harness", {"packages/app/.claude/skills/a/SKILL.md": "x\n"})
+        self._commit(repo, "api harness", {"packages/api/.claude/skills/b/SKILL.md": "x\n"})
+        history = ah.run(repo / "packages" / "app")["harness_history"]
+        self.assertEqual([c["subject"] for c in history["commits"]], ["app harness"])
+
+    def test_a_deleted_component_keeps_its_history(self):
+        """Why the pathspec is directory patterns and not the files
+        discovery finds today: the decision to remove a component is exactly
+        the one a later pass must not re-litigate, and nothing on disk
+        records it."""
+        repo = self._repo()
+        self._commit(repo, "add the review skill", {".claude/skills/review/SKILL.md": "x\n"})
+        shutil.rmtree(repo / ".claude" / "skills" / "review")
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-q", "-m", "retire the review skill")
+        subjects = [c["subject"] for c in ah.run(repo)["harness_history"]["commits"]]
+        self.assertEqual(subjects, ["retire the review skill", "add the review skill"])
+
+    def test_a_hook_body_change_counts(self):
+        """A hook whose settings entry never moves still changes what the
+        harness enforces. Discovery reaches hooks through settings.json, so
+        a path list derived from it alone would miss this commit."""
+        repo = self._repo()
+        self._commit(repo, "tighten the pre-commit hook", {".claude/hooks/pre-commit.sh": "#!/bin/sh\n"})
+        subjects = [c["subject"] for c in ah.run(repo)["harness_history"]["commits"]]
+        self.assertEqual(subjects, ["tighten the pre-commit hook"])
+
+    def test_a_mixed_commit_is_kept_and_says_which_paths_matched(self):
+        """Feature work that adds a build command to CLAUDE.md really did
+        change the harness, so it belongs in the list -- but its subject
+        describes the feature. Naming the matched paths is what stops a
+        reader from having to open every commit to find the harness half."""
+        repo = self._repo()
+        self._commit(repo, "add checkout, document its build step", {
+            "src/checkout.py": "pass\n",
+            "CLAUDE.md": "run `make build`\n",
+        })
+        commit = ah.run(repo)["harness_history"]["commits"][0]
+        self.assertEqual(commit["subject"], "add checkout, document its build step")
+        self.assertEqual(commit["matched"], ["CLAUDE.md"])
+
+    def test_a_long_history_is_capped_and_says_it_was(self):
+        """A report that silently stops at N reads as a project with N
+        harness commits. The cap is a budget on this report, not a claim
+        about the repository."""
+        repo = self._repo()
+        for i in range(ah.HISTORY_LIMIT + 1):
+            self._commit(repo, f"pass {i}", {".claude/skills/review/SKILL.md": f"{i}\n"})
+        history = ah.run(repo)["harness_history"]
+        self.assertEqual(len(history["commits"]), ah.HISTORY_LIMIT)
+        self.assertTrue(history["truncated"])
+        self.assertEqual(history["commits"][0]["subject"], f"pass {ah.HISTORY_LIMIT}")
+
+    def test_a_short_history_is_not_marked_truncated(self):
+        repo = self._repo()
+        self._commit(repo, "add the review skill", {".claude/skills/review/SKILL.md": "x\n"})
+        self.assertFalse(ah.run(repo)["harness_history"]["truncated"])
+
+    def test_the_text_report_distinguishes_the_three_states(self):
+        """The structured result is not what a pass reads. If the rendered
+        report collapses these, the distinction exists only in the JSON
+        nobody opened."""
+        empty = self._repo()
+        no_match = self._repo()
+        self._commit(no_match, "implement checkout", {"src/checkout.py": "pass\n"})
+        found = self._repo()
+        self._commit(found, "add the review skill", {".claude/skills/review/SKILL.md": "x\n"})
+        not_repo = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, not_repo, True)
+
+        texts = {name: run_cli("--path", str(path)).stdout
+                 for name, path in (("empty", empty), ("no_match", no_match),
+                                    ("found", found), ("not_repo", not_repo))}
+        for text in texts.values():
+            self.assertIn("Harness change history", text)
+        self.assertIn("not a git repository", texts["not_repo"])
+        self.assertIn("no commits", texts["empty"])
+        self.assertIn("no commit has touched", texts["no_match"])
+        self.assertIn("add the review skill", texts["found"])
+        self.assertEqual(len(set(texts.values())), 4)
+
+    def test_the_text_report_names_the_paths_it_searched(self):
+        """The report is bounded by a path list, and a reader who does not
+        know the bounds reads "nothing found" as "nothing happened"."""
+        repo = self._repo()
+        self._commit(repo, "add the review skill", {".claude/skills/review/SKILL.md": "x\n"})
+        text = run_cli("--path", str(repo)).stdout
+        self.assertIn(".claude/hooks", text)
+        self.assertIn("CLAUDE.md", text)
+
+    def test_every_component_discovery_finds_is_a_path_history_searches(self):
+        """Two definitions of "harness component" -- one that inventories the
+        disk, one that searches history -- drift apart silently, and the
+        symptom is a whole component type quietly missing from the record.
+        The fixture is the independent source here: it was built to exercise
+        discovery, not this list."""
+        fixture = REPO_ROOT / "tests" / "fixtures" / "good-harness"
+        discovered = [
+            *hc.claude_md_paths(fixture),
+            *hc.iter_rule_files(fixture),
+            *hc.iter_agent_files(fixture),
+            *hc.iter_workflow_files(fixture),
+            *hc.settings_paths(fixture),
+            *(d / "SKILL.md" for d in hc.iter_skill_dirs(fixture)),
+        ]
+        self.assertTrue(discovered, "the fixture stopped exercising discovery")
+        searched = ah.harness_history_paths(fixture)
+        for path in discovered:
+            rel = Path(path).relative_to(fixture).as_posix()
+            self.assertTrue(
+                any(rel == s or rel.startswith(s + "/") for s in searched),
+                f"{rel} is inventoried but its history is never searched",
+            )
+
+    def test_the_scope_states_what_the_history_cannot_see(self):
+        """The history is about to become the record, and a record whose
+        limits are unstated is read as complete. Each of these is a way a
+        real decision leaves no trace the search can reach."""
+        blind = " ".join(ah.SCOPE["does_not_detect"]).lower()
+        self.assertIn("did not change any file", blind)
+        self.assertIn("pull request", blind)
+        self.assertIn("revert", blind)
+        detects = " ".join(ah.SCOPE["detects"]).lower()
+        self.assertIn("commits that changed a harness component", detects)
 
 
 if __name__ == "__main__":
