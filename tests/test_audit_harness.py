@@ -4,6 +4,8 @@
     python3 tests/test_audit_harness.py
 """
 
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -495,7 +497,7 @@ class HarnessHistoryTests(unittest.TestCase):
         self._commit(repo, "add the review skill", {".claude/skills/review/SKILL.md": "x\n"})
         self.assertFalse(ah.run(repo)["harness_history"]["truncated"])
 
-    def test_the_text_report_distinguishes_the_three_states(self):
+    def test_the_text_report_distinguishes_every_empty_outcome(self):
         """The structured result is not what a pass reads. If the rendered
         report collapses these, the distinction exists only in the JSON
         nobody opened."""
@@ -512,9 +514,9 @@ class HarnessHistoryTests(unittest.TestCase):
                                     ("found", found), ("not_repo", not_repo))}
         for text in texts.values():
             self.assertIn("Harness change history", text)
-        self.assertIn("not a git repository", texts["not_repo"])
-        self.assertIn("no commits", texts["empty"])
-        self.assertIn("no commit has touched", texts["no_match"])
+        self.assertIn("not a git repository", texts["not_repo"].lower())
+        self.assertIn("no commits yet", texts["empty"].lower())
+        self.assertIn("touched a harness component", texts["no_match"].lower())
         self.assertIn("add the review skill", texts["found"])
         self.assertEqual(len(set(texts.values())), 4)
 
@@ -532,7 +534,11 @@ class HarnessHistoryTests(unittest.TestCase):
         disk, one that searches history -- drift apart silently, and the
         symptom is a whole component type quietly missing from the record.
         The fixture is the independent source here: it was built to exercise
-        discovery, not this list."""
+        discovery, not this list.
+
+        Its reach stops at the discovery functions named below, so a source
+        reached another way -- a plugin manifest's roots, a file CLAUDE.md
+        imports -- is held by its own behavioural test instead."""
         fixture = REPO_ROOT / "tests" / "fixtures" / "good-harness"
         discovered = [
             *hc.claude_md_paths(fixture),
@@ -561,6 +567,174 @@ class HarnessHistoryTests(unittest.TestCase):
         self.assertIn("revert", blind)
         detects = " ".join(ah.SCOPE["detects"]).lower()
         self.assertIn("commits that changed a harness component", detects)
+
+    def test_a_git_call_that_cannot_run_is_reported_not_raised(self):
+        """`_git` returns None when git cannot run at all -- a missing
+        binary, or a log that outran its timeout, which a large history
+        really can. An audit that raises there takes the inventory down
+        with it, and the inventory is the part that still worked."""
+        repo = self._repo()
+        self._commit(repo, "add the review skill", {".claude/skills/review/SKILL.md": "x\n"})
+        real = ah._git
+
+        def every_log_fails(cwd, *args):
+            # Keyed on the call, not on where its arguments sit: git-level
+            # options come before the subcommand, so a positional check
+            # stops standing for "this is the log call" the moment one is added.
+            return None if "log" in args else real(cwd, *args)
+
+        ah._git = every_log_fails
+        self.addCleanup(setattr, ah, "_git", real)
+        history = ah.run(repo)["harness_history"]
+        self.assertEqual(history["status"], "unavailable")
+        self.assertEqual(history["commits"], [])
+        rendered = io.StringIO()
+        with contextlib.redirect_stdout(rendered):
+            ah.print_markdown(ah.run(repo))
+        self.assertIn("could not be read", rendered.getvalue())
+
+    def test_a_file_claude_md_imports_is_searched_too(self):
+        """`@file` pulls another file into every session, so editing it
+        changes what the harness says without touching a path on the fixed
+        list. The reference recommends exactly this arrangement for a repo
+        that keeps one source of truth for several agents."""
+        repo = self._repo()
+        self._commit(repo, "point CLAUDE.md at the shared instructions", {
+            "CLAUDE.md": "@AGENTS.md\n",
+            "AGENTS.md": "build with make\n",
+        })
+        self._commit(repo, "change how the project is built", {"AGENTS.md": "build with bazel\n"})
+        subjects = [c["subject"] for c in ah.run(repo)["harness_history"]["commits"]]
+        self.assertIn("change how the project is built", subjects)
+
+    def test_a_harness_spec_left_by_an_earlier_version_is_searched(self):
+        """A project set up before this tool kept its record in git has one
+        file holding every decision it ever made. Dropping that path from
+        the search does not retire the file -- it retires the history."""
+        repo = self._repo()
+        self._commit(repo, "record why the hook was declined",
+                     {".claude/harness-spec.md": "# Harness Spec\n"})
+        subjects = [c["subject"] for c in ah.run(repo)["harness_history"]["commits"]]
+        self.assertEqual(subjects, ["record why the hook was declined"])
+
+    def test_a_shallow_clone_says_its_history_is_incomplete(self):
+        """At a shallow boundary git treats the cut-off commit as a root, so
+        every file in it reads as an addition -- the report would credit a
+        commit with creating a harness it merely inherited, and would say
+        "no commit touched" for anything below the cut. Truncation is about
+        this report; incompleteness is about the clone, and they are not the
+        same disclosure."""
+        origin = self._repo()
+        self._commit(origin, "add the review skill", {".claude/skills/review/SKILL.md": "x\n"})
+        self._commit(origin, "tune the review skill", {".claude/skills/review/SKILL.md": "y\n"})
+        clone = Path(tempfile.mkdtemp()) / "shallow"
+        self.addCleanup(shutil.rmtree, clone.parent, True)
+        subprocess.run(["git", "clone", "-q", "--depth", "1", f"file://{origin}", str(clone)],
+                       capture_output=True, text=True, check=True)
+        history = ah.run(clone)["harness_history"]
+        self.assertTrue(history["shallow"])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ah.print_markdown(ah.run(clone))
+        self.assertIn("shallow", out.getvalue().lower())
+
+    def test_a_full_repository_is_not_marked_shallow(self):
+        repo = self._repo()
+        self._commit(repo, "add the review skill", {".claude/skills/review/SKILL.md": "x\n"})
+        self.assertFalse(ah.run(repo)["harness_history"]["shallow"])
+
+    def test_a_merge_that_brought_in_a_harness_change_names_its_paths(self):
+        """Measured on this repository: five merges match the pathspec and
+        all five list no files, because a merge is not diffed by default.
+        They still consume the cap, so a busy project spends its report on
+        entries that say a change happened and not what changed."""
+        repo = self._repo()
+        self._commit(repo, "base", {"README.md": "x\n"})
+        self._git(repo, "checkout", "-q", "-b", "side")
+        self._commit(repo, "add the review skill on a branch", {".claude/skills/review/SKILL.md": "x\n"})
+        self._git(repo, "checkout", "-q", "main")
+        self._commit(repo, "unrelated main work", {"src/app.py": "pass\n"})
+        self._git(repo, "merge", "-q", "--no-ff", "-m", "merge the review skill", "side")
+        merge = ah.run(repo)["harness_history"]["commits"][0]
+        self.assertEqual(merge["subject"], "merge the review skill")
+        self.assertEqual(merge["matched"], [".claude/skills/review/SKILL.md"])
+
+    def test_a_declared_skills_root_is_searched_after_its_last_skill_is_deleted(self):
+        """Deleting the last skill under a declared root removes the
+        directory, and a path list built from what exists now loses exactly
+        the commit that removed it -- the decision a later pass most needs
+        not to re-litigate."""
+        repo = self._repo()
+        (repo / ".claude-plugin").mkdir(parents=True)
+        (repo / ".claude-plugin" / "plugin.json").write_text('{"skills": "./packaged"}\n')
+        self._commit(repo, "ship the packaged skill", {"packaged/only/SKILL.md": "x\n"})
+        shutil.rmtree(repo / "packaged")
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-q", "-m", "retire the packaged skill")
+        subjects = [c["subject"] for c in ah.run(repo)["harness_history"]["commits"]]
+        self.assertEqual(subjects, ["retire the packaged skill", "ship the packaged skill"])
+
+    def test_git_being_unavailable_is_not_reported_as_having_no_repository(self):
+        """"There is no repository here" is a fact about the project; "git
+        did not run" is a fact about this machine. Reported as the first, a
+        broken install tells every project it has nowhere to keep a record."""
+        repo = self._repo()
+        self._commit(repo, "add the review skill", {".claude/skills/review/SKILL.md": "x\n"})
+        self.addCleanup(setattr, ah, "_git", ah._git)
+        ah._git = lambda cwd, *args: None
+        self.assertEqual(ah.run(repo)["harness_history"]["status"], "unavailable")
+
+    def test_the_absence_messages_report_the_search_not_a_conclusion(self):
+        """A project can keep its reasons somewhere this search cannot
+        reach. Saying the decisions do not exist, rather than that no commit
+        matched, is how a pass talks a user into deciding it all again."""
+        rendered = []
+        for status in ("not_a_repository", "no_history", "no_match"):
+            out = io.StringIO()
+            result = ah.run(REPO_ROOT / "tests" / "fixtures" / "good-harness")
+            result["harness_history"] = {"status": status, "commits": [], "truncated": False,
+                                         "shallow": False, "paths": []}
+            with contextlib.redirect_stdout(out):
+                ah.print_markdown(result)
+            section = out.getvalue().split("## Harness change history")[1].split("##")[0]
+            rendered.append(section)
+            for invented in ("survive only as long", "nowhere a past decision",
+                            "was not recorded", "no durable record"):
+                self.assertNotIn(invented, section, status)
+        self.assertEqual(len(set(rendered)), 3)
+
+    def test_subjects_and_paths_survive_bytes_that_would_frame_a_record(self):
+        """The framing bytes have to be ones the data cannot contain. A
+        subject may hold any byte but NUL, and a path may hold any byte but
+        NUL and `/` -- so NUL is the only safe frame, and `%x00` supplies it
+        from inside git rather than through argv, which is where the null
+        byte is actually forbidden. Without `-z`, git also hands back its
+        display form: a Korean path arrives octal-escaped and a quoted one
+        keeps its quotes, so `matched` would name files that do not exist."""
+        repo = self._repo()
+        subject = "keep \x1f and \x1e literal"
+        self._commit(repo, subject, {
+            ".claude/skills/\ud55c\uae00/SKILL.md": "x\n",
+            '.claude/rules/we"ird.md': "y\n",
+        })
+        commit = ah.run(repo)["harness_history"]["commits"][0]
+        self.assertEqual(commit["subject"], subject)
+        self.assertEqual(sorted(commit["matched"]), [
+            '.claude/rules/we"ird.md',
+            ".claude/skills/\ud55c\uae00/SKILL.md",
+        ])
+
+    def test_a_skills_root_whose_name_looks_like_pathspec_magic_is_matched_literally(self):
+        """A plugin manifest names a directory; git reads a pathspec. A name
+        starting with `:` is magic to git, and the failure is silent -- the
+        search returns nothing and the report says no commit touched a
+        component, which is the one answer a reader will act on."""
+        repo = self._repo()
+        (repo / ".claude-plugin").mkdir(parents=True)
+        (repo / ".claude-plugin" / "plugin.json").write_text('{"skills": "./:(top)odd"}\n')
+        self._commit(repo, "ship the packaged skill", {":(top)odd/packaged/SKILL.md": "x\n"})
+        subjects = [c["subject"] for c in ah.run(repo)["harness_history"]["commits"]]
+        self.assertEqual(subjects, ["ship the packaged skill"])
 
 
 if __name__ == "__main__":

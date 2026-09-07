@@ -14,8 +14,10 @@ Then lists the commits that changed a harness component -- hash, date,
 subject and which component paths matched -- most recent first, capped. A
 commit that merely used the harness edits the project, not the harness, so
 the path filter never meets it. The report names the paths it searched, and
-says which of three things it found: no repository, no commits, or no commit
-touching a component. Read a listed commit's reasons with `git show`.
+distinguishes what it found: no repository, git that would not run, no
+commits, or no commit touching a component. A shallow clone is reported as
+such, because its oldest entry lists files inherited rather than added.
+Read a listed commit's reasons with `git show`.
 
 Existence only. It does not compare contents: an edited CLAUDE.md, or a
 rewritten skill body at the path the spec names, reads as in sync.
@@ -320,15 +322,19 @@ def hygiene_signals(root):
 
 
 def _git_root(root):
-    """The repository that contains root, or None.
+    """(path, reason) for the repository containing root.
 
     Resolved by asking git rather than looking for `root/.git`: a target
     inside a monorepo has its repository several levels up, and a bare
-    existence check reports that project as unversioned."""
+    existence check reports that project as unversioned. The two ways this
+    can come back empty stay apart -- git that would not run is a fact about
+    the machine, and no repository is a fact about the project."""
     done = _git(root, "rev-parse", "--show-toplevel")
-    if done is None or done.returncode != 0 or not done.stdout.strip():
-        return None
-    return Path(done.stdout.strip())
+    if done is None:
+        return None, "unavailable"
+    if done.returncode != 0 or not done.stdout.strip():
+        return None, "not_a_repository"
+    return Path(done.stdout.strip()), None
 
 
 def _git(cwd, *args):
@@ -363,11 +369,16 @@ HARNESS_HISTORY_PATHS = (
     ".claude/hooks",
     ".claude/settings.json",
     ".claude/settings.local.json",
+    # Where a project set up before this tool read git kept its decisions.
+    # No pass writes one now; dropping the path would retire the history
+    # rather than the file, and for such a project that history is all of it.
+    ".claude/harness-spec.md",
 )
 
+# A commit subject may hold any byte but NUL, and a path any byte but NUL and
+# `/`, so NUL is the only framing byte the data cannot forge. `%x00` asks git
+# to emit one; the null byte argv cannot carry is a different question.
 _HISTORY_FIELD_SEP = "\x1f"
-# Record separator, not NUL: argv strings cannot carry a null byte.
-_HISTORY_RECORD_SEP = "\x1e"
 
 # A budget on this report, not a claim about the repository. Twenty covers
 # several passes' worth of decisions without turning an audit into a
@@ -388,7 +399,16 @@ def harness_history_paths(root):
     record."""
     paths = list(HARNESS_HISTORY_PATHS)
     root = Path(root)
-    for extra in hc.plugin_skills_roots(root):
+    extras = list(hc.declared_plugin_skills_roots(root))
+    # `@file` puts another file in every session, so editing it changes what
+    # the harness says while touching nothing on the fixed list. Only targets
+    # inside this project: an import that reaches outside has no history here.
+    for instruction_file in hc.claude_md_paths(root):
+        for target in hc.parse_at_imports(hc.read_text(instruction_file)):
+            resolved, external = hc.resolve_import(target, instruction_file)
+            if not external:
+                extras.append(resolved)
+    for extra in extras:
         try:
             rel = Path(extra).relative_to(root).as_posix()
         except ValueError:
@@ -398,49 +418,97 @@ def harness_history_paths(root):
     return paths
 
 
+def _run_history_log(root, paths, diff_merges=True):
+    """The log call, with its one optional flag isolated.
+
+    `--diff-merges` arrived in git 2.31. Without it a merge is listed with no
+    files at all, so it is worth asking for -- and worth falling back when a
+    git that does not know it refuses the whole command, because a report
+    that lists merges without their paths still beats no report."""
+    args = [
+        # A directory whose name starts with `:` is a pathspec magic word to
+        # git, and the mismatch is silent: the search returns nothing and the
+        # report says no commit touched a component.
+        "--literal-pathspecs",
+        # --full-history because path-limited history simplification prunes
+        # side branches: a decision that arrived on a merged branch is
+        # otherwise absent from a report that claims to be the record.
+        "log", "--full-history", "--name-only",
+        # -z for the file list too: without it git hands back its display
+        # form, which octal-escapes a non-ASCII path and quotes an awkward
+        # one, so `matched` would name files that are not on disk.
+        "-z",
+        # One past the limit, so truncation is known without walking (and
+        # paying for) a history the report is not going to print.
+        "-n", str(HISTORY_LIMIT + 1),
+        f"--format=%x00%h{_HISTORY_FIELD_SEP}%ad{_HISTORY_FIELD_SEP}%s",
+        "--date=short", "--", *paths
+    ]
+    if diff_merges:
+        # A merge is not diffed by default, so a resolution that changed a
+        # component reads as a change with no files. Against the first parent
+        # is the branch's own contribution, which is what a reader is after.
+        args.insert(args.index("--name-only") + 1, "--diff-merges=first-parent")
+    done = _git(root, *args)
+    if diff_merges and (done is None or done.returncode != 0):
+        return _run_history_log(root, paths, diff_merges=False)
+    return done
+
+
 def harness_history(root):
     """Commits that changed this project's harness.
 
     Pathspecs are resolved by git against its own working directory, so the
     query runs with `-C root`: the same relative path from the repository
     root matches nothing when the target is a subdirectory."""
-    git_root = _git_root(root)
+    git_root, reason = _git_root(root)
     if git_root is None:
-        return {"status": "not_a_repository", "commits": [], "truncated": False, "paths": []}
+        return {"status": reason, "commits": [], "truncated": False, "shallow": False, "paths": []}
     paths = harness_history_paths(root)
-    done = _git(
-        root,
-        # --full-history because path-limited history simplification prunes
-        # side branches: a decision that arrived on a merged branch is
-        # otherwise absent from a report that claims to be the record.
-        "log", "--full-history", "--name-only",
-        # One past the limit, so truncation is known without walking (and
-        # paying for) a history the report is not going to print.
-        "-n", str(HISTORY_LIMIT + 1),
-        f"--format={_HISTORY_RECORD_SEP}%h{_HISTORY_FIELD_SEP}%ad{_HISTORY_FIELD_SEP}%s",
-        "--date=short", "--", *paths,
-    )
+    # A shallow clone cuts ancestry off, and git presents the boundary commit
+    # as a root: its whole tree reads as files that commit added. So the
+    # oldest entry here can credit a commit with creating a component it only
+    # inherited, and anything below the cut is invisible rather than absent.
+    depth = _git(root, "rev-parse", "--is-shallow-repository")
+    shallow = depth is not None and depth.stdout.strip() == "true"
+    # Before the log, not after: a repository with no commits makes `git log`
+    # exit non-zero, and reading that as "git failed" turns "nothing has been
+    # recorded yet" into "the record could not be read".
+    head = _git(root, "rev-parse", "--verify", "-q", "HEAD")
+    if head is None or head.returncode != 0:
+        return {"status": "no_history", "commits": [], "truncated": False,
+                "shallow": shallow, "paths": paths}
+    done = _run_history_log(root, paths)
+    if done is None or done.returncode != 0:
+        return {"status": "unavailable", "commits": [], "truncated": False,
+                "shallow": shallow, "paths": paths}
+
     commits = []
-    for record in (done.stdout or "").split(_HISTORY_RECORD_SEP):
-        lines = [ln for ln in record.splitlines() if ln.strip()]
-        if not lines:
+    # Under `-z` each commit arrives as an empty field, then the formatted
+    # header, then its paths. The first path carries git's own newline
+    # between the two, and exactly one leading newline is that separator
+    # rather than part of a filename.
+    expect_header = True
+    for token in (done.stdout or "").split("\x00"):
+        if not token:
+            expect_header = True
             continue
-        parts = lines[0].split(_HISTORY_FIELD_SEP)
-        if len(parts) != 3:
-            continue
-        commits.append({
-            "hash": parts[0], "date": parts[1], "subject": parts[2],
-            "matched": lines[1:],
-        })
+        if expect_header:
+            parts = token.split(_HISTORY_FIELD_SEP, 2)
+            if len(parts) != 3:
+                continue
+            commits.append({
+                "hash": parts[0], "date": parts[1], "subject": parts[2], "matched": [],
+            })
+            expect_header = False
+        elif commits:
+            commits[-1]["matched"].append(token[1:] if token.startswith("\n") else token)
     truncated = len(commits) > HISTORY_LIMIT
     commits = commits[:HISTORY_LIMIT]
-    if commits:
-        status = "searched"
-    elif _git(root, "rev-parse", "--verify", "-q", "HEAD").returncode != 0:
-        status = "no_history"
-    else:
-        status = "no_match"
-    return {"status": status, "commits": commits, "truncated": truncated, "paths": paths}
+    return {
+        "status": "searched" if commits else "no_match",
+        "commits": commits, "truncated": truncated, "shallow": shallow, "paths": paths,
+    }
 
 
 # What the drift check reads and what it is blind to. Printed on every run,
@@ -577,14 +645,13 @@ def print_markdown(result):
     print("\n## Harness change history\n")
     history = result["harness_history"]
     if history["status"] == "not_a_repository":
-        print("- This project is not a git repository, so it has no durable record of why "
-              "its harness looks the way it does -- decisions made here survive only as long "
-              "as the conversation.")
+        print("- Not a git repository, so there is no commit history to search here.")
     elif history["status"] == "no_history":
-        print("- The repository has no commits yet, so there is nowhere a past decision could be.")
+        print("- The repository has no commits yet, so there is no history to search.")
+    elif history["status"] == "unavailable":
+        print("- The history could not be read: git did not answer. Everything above still holds.")
     elif history["status"] == "no_match":
-        print("- The repository has history, but no commit has touched a harness component. "
-              "Anything decided before now was not recorded here.")
+        print("- No commit in this repository has touched a harness component.")
     else:
         for c in history["commits"]:
             print(f"- {c['hash']} {c['date']} {c['subject']}")
@@ -593,6 +660,10 @@ def print_markdown(result):
         if history["truncated"]:
             print(f"- Capped at {len(history['commits'])}; older harness commits exist. "
                   "Read a commit's reasons with `git show <hash>`.")
+    if history["shallow"]:
+        print("- This clone is shallow, so its history stops at a boundary git presents as a "
+              "root: the oldest entry above lists files it inherited rather than added, and "
+              "anything before the cut is out of reach here rather than absent.")
     if history["paths"]:
         print("- Searched: " + ", ".join(history["paths"]) + ".")
 
