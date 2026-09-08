@@ -1,12 +1,12 @@
 # E2E Testing
 
-This is the second, deeper tier of harness validation. Read it once the user has consented to an e2e run, right before you compose and launch it.
+Use this guide when the approved behavior needs evidence from a real model session. Structural checks establish file shape; scenarios establish what happens on the requests the harness must serve.
 
-`validate_harness.py` proves the harness is well-formed; only a real run against a real prompt proves it does what the user approved it to do. A skill with perfect frontmatter can still never trigger because its description's boundary language is fuzzy, and a hook can be syntactically flawless and fire on the wrong tool, or never, because the matcher assumed a tool-call shape that turned out wrong. e2e closes that gap by spawning a headless Claude session against the generated harness and watching what happens. It costs a full agentic session per scenario, which is why SKILL.md's K14 puts consent before it.
+`validate_harness.py` checks the harness's structure; a real run against a real prompt supplies evidence about the behavior the user approved. A skill with perfect frontmatter can still never trigger because its description's boundary language is fuzzy, and a hook can be syntactically flawless and fire on the wrong tool, or never, because the matcher assumed a tool-call shape that turned out wrong. e2e closes that gap by spawning a headless Claude session against the generated harness and watching what happens.
 
 ## Shape: a workflow composed on the spot, not a file you ship
 
-The scenarios differ for every project, so a fixed workflow file would be too narrow for the next project or too generic to check anything real. Compose the workflow when you need it, from the scenarios settled during approval (K7 puts them before generation, so this step composes them rather than inventing them), and throw the composition away afterward. The scenario, its expectation and the latest result are kept in the handoff; the composition is not.
+The scenarios differ for every project, so a fixed workflow file would be too narrow for the next project or too generic to check anything real. Compose the workflow when you need it, from scenarios whose expected behavior and evidence were settled with the design, before generation, and throw the composition away afterward. The scenario, its expectation and the latest result are kept in the handoff; the composition is not.
 
 Three phases, because each needs something the one before it produced: **Run** — one agent per scenario, running `run_e2e.py` via Bash, scenarios pipelined independently so a slow one doesn't block a fast one. **Grade** — one agent per transcript, every verdict citing transcript evidence. **Report** — pass/fail across scenarios plus a concrete repair target per failure. Run and Grade stay separate stages because grading needs the whole transcript and summary already on disk, while the next scenario's run shouldn't wait on the previous one's grading. A single-scenario check can collapse Grade and Report into one agent — what cannot collapse is Run into Grade, since a grader that also ran the scenario is grading its own work from memory rather than from the transcript.
 
@@ -35,7 +35,7 @@ const scenarios = [
     expect: 'Should trigger the api-route-conventions skill and follow its error-handling pattern.' },
   { id: 'V2', isolate: false, prompt: 'What testing framework does this project use?',
     expect: 'Should answer "pytest" by reading CLAUDE.md, not by guessing or searching.' },
-  { id: 'V3', isolate: false, prompt: 'Refactor the auth module to use async/await.',
+  { id: 'V3', isolate: true, prompt: 'Refactor the auth module to use async/await.',
     expect: 'Should NOT trigger the migration-safety skill -- this is a near-miss prompt.' },
 ]
 
@@ -65,7 +65,7 @@ const grades = await pipeline(
 return { passed: grades.filter(g => g.verdict === 'pass').length, total: grades.length, grades }
 ```
 
-The script never decides whether a transcript shows real trigger evidence or what "correct behavior" means — both live in the prompt strings, from what the user approved. The Report phase is yours, in the main session: take the returned `grades`, route each failure to a repair target with SKILL.md's layer-routing table (its repair column is the same routing run backwards), and delete any kept isolated copies once graded. Don't hand that judgment to an agent inside the workflow, since you are the one who then acts on it. Before launching, check that `permissions.allow` covers the Bash call the Run agents make — a workflow's agents stall on an unapproved call with nobody watching the prompt (references/workflows.md) — or take the fallback below.
+The script never decides whether a transcript shows real trigger evidence or what "correct behavior" means — both live in the prompt strings, from what the user approved. The Report phase is yours, in the main session: take the returned `grades`, route each failure to a repair target with SKILL.md's layer-routing table, and delete any kept isolated copies once graded. Don't hand that judgment to an agent inside the workflow, since you are the one who then acts on it. Before launching, check that `permissions.allow` covers the Bash call the Run agents make — a workflow's agents stall on an unapproved call with nobody watching the prompt (references/workflows.md) — or take the fallback below.
 
 **Two failures in this shape are silent.** `${CLAUDE_SKILL_DIR}` is substituted in a skill's own markdown and in `allowed-tools` rules — **not** in a workflow's prompt strings or a subagent's shell environment. Written there it arrives as literal text and becomes a permission stall or a `python "/scripts/run_e2e.py"` file-not-found, which reads like a permissions problem and isn't one; resolve the absolute path in the composing session. And an `agent()` call **without** a `schema` returns its final text as a plain string, so reading a property off it (`run.label`, `run.id`) silently yields `undefined` and a path like `.e2e-runs/undefined/`; attach a schema, or carry the identity from the original item as the second stage above does.
 
@@ -75,11 +75,11 @@ Workflows are gated on version, plan, an opt-in on the Pro tier, and two off swi
 
 ## Scenario count and model choice
 
-Default to 2–4 scenarios and look deeply at each: a grader producing evidence-cited verdicts for a dozen transcripts starts skimming, and skimming is how surface compliance becomes a false PASS. Expand only when the user asks for broader coverage or the approved design genuinely has more independent things worth checking.
+Choose scenarios to cover the independent behaviors and failure modes in the approved design. Include intended triggers, neighboring requests that should not trigger, legitimate operations a boundary must allow, and alternate paths that could bypass it where relevant. Each scenario needs its own evidence-based verdict; a larger set does not justify shallower grading.
 
-Default the model to the one the user actually runs. The point of e2e is behavioural fidelity, and a cheaper model's trigger behaviour is a different distribution from the one the user lives with. `--model` on `run_e2e.py` is an explicit cost-for-fidelity trade; offer it by name and let a cost-sensitive user choose it with eyes open, never default to it silently.
+Use the model the harness will actually serve. Triggering and instruction-following differ between models, so a result on another model does not establish the behavior of the target one. If the harness must support several models, identify which claims need checking on each; the runner's CLI exposes model selection.
 
-A with/without-harness comparison earns its doubled cost in two situations only: a fresh build where the user wants to see the baseline the harness improves on, and a repair where old-versus-new behaviour on the same scenario is the most direct evidence the fix worked.
+Use a with/without-harness or old/new comparison when the claim concerns what the harness changes. Hold the task and relevant environment constant so the comparison can attribute the observed difference; a single successful run is not evidence that the harness caused the success.
 
 ## The assertion types
 
@@ -115,7 +115,7 @@ After a repair, re-run the scenarios that failed and any whose surface the repai
 
 The flag combination that lets a headless scenario run to completion is settled (`--isolate` with skip-permissions, confirmed against real sessions). What it does not settle is the box you are on, because **auth is per-machine**: the credentials a spawned `claude` needs are the ones where it spawns, and a child spawned via Bash can fail with "Not logged in" even when the calling session is logged in.
 
-**`--isolate` is opt-in**, so choosing it is a decision you make per run: without it the headless session runs in the user's actual working tree, and a scenario that writes, writes there. Attach it for anything that isn't purely read-only, use `--permission-mode` when a scenario needs to run under a specific mode rather than with permissions skipped, and say which you picked when you propose the run. The isolated copy is where an artifact-quality scenario's files are, so keep it for those and delete it once graded — nothing else collects it.
+Run any scenario that can write in an isolated copy, and retain that copy until its artifacts have been graded. When the claim depends on a particular permission mode, select it with `--permission-mode`: a run with permissions skipped cannot establish behavior under another mode. State the environment used alongside the result and clean up retained copies after inspection. The runner's `--help` defines the flags for isolation and retention.
 
 On a machine you have not run this on before, tell the user the first run *is* the confirmation and read its outcome that way: scenarios that complete with a sensible transcript settle it; a stall on a permission prompt nobody answers means adjust the permission flags; "Not logged in" means the spawned `claude` needs authenticating on that machine, and no flag fixes it. Note which happened in the handoff so the next run doesn't re-litigate it.
 
