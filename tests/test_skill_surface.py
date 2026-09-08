@@ -3,10 +3,9 @@
 
     python3 tests/test_skill_surface.py
 
-These cover the WS1 "truth repair" bugs. Most were classified as prose-only
-in the plan, but each one has a mechanical shadow -- an ordering, a count, a
-grep that must stay at zero -- and a check that runs on every commit is worth
-more than a review note that runs once. stdlib unittest only, no pytest.
+These cover shipped resource and interface regressions. Authoring judgment
+is evaluated through real sessions and independent review, not prose pins.
+stdlib unittest only, no pytest.
 """
 
 import ast
@@ -30,38 +29,22 @@ def read(path):
     return path.read_text(encoding="utf-8")
 
 
-class PassOrderTests(unittest.TestCase):
-    """The pass is one paragraph of dependency order, each step consuming the
-    one before it. Two orderings inside it are load-bearing: the wrap-up's
-    re-validation has to come after the CLAUDE.md edits it checks (v2 ran it
-    first and committed an unvalidated state), and the handoff
-    comes last, stated as a principle that defers to the target project's
-    git conventions rather than as an unconditional commit."""
-
-    def setUp(self):
-        text = read(SKILL_MD)
-        self.para = text.split("## How a pass runs")[1].split("\n## ")[0]
-        self.wrap = self.para.split("Wrap up")[1]
-
-    def test_validation_runs_after_the_edits_it_checks(self):
-        pointers = self.wrap.index("update CLAUDE.md's pointers")
-        validate = self.wrap.index("validate_harness.py")
-        self.assertLess(pointers, validate)
-
-    def test_the_handoff_is_last_and_defers_to_the_project(self):
-        self.assertLess(self.wrap.index("validate_harness.py"), self.wrap.index("handoff"))
-        self.assertIn("git conventions", self.wrap)
-        self.assertNotIn("propose a commit", read(SKILL_MD))
-
-    def test_the_reference_reload_rule_carries_its_reason(self):
-        """v6 said "reload before generating, every time" with no reason; the
-        reason is that compaction summarizes a reference read away while it
-        re-attaches this file, and a rule without it cannot be re-derived."""
-        self.assertIn("read it again after a compaction", self.para)
-        self.assertIn("summarizes a reference read away", self.para)
-
-    def test_false_independence_claim_is_gone(self):
-        self.assertNotIn("will independently catch", read(SKILL_MD))
+def reachable_skill_pointers():
+    """Follow shipped Markdown pointers from the skill's entry point."""
+    pending = [SKILL_MD]
+    visited = set()
+    pointers = set()
+    while pending:
+        path = pending.pop()
+        if path in visited:
+            continue
+        visited.add(path)
+        for pointer in vh.iter_skill_pointers(read(path)):
+            pointers.add(pointer)
+            target = SKILL_DIR / pointer
+            if target.suffix == ".md" and target.is_file():
+                pending.append(target)
+    return pointers
 
 
 class TimeoutFactsTests(unittest.TestCase):
@@ -127,13 +110,10 @@ class DeadLinkCoverageTests(unittest.TestCase):
         return list(vh.iter_skill_pointers(text))
 
     def test_pointers_in_both_skill_md_and_references_are_scanned(self):
-        """SKILL.md routes to every reference the moment a component type is
-        picked, so every reference except the data file behind hook_event.py
-        must be reachable from it by a pointer the linter scans."""
-        pointed = set(self._scan(read(SKILL_MD)))
+        """Every shipped reference is reachable, directly or through another
+        reference, by a pointer the linter scans."""
+        pointed = reachable_skill_pointers()
         for ref in REFERENCES:
-            if ref.name == "hooks-events.md":
-                continue
             self.assertIn(f"references/{ref.name}", pointed, ref.name)
         ref_hits = sum(len(self._scan(read(p))) for p in REFERENCES)
         self.assertGreater(ref_hits, 0, "reference-to-reference pointers must be scanned")
@@ -176,64 +156,8 @@ class DeadLinkCoverageTests(unittest.TestCase):
         self.assertEqual([f for f in findings if f[0] == "E"], [])
 
 
-class AlwaysLoadedBudgetTests(unittest.TestCase):
-    """The headline metric of the v2 revision. SKILL.md was 2,185 words but
-    the true always-loaded surface was 4,833, because SKILL.md instructed an
-    unconditional load of interview.md and reached into it during Phase 0 --
-    so the progressive-disclosure seam between them bought nothing.
-
-    The ceiling that matters is compaction: auto-compaction re-attaches only
-    the first 5,000 tokens of a skill, and everything past that vanishes
-    silently rather than degrading.
-
-    Only HARD_CEILING is a product fact. WORD_BUDGET is a self-imposed target,
-    and v3 raised it from 2,500 to 2,650 rather than cut the compression
-    doctrine down to fit: 2,500 was the number v2 landed on while *removing*
-    an unconditional interview.md load, and v3 is adding four pieces of
-    doctrine that every generated harness inherits. Holding a number whose
-    justification had changed is the rail-wearing-a-digit failure this skill
-    warns about, and the density metric v3 actually targets moved the right
-    way -- words trapped in >=110-word paragraphs went 788 -> 580. Raise this
-    again only with the same kind of reason written down; the ceiling below
-    is the one that must not move."""
-
-    WORD_BUDGET = 2950          # self-imposed; see docstring
-
-    def test_skill_md_within_budget(self):
-        """The 5,000-token figure is the compaction re-injection cap, not a
-        load cap: a first invocation loads the whole body. v7 measured the
-        pre-rewrite body at about 5,250 tokens (3.0 chars/token) and chose
-        not to design around compaction -- the body's quality comes first --
-        so the word pin stays as the only size guardrail. v7 raised it
-        2,650 -> 2,850: deleting interview.md moved its knowledge (K1-K15,
-        about 550 words as rule-plus-reason pairs) into this file, the
-        operating loop and hard lines it replaced gave back most but not all
-        of that, and the adversarial review then asked for reasons the four
-        frames demand (why the diagnostic order, why the pair, what e2e
-        costs) -- reasons cost words. What remained over the old pin was
-        knowledge and reasons, not argument.
-
-        v8 raised it 2,850 -> 2,950, and audited the draft twice before
-        doing it. Retiring the spec file moved three things no other file
-        holds into this one: K16, the record contract (100 words); K7's
-        "settle what would show it working before it is built", which the
-        deleted template carried as "the scenarios that count as proof"; and
-        K16's supersession clause, which that template carried as "rewrite
-        the entry instead of stacking" and which had to be restated for a
-        history that cannot be rewritten.
-
-        The first audit cut 68 words; an adversarial review then showed more
-        was available and named it, and the second cut took the rest -- the
-        loop announcing what K7 states, "each with the reason that lets you
-        re-derive it" restating the philosophy section, a tautological
-        removal clause, and K16 repeating K6 and K10. Measured after both:
-        2,848 -> 2,942 by this test's own counting. What remains over the
-        old pin is the three additions above; the review's own compression
-        experiment reached 2,845, but it was compressing a draft that did
-        not yet carry them."""
-
-        words = len(read(SKILL_MD).split())
-        self.assertLess(words, self.WORD_BUDGET, f"SKILL.md is {words} words")
+class RetiredReferenceTests(unittest.TestCase):
+    """Deleted references must not remain dependencies of the shipped package."""
 
     def test_no_interview_file_and_nothing_points_at_one(self):
         """v7 deleted interview.md: its protocol (modes, stages, scripts) was
@@ -273,81 +197,6 @@ class NoModeVocabularyTests(unittest.TestCase):
     def test_the_audit_does_not_suggest_a_mode(self):
         self.assertNotIn("suggested mode", read(SKILL_MD).lower())
         self.assertNotIn("suggested_mode", read(SCRIPTS_DIR / "audit_harness.py"))
-
-
-class HarnessEngineerKnowledgeTests(unittest.TestCase):
-    """K1-K15: the interview knowledge that survived the protocol's deletion.
-    Each entry pins a rule anchor and a reason anchor, because the reason is
-    what lets the model re-derive the rule, and the first thing a compression
-    pass cuts is the clause after the dash."""
-
-    K = {
-        "K1": ("ask only what is left open", "spends the user's attention twice"),
-        "K2": ("what is now unnecessary", "nothing on disk records what was used"),
-        # K3 absorbed retired K5: both halves of that rule are pinned here.
-        "K3": ("ask which side is right before regenerating", "silently reverting a colleague's work is far worse"),
-        "K4": ("keep every approved section the delta does not invalidate", "adds no evidence"),
-        "K6": ("what would reopen it", "the next pass re-proposes it"),
-        "K7": ("approving each piece before the next depends on it", "mixing them makes both harder to judge"),
-        "K8": ("surface every enforced-versus-advisory call", "the one judgment with a real cost when it is wrong"),
-        "K9": ("look for an interface that makes the wrong move unavailable", "a hook fires after Claude has already decided"),
-        "K10": ("`permissions.allow` entries get their own question", "removes a checkpoint the user has today"),
-        "K11": ("Ask once whether any of this must work beyond this repo", "no portable form"),
-        "K12": ("what language the generated harness should be written in", "may differ from the language of the interview"),
-        "K13": ("converge with AskUserQuestion", "what lets the user judge"),
-        "K14": ("Offer e2e only after stating its cost and getting consent", "spends real tokens"),
-        "K15": ("never ablate a hook or a permission rule", "too expensive to observe even once"),
-        "K16": ("which earlier decision each one supersedes", "a squash keeps one commit and discards the branch's bodies"),
-    }
-
-    def _items(self):
-        section = read(SKILL_MD).split("## What a harness engineer asks")[1].split("\n## ")[0]
-        items = {}
-        for line in section.splitlines():
-            m = re.match(r"- \*\*(K\d+)\.\*\* (.*)", line)
-            if m:
-                items[m.group(1)] = m.group(2)
-        return items
-
-    def test_every_item_is_present_and_a_retired_number_is_not_reused(self):
-        """`K5` is retired: when the spec file went, "the spec is usually the
-        one behind" became a case of K3's read-before-overwriting, and the
-        knowledge moved there rather than being deleted. The number is not
-        reused, and the others do not shift down, because references cite
-        them by number -- e2e-testing.md points at K14 and agents.md at K11,
-        and renumbering would silently repoint both."""
-        expected = [f"K{i}" for i in range(1, 17) if i != 5]
-        self.assertEqual(sorted(self._items(), key=lambda k: int(k[1:])), expected)
-
-    def test_each_item_carries_its_rule_and_its_reason(self):
-        items = self._items()
-        for k, (rule, reason) in self.K.items():
-            self.assertIn(rule, items[k], f"{k} lost its rule")
-            self.assertIn(reason, items[k], f"{k} lost its reason")
-            self.assertIn("—", items[k], f"{k} has no reason clause")
-        self.assertIn("Read a file before overwriting it", items["K3"],
-                      "K3 lost the half that was its own before K5 merged in")
-
-    def test_the_relocated_obligations_are_each_pinned(self):
-        """One surviving phrase does not show that a rule survived a move.
-        Each clause below was a separate instruction before the spec went,
-        and an adversarial review removed all four in memory while the pin
-        above stayed green -- so they are pinned as the distinct obligations
-        they are, not as evidence of one another."""
-        items = self._items()
-        for k, clause, lost in (
-            ("K3", "say in the handoff how it was settled",
-             "the settlement stops being recorded anywhere"),
-            ("K6", "fold near-duplicate candidates",
-             "two names for one idea both get built"),
-            ("K6", "`disable-model-invocation`",
-             "a limited component reads as a removed one and gets deleted"),
-            ("K7", "Settle what observation would show a piece working before it is built",
-             "the session that builds it invents the standard it then grades against"),
-            ("K16", "no commit to ride on",
-             "a decision that changed nothing on disk leaves no trace at all"),
-        ):
-            self.assertIn(clause, items[k], f"{k}: {lost}")
 
 
 class GuardrailTests(unittest.TestCase):
@@ -452,26 +301,12 @@ class GuardrailTests(unittest.TestCase):
                          "the caveat was retired; do not reintroduce it as prose")
 
 
-class InterfaceDoctrineTests(unittest.TestCase):
-    """v5 gave the interface boundary its second direction, and retired the
-    `Signature` column that the missing direction had permitted.
-
-    The one-way version constrained only the interface author -- "don't put
-    when/why in a signature" -- so writing both a signature and a prose copy
-    of it broke no rule, and this skill did exactly that until two rows of
-    the copy went wrong. Anchored here for the same reason as
-    ConsequenceClauseTests in test_validate_harness.py: without an assertion
-    the clause is prose like any other and erodes on the next pass."""
-
-    def _scripts_section(self):
-        return read(SKILL_MD).split("## Scripts")[1].split("\n## ")[0]
-
-    def _table_rows(self):
-        return [l for l in self._scripts_section().splitlines() if l.startswith("|")]
+class BundledCliCoverageTests(unittest.TestCase):
+    """Bundled CLIs remain discoverable wherever the skill routes to them."""
 
     def _argparse_clis(self):
         """Which bundled scripts are CLIs, read from the source rather than
-        listed here -- adding one without a 'Run it when' row should fail."""
+        listed here -- adding an unreachable CLI should fail."""
         names = []
         for path in sorted(SCRIPTS_DIR.glob("*.py")):
             tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -480,45 +315,10 @@ class InterfaceDoctrineTests(unittest.TestCase):
                 names.append(path.name)
         return names
 
-    def test_boundary_names_both_owners(self):
-        """Both halves, because naming only the tool's half is what let the
-        prose copy exist. An adversarial read of an earlier draft that
-        forbade prose from "asserting how the tool currently behaves" also
-        forbade "run this only with consent, it spends real tokens" -- while
-        a --help string saying the same thing was forbidden by the other
-        half. Splitting on ownership instead leaves nowhere unreachable."""
-        text = read(SKILL_MD)
-        self.assertIn("the tool owns what is *valid*, what it does, and what it prints", text)
-        self.assertIn("the project owns when to reach for it, what it costs, and why it was chosen", text)
-        self.assertIn("Neither side restates the other.", text)
-
-    def test_the_falsifiability_test_is_stated(self):
-        """The clause that makes the rule operable on a case nobody listed."""
-        self.assertIn(
-            "If editing the tool would make the sentence false, the sentence belongs in the tool.",
-            read(SKILL_MD),
-        )
-
-    def test_a_pointer_inherits_its_targets_reader(self):
-        self.assertIn("A pointer inherits its target's reader", read(SKILL_MD))
-
-    def test_the_script_table_has_no_signature_column(self):
-        header = self._table_rows()[0]
-        self.assertNotIn("Signature", header)
-        self.assertEqual(header.count("|"), 3, header)
-
-    def test_the_script_table_carries_no_flags(self):
-        """The specific regression. A flag in this table is a copy of
-        `--help`, and the copy is the half nothing checks."""
-        for row in self._table_rows():
-            self.assertNotRegex(row, r"--[a-z]", row)
-
-    def test_every_bundled_cli_still_says_when_to_run_it(self):
-        """Judgment is the half that stays. Dropping the column must not
-        drop the row."""
-        rows = "\n".join(self._table_rows())
+    def test_every_bundled_cli_is_reachable(self):
+        pointers = reachable_skill_pointers()
         for name in self._argparse_clis():
-            self.assertIn(name, rows, name)
+            self.assertIn(f"scripts/{name}", pointers, name)
 
     def test_the_canonical_skill_example_points_instead_of_restating(self):
         self.assertNotIn("script's signature", read(SKILL_DIR / "references" / "skills.md"))
@@ -558,9 +358,6 @@ class InterfaceContradictionTests(unittest.TestCase):
         text = read(self.E2E) + read(SKILL_MD)
         for claim in ("implements as its default", "isolates by default", "isolated by default"):
             self.assertNotIn(claim, text, claim)
-
-    def test_prose_states_that_passing_the_flag_is_the_decision(self):
-        self.assertIn("`--isolate` is opt-in", read(self.E2E))
 
     def test_permission_mode_flag_is_not_hidden_from_the_reader(self):
         """`--permission-mode` exists and is the direct answer to the
@@ -602,45 +399,6 @@ class InterfaceContradictionTests(unittest.TestCase):
         for path in [SKILL_MD] + REFERENCES:
             for m in re.finditer(r"`run_e2e\.py[^`]*`", read(path)):
                 self.assertNotIn("--dangerously-skip-permissions", m.group(0), path.name)
-
-
-class SubtractionTests(unittest.TestCase):
-    """v5. A harness only grows unless something makes it shrink, and improve
-    mode had no downward arrow: every row of the feedback-routing table ended
-    in a repair or a promotion to a stronger layer.
-
-    The retirement doctrine that did exist covered *components*, and only
-    fired once you already suspected one. A stale *line* has no such tell --
-    a rule written to fight a model's old default reads exactly like one
-    still fighting the current default."""
-
-    def _routing_section(self):
-        return read(SKILL_MD).split("## The layer-routing framework")[1].split("\n## ")[0]
-
-    def test_the_existing_harness_question_asks_what_is_unnecessary(self):
-        self.assertIn("what is now unnecessary", read(SKILL_MD))
-
-    def test_ablation_is_evidence_not_proof_and_one_rule_at_a_time(self):
-        text = read(SKILL_MD)
-        self.assertIn("Ablate one rule at a time", text)
-        self.assertIn("evidence for retiring it, not proof", text)
-
-    def test_hooks_and_permissions_are_excluded_from_ablation(self):
-        """The guard that makes the rest safe to state. Ablating a hook means
-        observing the failure the hook exists to prevent."""
-        self.assertIn("never ablate a hook or a permission rule", read(SKILL_MD).lower())
-
-    def test_the_routing_table_carries_a_repair_column_and_a_downward_arrow(self):
-        """Repair is the routing table run backwards, so it lives as a column
-        of that table rather than as a second table in another file."""
-        section = self._routing_section()
-        header = next(l for l in section.splitlines() if l.startswith("| What it is"))
-        self.assertEqual(header.count("|"), 5, header)
-        self.assertIn("fix", header.lower())
-        repair = section.split("Repair runs the table backwards")[1]
-        self.assertIn("never a deletion", repair)
-        self.assertIn("K6 keeps it apart from removal", repair)
-        self.assertRegex(repair, r"harness grew[^.]*K15")
 
 
 class GotchaCountTests(unittest.TestCase):

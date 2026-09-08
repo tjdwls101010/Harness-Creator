@@ -33,7 +33,7 @@ One trap on the pre-written-role idea: **a subagent definition's `skills:` and `
 - **A plugin's subagents lose `hooks`, `mcpServers`, and `permissionMode`.** Those three fields are ignored when an agent loads from a plugin, for security reasons. An agent whose safety story rests on its own frontmatter hook has no safety story the moment it ships that way.
 - **A workflow can be packaged.** A plugin ships one from a `workflows/` directory at its root, or wherever its manifest's `workflows` field points, and it runs namespaced as `/<plugin>:<name>`. Outside a plugin the load paths are `.claude/workflows/` (project, walked up to the repo root) and `~/.claude/workflows/`, and the project copy wins a name collision.
 
-Only the first of those forces a distribution choice: a harness depending on the ignored fields travels as a repo `.claude/` tree rather than as a plugin. A workflow does not — it packages. Ask whether the harness must travel (SKILL.md's K11) before routing a role, so this is a design input rather than a discovery.
+Only the first of those forces a distribution choice: a harness depending on the ignored fields travels as a repo `.claude/` tree rather than as a plugin. A workflow does not — it packages. Establish whether the harness must travel before routing a role, so distribution is a design input rather than a discovery after generation.
 
 ## The eligibility test: don't generate an agent by default
 

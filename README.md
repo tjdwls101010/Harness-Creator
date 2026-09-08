@@ -120,7 +120,7 @@ Harness Creator is one way to build a Claude Code harness. The right choice depe
 | Manual configuration | You inspect everything | You make every decision | You write each file | You design the checks | Experts who want direct control |
 | Static template | Minimal | Mostly predetermined | Copy and edit | Usually manual | Similar projects with known conventions |
 | Component collection | Partial | You assemble the pieces | Reuse selected parts | Varies by component | Teams with an established internal system |
-| Harness Creator | Repository audit plus interview | Each need is routed deliberately | Approved project-specific components | Structural by default; behavioral E2E optional | Claude Code users who want a guided, inspectable process |
+| Harness Creator | Repository audit plus interview | Each need is routed deliberately | Approved project-specific components | Structural checks plus evidence for the approved behavior | Claude Code users who want a guided, inspectable process |
 
 Harness Creator does not remove judgment from the user or the model. It makes routing decisions explicit and records why each generated layer exists.
 
@@ -149,11 +149,11 @@ The operating loop is:
 
 1. **Audit** — inspect existing Claude Code files and the commits that changed them.
 2. **Interview** — establish goals, inventory needs, resolve component details, and define validation evidence.
-3. **Route** — assign each approved need to the least costly layer with enough authority.
+3. **Route** — assign each approved need to a layer whose authority and loading behavior fit it.
 4. **Generate** — create only the approved components.
-5. **Validate** — run deterministic structural checks, then offer optional behavioral end-to-end scenarios.
+5. **Validate** — check structure and gather the behavioral evidence agreed in the design.
 
-Each interview stage ends in an approval gate. Simple requests compress the conversation, but generation still waits for explicit approval of the design.
+The design and its success criteria are settled before generation. Existing approval remains valid where its inputs still hold; a repair revisits the decisions its evidence changes.
 
 Files show what exists; they never show why a need was routed to one layer instead of another. That goes in the commit and pull request the pass hands off, which is also where the next pass looks for it.
 
@@ -188,11 +188,11 @@ python3 .claude/skills/harness-creator/scripts/test_hook.py \
 
 The tool reproduces matcher evaluation, runs the selected hook with realistic input, and explains the effect of its exit code and output channel.
 
-### 6.3. Optional behavioral end-to-end validation
+### 6.3. Behavioral end-to-end validation
 
-With your consent, `run_e2e.py` can launch a real headless Claude Code session against an isolated project copy and record a transcript for grading against the behavior you approved.
+When a structural check cannot establish the approved behavior, `run_e2e.py` launches a real headless Claude Code session and records a transcript for grading. Scenarios that write run against an isolated project copy.
 
-This path can consume model tokens and may execute generated behavior, so it is separate from the default structural gate. See [Behavioral E2E validation](docs/wiki/how-to/validate-a-harness.md#4-behavioral-e2e-validation) before using it.
+Scenario coverage follows the behaviors and failure modes under test, using the model the harness will serve. Structural validity, observed behavior and interactive interview quality are separate claims; see the [E2E authoring guide](.claude/skills/harness-creator/references/e2e-testing.md) for their evidence boundaries.
 
 ## 7. Philosophy
 

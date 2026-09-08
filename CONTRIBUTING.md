@@ -80,7 +80,7 @@ Canonical user documentation lives in `docs/wiki/` and follows the [Diátaxis](h
 - Use relative links for repository files and images.
 - Keep the README as the front door; put depth in the wiki.
 - Write English public documentation in plain language for Claude Code users, not only harness experts.
-- Distinguish structural validation from optional behavioral E2E evidence.
+- Distinguish structural validation from behavioral E2E evidence.
 - Cite current primary sources for Claude Code mechanics.
 - Do not copy local research transcripts or `.tmp/` material into tracked files.
 - Avoid hard line wraps inside paragraphs; let Markdown renderers wrap prose.
