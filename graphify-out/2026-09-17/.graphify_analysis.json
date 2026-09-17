@@ -1529,18 +1529,18 @@
       "degree": 16
     },
     {
-      "id": "tests_test_component_shapes_positivefixturetests",
-      "label": "PositiveFixtureTests",
+      "id": "claude_skills_harness_creator_scripts_audit_harness_run",
+      "label": "run()",
       "degree": 12
     },
     {
-      "id": "tests_test_validate_harness_atimportparsingtests",
-      "label": "AtImportParsingTests",
+      "id": "claude_skills_harness_creator_scripts_harness_common_parse_frontmatter",
+      "label": "parse_frontmatter()",
       "degree": 12
     },
     {
-      "id": "tests_test_validate_harness_heuristicfalsepositivetests",
-      "label": "HeuristicFalsePositiveTests",
+      "id": "claude_skills_harness_creator_scripts_validate_harness_run",
+      "label": "run()",
       "degree": 12
     }
   ],
@@ -1557,7 +1557,7 @@
       "why": "inferred connection - not explicitly stated in source; connects across different repos/directories; semantically similar concepts with no structural link"
     },
     {
-      "source": "Diátaxis Documentation Structure",
+      "source": "Di\u00e1taxis Documentation Structure",
       "target": "Harness Creator",
       "source_files": [
         "CONTRIBUTING.md",
@@ -1565,7 +1565,7 @@
       ],
       "confidence": "INFERRED",
       "relation": "conceptually_related_to",
-      "why": "inferred connection - not explicitly stated in source; connects across different repos/directories; peripheral node `Diátaxis Documentation Structure` unexpectedly reaches hub `Harness Creator`"
+      "why": "inferred connection - not explicitly stated in source; connects across different repos/directories; peripheral node `Di\u00e1taxis Documentation Structure` unexpectedly reaches hub `Harness Creator`"
     },
     {
       "source": "Harness Creator Repository Contract",
@@ -1580,7 +1580,7 @@
     },
     {
       "source": "Documentation Issue Form",
-      "target": "Diátaxis Documentation Structure",
+      "target": "Di\u00e1taxis Documentation Structure",
       "source_files": [
         ".github/ISSUE_TEMPLATE/documentation.yml",
         "CONTRIBUTING.md"
@@ -1601,41 +1601,8 @@
       "why": "connects across different repos/directories; peripheral node `Graphify Project Guidance` unexpectedly reaches hub `Harness Creator`"
     }
   ],
-  "questions": [
-    {
-      "type": "bridge_node",
-      "question": "Why does `HarnessHistoryTests` connect `Harness History Audit Tests` to `Audit Script Self-Test`, `Git Failure Handling Test`, `Harness Git History Tests`, `Component History Pathspec Tests`, `Audit Report Contract Tests`?",
-      "why": "High betweenness centrality (0.090) - this node is a cross-community bridge."
-    },
-    {
-      "type": "bridge_node",
-      "question": "Why does `read()` connect `Orchestration Vocabulary Tests` to `Package Pointer Regression Tests`, `Spec Decision Record Tests`, `Hook Timeout Fact Tests`, `Bundled CLI Reachability Tests`, `Do-Not-Cut Guardrail Tests`, `Spec Vocabulary Removal Tests`, `Component Registry Pointer Tests`, `Shipped Skill Surface Tests`, `Orphaned Heading Tests`, `Dead Pointer Link Tests`, `Interface Contradiction Tests`, `Retired Reference Tests`?",
-      "why": "High betweenness centrality (0.036) - this node is a cross-community bridge."
-    },
-    {
-      "type": "bridge_node",
-      "question": "Why does `BadHarnessTests` connect `Bad Harness Validation Tests` to `Validator Self-Test Suite`?",
-      "why": "High betweenness centrality (0.034) - this node is a cross-community bridge."
-    },
-    {
-      "type": "isolated_nodes",
-      "question": "What connects `meta`, `stamp`, `Loading` to the rest of the system?",
-      "why": "85 weakly-connected nodes found - possible documentation gaps or missing edges."
-    },
-    {
-      "type": "low_cohesion",
-      "question": "Should `Hook Event Reference Printer` be split into smaller, more focused modules?",
-      "why": "Cohesion score 0.05585106382978723 - nodes in this community are weakly interconnected."
-    },
-    {
-      "type": "low_cohesion",
-      "question": "Should `Hook Unit Testing CLI` be split into smaller, more focused modules?",
-      "why": "Cohesion score 0.05217391304347826 - nodes in this community are weakly interconnected."
-    },
-    {
-      "type": "low_cohesion",
-      "question": "Should `Harness Validation Checks` be split into smaller, more focused modules?",
-      "why": "Cohesion score 0.08888888888888889 - nodes in this community are weakly interconnected."
-    }
-  ]
+  "tokens": {
+    "input": 0,
+    "output": 0
+  }
 }
