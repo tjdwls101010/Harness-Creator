@@ -238,7 +238,14 @@ class GuardrailTests(unittest.TestCase):
         "claude-md-and-rules.md": [
             "paths:",              # a rule without paths: loads at launch
             "@",                   # imports expand at launch, saving nothing
-            "200",                 # the line guideline, with its exception
+            # Retired in v9: "200", the line-count guideline. Unlike the
+            # "acceptEdits" retirement below, the value was never false --
+            # the live memory doc still states it. It went because a target
+            # answers once, for the whole file, the question that belongs to
+            # each line, and the anchor pinned the number rather than the
+            # test. What replaces it is the test itself, which is the thing
+            # that must not be deleted.
+            "would removing this line",
             "CLAUDE.local.md",     # the destination for per-machine facts
             "autoMemoryEnabled",   # auto memory can be switched off entirely
             "MEMORY.md",           # a second always-loaded surface
