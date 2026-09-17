@@ -1,8 +1,6 @@
 # E2E Testing
 
-Use this guide when the approved behavior needs evidence from a real model session. Structural checks establish file shape; scenarios establish what happens on the requests the harness must serve.
-
-`validate_harness.py` checks the harness's structure; a real run against a real prompt supplies evidence about the behavior the user approved. A skill with perfect frontmatter can still never trigger because its description's boundary language is fuzzy, and a hook can be syntactically flawless and fire on the wrong tool, or never, because the matcher assumed a tool-call shape that turned out wrong. e2e closes that gap by spawning a headless Claude session against the generated harness and watching what happens.
+Use this guide when the approved behavior needs evidence from a real model session. Structural checks establish file shape; scenarios establish what happens on the requests the harness must serve. The gap between the two is where the interesting failures are: a skill with perfect frontmatter can still never trigger because its description's boundary language is fuzzy, and a hook can be syntactically flawless and fire on the wrong tool, or never, because the matcher assumed a tool-call shape that turned out wrong. e2e closes that gap by spawning a headless Claude session against the generated harness and watching what happens.
 
 ## Shape: a workflow composed on the spot, not a file you ship
 
@@ -75,11 +73,11 @@ Workflows are gated on version, plan, an opt-in on the Pro tier, and two off swi
 
 ## Scenario count and model choice
 
-Choose scenarios to cover the independent behaviors and failure modes in the approved design. Include intended triggers, neighboring requests that should not trigger, legitimate operations a boundary must allow, and alternate paths that could bypass it where relevant. Each scenario needs its own evidence-based verdict; a larger set does not justify shallower grading.
+The coverage a design implies is in SKILL.md; what it does not say is that these kinds pull in different directions and a set that has only the first is short: intended triggers, neighboring requests that should not trigger, and — wherever the design has a boundary at all — both the legitimate operations it must let through and the alternate paths that could get around it. Each scenario needs its own evidence-based verdict; a larger set does not justify shallower grading.
 
-Use the model the harness will actually serve. Triggering and instruction-following differ between models, so a result on another model does not establish the behavior of the target one. If the harness must support several models, identify which claims need checking on each; the runner's CLI exposes model selection.
+Triggering and instruction-following differ between models, so a result on another model does not establish the behavior of the target one. If the harness must support several models, identify which claims need checking on each; the runner's CLI exposes model selection.
 
-Use a with/without-harness or old/new comparison when the claim concerns what the harness changes. Hold the task and relevant environment constant so the comparison can attribute the observed difference; a single successful run is not evidence that the harness caused the success.
+When the claim concerns what the harness changes, hold the task and relevant environment constant so the comparison can attribute the observed difference. A single successful run is not evidence that the harness caused the success.
 
 ## The assertion types
 
