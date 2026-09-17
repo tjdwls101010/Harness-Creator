@@ -1,5 +1,11 @@
 # Frozen gotcha quiz for tools/probe.py. One question per reference claim that a rewrite might cut as "already known".
-# id, source (file:line in the pre-v7 reference), question sent to the model, answer_key kept for the human grader.
+# id, source, question sent to the model, answer_key kept for the human grader.
+# `source` is provenance only: probe.py echoes it into each result record and never resolves it.
+# The line numbers are where the claim sat in the PRE-v7 reference and do not resolve against the
+# files as they stand -- v7 rewrote them, v8 restructured them, and the v9 fact audit moved them
+# again. Find a claim by its text, not by its line. The quiz itself is frozen on purpose: its
+# questions are the contract a probe run is measured against, so re-anchoring them would make an
+# earlier run's numbers mean something else.
 {"id": "hooks-01", "source": "hooks.md:66", "question": "In a Claude Code hook script, which exit codes block the action, and what happens to the action when the hook exits 1?", "answer_key": "Only exit 2 blocks. Exit 1 (or any other nonzero) is a non-blocking error: the action proceeds and a hook-error notice appears in the transcript. Exception: WorktreeCreate, where any nonzero exit fails creation."}
 {"id": "hooks-02", "source": "hooks.md:68", "question": "A Claude Code PreToolUse hook prints a JSON object with permissionDecision: \"deny\" to stdout and then exits 2. What does Claude Code do with the JSON?", "answer_key": "The JSON is discarded. stdout is parsed as JSON only on exit 0; on exit 2 only stderr is read as the block reason. The two channels are mutually exclusive."}
 {"id": "hooks-03", "source": "hooks.md:70", "question": "In a Claude Code settings.json hook, the matcher is written as \"Edit.*\". Which tools does it match, and why?", "answer_key": "Any character outside letters, digits, _, -, whitespace, comma or pipe turns the matcher into an unanchored regex tested with RegExp.test, so \"Edit.*\" also matches NotebookEdit. Anchor as ^Edit$ to match only Edit."}

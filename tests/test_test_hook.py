@@ -57,6 +57,29 @@ class SampleInputTests(unittest.TestCase):
         data = th.build_sample_input("PreToolUse", "Bash", {"command": "custom"})
         self.assertEqual(data["command"], "custom")
 
+    def test_a_bare_tool_argument_override_does_not_reach_tool_input(self):
+        """v9. Overrides are top-level by design (the test above), and a hook
+        reads its tool arguments from tool_input -- so `--input-field
+        command=...` leaves tool_input at the sample value and the hook is
+        tested against input nobody chose. That combination produced a PASS
+        from a protected-path guard that had actually inspected the default
+        `echo hello`, which is the one outcome this tool must never produce.
+        The module docstring and --input-field help now show the object form;
+        this pins the behaviour they describe."""
+        data = th.build_sample_input("PreToolUse", "Bash", {"command": "rm -rf /"})
+        self.assertEqual(data["command"], "rm -rf /")
+        self.assertNotEqual(data["tool_input"]["command"], "rm -rf /")
+
+    def test_the_documented_object_form_reaches_tool_input(self):
+        data = th.build_sample_input(
+            "PreToolUse", "Bash", {"tool_input": {"command": "rm -rf /"}})
+        self.assertEqual(data["tool_input"]["command"], "rm -rf /")
+
+    def test_help_shows_the_form_that_reaches_tool_input(self):
+        """The example is the thing that was wrong, so assert on it directly:
+        prose in --help does not make itself true."""
+        self.assertIn('tool_input={"command": "rm -rf /"}', th.__doc__)
+
 
 class InterpretTests(unittest.TestCase):
     def test_exit_2_blocks(self):

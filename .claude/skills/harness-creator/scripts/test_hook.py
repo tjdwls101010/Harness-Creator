@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Unit-test a single hook (or a whole settings.json) without a real session.
 
-    # Find hooks matching an event/tool in settings.json and run them:
+    # Find hooks matching an event/tool in settings.json and run them.
+    # A tool's arguments live under tool_input, which is where the hook reads
+    # them -- pass the whole object, not a bare `command=` / `file_path=`:
     python test_hook.py --settings .claude/settings.json --event PreToolUse \\
-        --tool Bash --input-field command="rm -rf /"
+        --tool Bash --input-field 'tool_input={"command": "rm -rf /"}'
 
     # Run one script directly with a specific input file:
     python test_hook.py --command .claude/hooks/guard.sh --event PreToolUse \\
@@ -273,7 +275,12 @@ def main():
                         help="hook event name; one of: " + ", ".join(sorted(hc.HOOK_EVENTS)))
     parser.add_argument("--tool", help="tool name, for matcher evaluation and building tool_input (default: Bash)")
     parser.add_argument("--input", help="path to a JSON file to use as the hook's stdin input")
-    parser.add_argument("--input-field", action="append", default=[], metavar="k=v", help="override/add a field in the sample input; repeatable")
+    parser.add_argument("--input-field", action="append", default=[], metavar="k=v",
+                        help="override/add a TOP-LEVEL field in the sample input; repeatable. "
+                             "A value that parses as JSON is used as JSON, so a tool's arguments go in "
+                             "as a whole object: 'tool_input={\"file_path\": \".env\"}'. Writing "
+                             "'file_path=.env' sets a top-level key the hook does not read, leaving "
+                             "tool_input at its sample value -- the hook then passes on input you did not mean to send")
     parser.add_argument("--matrix", action="store_true", help="print the matcher matrix for --settings without executing anything")
     parser.add_argument("--json", action="store_true", help="machine-readable JSON output")
     args = parser.parse_args()
