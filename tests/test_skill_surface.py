@@ -63,10 +63,25 @@ class TimeoutFactsTests(unittest.TestCase):
 
     def test_session_end_is_described_as_a_shared_budget(self):
         for text, name in ((self.hooks, "hooks.md"), (self.events, "hooks-events.md")):
-            self.assertRegex(text, r"budget shared across all|shared across all `SessionEnd`", name)
+            self.assertRegex(
+                text,
+                r"budget shared across all|shared across all `SessionEnd`"
+                r"|shared across every `SessionEnd`",
+                name,
+            )
 
     def test_no_stale_two_events_count(self):
         self.assertNotIn("Two events break that pattern", self.hooks)
+
+    def test_no_count_of_departing_events_at_all(self):
+        """v9. The count itself is the recurring defect, not any particular
+        value of it: 'two events' went stale, was corrected to 'three', and
+        'three' went stale too once PreModelSwitch and the agent handler type
+        got their own defaults. hooks.md now describes which events get cut
+        and why, and delegates the figures to `hook_event.py`, so any new
+        census is a regression rather than a fix."""
+        section = self.hooks.split("Default timeouts are wildly uneven")[1][:1500]
+        self.assertNotRegex(section, r"\b(Two|Three|Four) events\b")
 
     def test_all_three_departing_events_are_named_together(self):
         section = self.hooks.split("Default timeouts are wildly uneven")[1][:1500]
