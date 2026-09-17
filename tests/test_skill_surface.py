@@ -232,7 +232,11 @@ class GuardrailTests(unittest.TestCase):
             "skills:",             # preloads full skill bodies, not descriptions
             "once: true",
             "AskUserQuestion",     # does not exist inside a subagent
-            "v2.1.218",            # frontmatter hooks are trust-gated
+            # Retired in v9: "v2.1.218". The gate is real; the version only
+            # says when it started, which changes nothing a generator
+            # decides -- the agent's hooks are inert until trust is
+            # accepted either way. Anchored on the mechanism instead.
+            "workspace trust",     # frontmatter hooks are trust-gated
             "agent-memory",        # memory: project writes a committed directory
         ],
         "claude-md-and-rules.md": [
