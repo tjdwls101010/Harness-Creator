@@ -6,7 +6,6 @@
   "4": "TestHookIsADeliveryGateTests",
   "5": "test_hook.py",
   "6": "run_e2e.py",
-  "7": "구현 순서 — reference당 PR 1개, 세션 여러 개",
   "8": "harness_common.py",
   "9": "_check_hooks_block",
   "10": "Harness Creator",

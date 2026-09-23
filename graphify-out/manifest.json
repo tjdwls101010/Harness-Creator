@@ -604,11 +604,5 @@
     "seen": 1788867612.1845179,
     "ast_hash": "d39f2c812b517f9dcc94306a41cc2812",
     "semantic_hash": ""
-  },
-  ".claude/plans/fable-inherited-lecun.md": {
-    "mtime": 1790152991.966496,
-    "seen": 1790152993.392721,
-    "ast_hash": "8a60398acc23698b2c87066e5b052fb8",
-    "semantic_hash": ""
   }
 }

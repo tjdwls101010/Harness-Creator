@@ -1,17 +1,17 @@
 # Graph Report - harness-creator  (2026-09-23)
 
 ## Corpus Check
-- 93 files · ~76,661 words
+- 92 files · ~75,646 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 2 file(s) not represented in the graph (top: (none) 2)
 
 ## Summary
-- 1014 nodes · 1404 edges · 117 communities (53 shown, 58 thin omitted)
+- 999 nodes · 1390 edges · 116 communities (52 shown, 58 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 11 edges (avg confidence: 0.87)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `8e952855`
+- Built from commit: `78abd10b`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -23,7 +23,6 @@
 - TestHookIsADeliveryGateTests
 - test_hook.py
 - run_e2e.py
-- 구현 순서 — reference당 PR 1개, 세션 여러 개
 - harness_common.py
 - _check_hooks_block
 - Harness Creator
@@ -160,7 +159,7 @@
 - **Packaged skill path classification** — tests_fixtures_plugin_package_closure__claude_skills_packaged_skill_packaged_skill, tests_fixtures_plugin_package_closure__claude_skills_packaged_skill_target_project_paths, tests_fixtures_plugin_package_closure__claude_skills_packaged_skill_package_internal_pointers, tests_fixtures_plugin_package_closure__claude_skills_packaged_skill_repository_path_leaks [EXTRACTED 1.00]
 - **Parallel Work Surface Choice** — _claude_skills_harness_creator_references_agents_subagents, _claude_skills_harness_creator_references_agents_agent_view, _claude_skills_harness_creator_references_agents_agent_teams, _claude_skills_harness_creator_references_agents_dynamic_workflows [EXTRACTED 1.00]
 
-## Communities (117 total, 58 thin omitted)
+## Communities (116 total, 58 thin omitted)
 
 ### Community 0 - "Hook Event Reference Printer"
 Cohesion: 0.06
@@ -189,10 +188,6 @@ Nodes (16): is_exact_matcher(), True if `matcher` stays in exact-string/list mod
 ### Community 6 - "run_e2e.py"
 Cohesion: 0.07
 Nodes (19): build_command(), discard_isolated(), isolate_project(), main(), parse_stream(), Spawn a headless Claude Code session against a project and record what…, Remove an isolated copy, including the mkdtemp parent that holds it. A copy of…, Runs `claude -p` and returns (raw_lines, error). error is None on a clean… (+11 more)
-
-### Community 7 - "구현 순서 — reference당 PR 1개, 세션 여러 개"
-Cohesion: 0.13
-Nodes (14): Context, Git, PR 0 — 메모리 기록 (파일 변경 없음, 구현 세션 첫 단계), PR 1 — `SKILL.md`: 기준 + Fable 사례, PR 2 — `references/claude-md-and-rules.md`, PR 3 — `references/skills.md`, PR 4 — `references/agents.md`, PR 5 — `references/workflows.md`, PR 6 — `references/e2e-testing.md` (+6 more)
 
 ### Community 8 - "harness_common.py"
 Cohesion: 0.05
@@ -375,21 +370,21 @@ Cohesion: 0.67
 Nodes (3): Dot-claude project instructions, Always-loaded frontend style rule, Path-scoped TypeScript rule
 
 ## Knowledge Gaps
-- **95 isolated node(s):** `noop.sh script`, `not-executable.sh script`, `meta`, `stamp`, `meta` (+90 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 511 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **83 isolated node(s):** `noop.sh script`, `not-executable.sh script`, `meta`, `stamp`, `meta` (+78 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 498 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **58 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `HarnessHistoryTests` connect `HarnessHistoryTests` to `Audit Script Self-Test`, `.test_a_commit_that_only_used_the_harness_is_not_found`, `Git Failure Handling Test`, `.test_a_hook_body_change_counts`, `._repo`, `Component History Pathspec Tests`, `Audit Report Contract Tests`?**
-  _High betweenness centrality (0.070) - this node is a cross-community bridge._
+  _High betweenness centrality (0.076) - this node is a cross-community bridge._
 - **Why does `BadHarnessTests` connect `Bad Harness Validation Tests` to `test_validate_harness.py`?**
-  _High betweenness centrality (0.068) - this node is a cross-community bridge._
+  _High betweenness centrality (0.064) - this node is a cross-community bridge._
 - **Why does `read()` connect `Orchestration Vocabulary Tests` to `Package Pointer Regression Tests`, `DanglingPointerTests`, `Hook Timeout Fact Tests`, `Bundled CLI Reachability Tests`, `Do-Not-Cut Guardrail Tests`, `Spec Vocabulary Removal Tests`, `Component Registry Pointer Tests`, `test_skill_surface.py`, `Orphaned Heading Tests`, `Dead Pointer Link Tests`, `Interface Contradiction Tests`?**
-  _High betweenness centrality (0.050) - this node is a cross-community bridge._
+  _High betweenness centrality (0.046) - this node is a cross-community bridge._
 - **What connects `noop.sh script`, `not-executable.sh script`, `meta` to the rest of the system?**
-  _95 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _83 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Hook Event Reference Printer` be split into smaller, more focused modules?**
   _Cohesion score 0.05585106382978723 - nodes in this community are weakly interconnected._
 - **Should `InterpretTests` be split into smaller, more focused modules?**
