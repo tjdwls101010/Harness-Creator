@@ -8,6 +8,8 @@ The harness spec file is retired. A generated harness no longer carries `.claude
 
 ### Removed
 
+- **Repository-local audit tools and the retired spec**: removed `tools/claims.py`, `tools/probe.py`, `tools/gotcha-quiz.jsonl`, and this repository's `.claude/harness-spec.md`, together with their dedicated tests and claims fixture. The earlier audit plan is preserved under `.claude/plans/` as a historical record; it is not the current execution procedure.
+
 - **`.claude/harness-spec.md` as a generated artifact**, with the drift check, the `--template` printer, the inventory parser, the status vocabulary and the `V01` lint that guarded it. The file's problem was never that nobody read it — it was edited every generation — but that nothing shipped to keep it honest: the drift check saw existence only, always exited 0, and was not in CI, so a spec could be silently wrong and pass. It was, in three places, at the moment of writing. A record that can be silently wrong is worse than none for a skill whose value is that its gotchas are true; git is often incomplete but never wrong about what changed.
 - **`K5`**, whose knowledge — the record may be behind, settle the disagreement before regenerating, say how it was settled — merged into `K3`. The number is not reused, and `V01` is not reissued: both are identifiers a reader looks up, and renumbering would make an existing report mean something else.
 
