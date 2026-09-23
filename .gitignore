@@ -10,4 +10,3 @@ __pycache__/
 
 # Machine-local Claude Code session state
 .claude/histories
-.claude/plans/
