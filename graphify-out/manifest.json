@@ -47,12 +47,6 @@
     "ast_hash": "afbc0b5896082751fa8307e452d03485",
     "semantic_hash": "afbc0b5896082751fa8307e452d03485"
   },
-  ".codex/hooks.json": {
-    "mtime": 1788481276.5238805,
-    "seen": 1788867612.184476,
-    "ast_hash": "0b205d74da1f1fc46215c83eb63695b5",
-    "semantic_hash": "0b205d74da1f1fc46215c83eb63695b5"
-  },
   "tests/fixtures/bad-harness/.claude/hooks/noop.sh": {
     "mtime": 1783296909.826137,
     "seen": 1788019324.5128782,
@@ -204,10 +198,10 @@
     "semantic_hash": "b3da045dbba1d74bc5cc97885d735165"
   },
   "tests/test_skill_surface.py": {
-    "mtime": 1789656736.2645905,
-    "seen": 1789657013.893266,
-    "ast_hash": "5b4046d3424e4921cf33ffade8c4533f",
-    "semantic_hash": "5b4046d3424e4921cf33ffade8c4533f"
+    "mtime": 1790152991.9679906,
+    "seen": 1790152993.3927171,
+    "ast_hash": "6c16929424a4b35f7a592a186561fe00",
+    "semantic_hash": ""
   },
   "tests/test_test_hook.py": {
     "mtime": 1789656979.5264947,
@@ -222,51 +216,51 @@
     "semantic_hash": "a61c2eab6e2d28e6dd2d007a90bb21e2"
   },
   ".claude/skills/harness-creator/SKILL.md": {
-    "mtime": 1788867610.9716847,
-    "seen": 1788867612.184499,
-    "ast_hash": "8726d5bba7c30c188242c1f78195b3cd",
+    "mtime": 1789648263.7405086,
+    "seen": 1790152993.392722,
+    "ast_hash": "6a38f4345e302a0fec66ea62819b892e",
     "semantic_hash": ""
   },
   ".claude/skills/harness-creator/references/agents.md": {
-    "mtime": 1788867610.9721308,
-    "seen": 1788867612.184499,
-    "ast_hash": "7cdd115459909989b1d43639faea30dd",
+    "mtime": 1789655751.4369059,
+    "seen": 1790152993.392722,
+    "ast_hash": "1fc6ccbf6f5ac70e1bad06001b2649de",
     "semantic_hash": ""
   },
   ".claude/skills/harness-creator/references/claude-md-and-rules.md": {
-    "mtime": 1788787654.718185,
-    "seen": 1788867612.184499,
-    "ast_hash": "4f2c9e27850a43f8a92f7c767a9d291d",
+    "mtime": 1789648701.2741854,
+    "seen": 1790152993.3927228,
+    "ast_hash": "8366b971326742f1f3f68ef6ea4ba6f6",
     "semantic_hash": ""
   },
   ".claude/skills/harness-creator/references/e2e-testing.md": {
-    "mtime": 1788867610.9726312,
-    "seen": 1788867612.1845,
-    "ast_hash": "5dc9a62096217966adcb86ef780774ba",
+    "mtime": 1789656192.5606003,
+    "seen": 1790152993.392724,
+    "ast_hash": "f462de3603a0b69cbe5740453e126a02",
     "semantic_hash": ""
   },
   ".claude/skills/harness-creator/references/hooks-events.md": {
-    "mtime": 1788481276.5227401,
-    "seen": 1788867612.1845,
+    "mtime": 1789572214.56381,
+    "seen": 1790152993.392724,
     "ast_hash": "b93145f96cbf126d7041da3c6dd58ac5",
     "semantic_hash": ""
   },
   ".claude/skills/harness-creator/references/hooks.md": {
-    "mtime": 1788787654.7189972,
-    "seen": 1788867612.184501,
-    "ast_hash": "c57f33b600a983fa7e5499eac2a1a9c0",
+    "mtime": 1789656736.263558,
+    "seen": 1790152993.392725,
+    "ast_hash": "fec479905737f800faf178eab96b9d68",
     "semantic_hash": ""
   },
   ".claude/skills/harness-creator/references/skills.md": {
-    "mtime": 1788481276.523199,
-    "seen": 1788867612.184501,
-    "ast_hash": "39c93bcbf491c5ce9c498182591dc49d",
+    "mtime": 1789655473.5368414,
+    "seen": 1790152993.392725,
+    "ast_hash": "5903167aa0eb77a6162756e140dfaaae",
     "semantic_hash": ""
   },
   ".claude/skills/harness-creator/references/workflows.md": {
-    "mtime": 1788787654.7194455,
-    "seen": 1788867612.1845021,
-    "ast_hash": "bc03c3432f624684e7fb5bd95eece45c",
+    "mtime": 1789656041.843997,
+    "seen": 1790152993.392726,
+    "ast_hash": "2aa17284b15b09b5deb2c7a8f7ebab8f",
     "semantic_hash": ""
   },
   ".github/ISSUE_TEMPLATE/bug.yml": {
@@ -330,16 +324,16 @@
     "semantic_hash": "6a47d64fcc136324ca395065a707ef76"
   },
   "CHANGELOG.md": {
-    "mtime": 1788787654.7214675,
-    "seen": 1788867612.184507,
-    "ast_hash": "aafa22b302d6576718589bad4b6a1145",
+    "mtime": 1790152991.967263,
+    "seen": 1790152993.392731,
+    "ast_hash": "011664957d0f74273c7b634a7775932b",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1785812277.7336423,
-    "seen": 1788019324.512894,
-    "ast_hash": "ab8ba45954218d51bcb5202dccae7722",
-    "semantic_hash": "ab8ba45954218d51bcb5202dccae7722"
+    "mtime": 1790152991.9675786,
+    "seen": 1790152993.392732,
+    "ast_hash": "c960eef36922050952f672b513aa3935",
+    "semantic_hash": ""
   },
   "CODE_OF_CONDUCT.md": {
     "mtime": 1785819229.9302633,
@@ -354,8 +348,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1788867610.9735696,
-    "seen": 1788867612.184509,
+    "mtime": 1789572214.5623612,
+    "seen": 1790152993.3927329,
     "ast_hash": "cc1de6cba36f147ba93d0c53f49cd017",
     "semantic_hash": ""
   },
@@ -414,8 +408,8 @@
     "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "tests/fixtures/bad-harness/.claude/skills/hooked-skill/SKILL.md": {
-    "mtime": 1787573217.6731372,
-    "seen": 1788019324.512917,
+    "mtime": 1789572214.5621402,
+    "seen": 1790152993.392738,
     "ast_hash": "05a2be91b809507da3ca558758c42198",
     "semantic_hash": "05a2be91b809507da3ca558758c42198"
   },
@@ -498,8 +492,8 @@
     "semantic_hash": "9aabb31513753b4dd72e9bb48445a80b"
   },
   "tests/fixtures/near-miss-harness/.claude/skills/deploy-guard/SKILL.md": {
-    "mtime": 1788354018.3527696,
-    "seen": 1788867612.184524,
+    "mtime": 1789572214.5620344,
+    "seen": 1790152993.392749,
     "ast_hash": "6d3f1557621a1ade11e4be52ac4b79a6",
     "semantic_hash": ""
   },
@@ -569,12 +563,6 @@
     "ast_hash": "a1d95caa976f65a241c3a81e5267119f",
     "semantic_hash": "a1d95caa976f65a241c3a81e5267119f"
   },
-  "tests/test_claims.py": {
-    "mtime": 1788350346.815401,
-    "seen": 1789657013.893232,
-    "ast_hash": "5a93109f18806b9bd897212642396604",
-    "semantic_hash": "5a93109f18806b9bd897212642396604"
-  },
   "tests/test_component_shapes.py": {
     "mtime": 1788481276.5482347,
     "seen": 1789657013.8932328,
@@ -587,35 +575,11 @@
     "ast_hash": "c058aed5abdd4618a30ddccaa65bfa43",
     "semantic_hash": "c058aed5abdd4618a30ddccaa65bfa43"
   },
-  "tests/test_probe.py": {
-    "mtime": 1788350992.1175041,
-    "seen": 1789657013.89325,
-    "ast_hash": "562f67014b5c7f6d974a9343c6d80ce4",
-    "semantic_hash": "562f67014b5c7f6d974a9343c6d80ce4"
-  },
   "tests/test_script_ownership.py": {
     "mtime": 1788352344.2497296,
     "seen": 1789657013.893266,
     "ast_hash": "57abf7b3052c0825362a4908c43f0bdf",
     "semantic_hash": "57abf7b3052c0825362a4908c43f0bdf"
-  },
-  "tools/claims.py": {
-    "mtime": 1788350346.816221,
-    "seen": 1789657013.8932679,
-    "ast_hash": "2674e763bf20c4a36f2e99777f6219de",
-    "semantic_hash": "2674e763bf20c4a36f2e99777f6219de"
-  },
-  "tools/probe.py": {
-    "mtime": 1788350992.1185038,
-    "seen": 1789657013.8932679,
-    "ast_hash": "48a45e39c996f23e17dbab4bb0868840",
-    "semantic_hash": "48a45e39c996f23e17dbab4bb0868840"
-  },
-  "tests/fixtures/claims/source.md": {
-    "mtime": 1788350346.815046,
-    "seen": 1788867612.184515,
-    "ast_hash": "631374cdacbaa9c39a2af570b65c61ab",
-    "semantic_hash": ""
   },
   "tests/fixtures/component-shapes/.claude/agents/asker.md": {
     "mtime": 1788354694.119217,
@@ -639,6 +603,12 @@
     "mtime": 1788354694.1207762,
     "seen": 1788867612.1845179,
     "ast_hash": "d39f2c812b517f9dcc94306a41cc2812",
+    "semantic_hash": ""
+  },
+  ".claude/plans/fable-inherited-lecun.md": {
+    "mtime": 1790152991.966496,
+    "seen": 1790152993.392721,
+    "ast_hash": "8a60398acc23698b2c87066e5b052fb8",
     "semantic_hash": ""
   }
 }
